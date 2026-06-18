@@ -1,0 +1,45 @@
+globals:
+  core.servers:
+    SRV1: localhost:5633
+    SRV2: localhost:5643
+    SRV3: localhost:5653
+
+servers:
+  SRV1:
+  - realm: {}
+
+  SRV2:
+  - realm: {}
+
+  SRV3:
+  - realm: {}
+
+  PSRV1:
+  - ftl:
+      server: localhost:5663
+  - persistence:
+      name: pserver1
+      data: /tmp/kof-cluster-data/Common
+      loglevel: connections:debug;producers:debug;consumers:debug;kof:debug;durables:debug;store:debug
+
+  PSRV2:
+  - ftl:
+      server: localhost:5673
+  - persistence:
+      name: pserver2
+      data: /tmp/kof-cluster-data/Common
+      loglevel: connections:debug;producers:debug;consumers:debug;kof:debug;durables:debug;store:debug
+
+  PSRV3:
+  - ftl:
+      server: localhost:5683
+  - persistence:
+      name: pserver3
+      data: /tmp/kof-cluster-data/Common
+      loglevel: connections:debug;producers:debug;consumers:debug;kof:debug;durables:debug;store:debug
+
+services:
+  persistence:
+    data: /tmp/kof-cluster-data
+  realm:
+    data: /tmp/kof-cluster-data
