@@ -41,7 +41,7 @@ func ShouldWriteSecure(cfg *BrokerConfig, opts SecureOpts) bool {
 }
 
 // WriteKOFSecureYAML generates kof-cluster-secure.yaml for the primary cluster (first 3 pservers).
-func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath string, numPservers int, ports PortMap, coreServers []CoreServer, opts SecureOpts, drOpts DROpts) error {
+func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, opts SecureOpts, drOpts DROpts) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
@@ -117,6 +117,7 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath string,
 	fmt.Fprintf(f, "    data: %s\n", dataDir)
 	fmt.Fprintln(f, "  realm:")
 	fmt.Fprintf(f, "    data: %s\n", dataDir)
+	fmt.Fprintf(f, "    initial.realm.config: %s\n", realmPath)
 
 	fmt.Fprintf(os.Stdout, "wrote %s\n", path)
 	return nil

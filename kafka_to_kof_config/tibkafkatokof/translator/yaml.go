@@ -41,7 +41,7 @@ func buildDRString(servers []CoreServer) string {
 // WriteKOFClusterYAML generates kof-cluster.yaml (primary) and, when numPservers > 3,
 // one or more kof-cluster-auxN.yaml files for additional pserver groups.
 // When drOpts.Enabled(), also generates kof-cluster-dr.yaml (and aux DR files).
-func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath string, numPservers int, ports PortMap, coreServers []CoreServer, drOpts DROpts) error {
+func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, drOpts DROpts) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
@@ -54,14 +54,14 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath string
 	// Primary cluster: first 3 pservers with realm servers.
 	primaryCount := min3(numPservers)
 	primaryPath := filepath.Join(outputDir, "kof-cluster.yaml")
-	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPath, primaryCount, ports, cores, drOpts); err != nil {
+	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPath, realmPath, primaryCount, ports, cores, drOpts); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "wrote %s\n", primaryPath)
 
 	if drOpts.Enabled() {
 		drPath := filepath.Join(outputDir, "kof-cluster-dr.yaml")
-		if err := writeDRYAML(drPath, cfg, drOpts.DRDataDir, propsPath, 0, primaryCount, drOpts.DRServers, cores); err != nil {
+		if err := writeDRYAML(drPath, cfg, drOpts.DRDataDir, propsPath, realmPath, 0, primaryCount, drOpts.DRServers, cores); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stdout, "wrote %s\n", drPath)
@@ -82,7 +82,7 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath string
 
 		if drOpts.Enabled() {
 			drAuxPath := filepath.Join(outputDir, fmt.Sprintf("kof-cluster-dr-aux%d.yaml", auxIdx))
-			if err := writeDRYAML(drAuxPath, cfg, drOpts.DRDataDir, propsPath, start, end, drOpts.DRServers, cores); err != nil {
+			if err := writeDRYAML(drAuxPath, cfg, drOpts.DRDataDir, propsPath, realmPath, start, end, drOpts.DRServers, cores); err != nil {
 				return err
 			}
 			fmt.Fprintf(os.Stdout, "wrote %s\n", drAuxPath)
@@ -92,7 +92,7 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath string
 	return nil
 }
 
-func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir, propsPath string, numPservers int, _ PortMap, cores []CoreServer, drOpts DROpts) error {
+func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir, propsPath, realmPath string, numPservers int, _ PortMap, cores []CoreServer, drOpts DROpts) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -141,6 +141,7 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir, propsPath string,
 	fmt.Fprintf(f, "    data: %s\n", dataDir)
 	fmt.Fprintln(f, "  realm:")
 	fmt.Fprintf(f, "    data: %s\n", dataDir)
+	fmt.Fprintf(f, "    initial.realm.config: %s\n", realmPath)
 	return nil
 }
 
@@ -196,7 +197,7 @@ func writeAuxYAML(path string, cfg *BrokerConfig, dataDir, propsPath string, sta
 // start=0 produces the primary DR YAML with realm entries; start>0 produces an aux DR file.
 // drServers is the list of DR server names/addresses; primaryCores is the primary core.servers list
 // (used as the back-reference in globals.dr of the DR YAML).
-func writeDRYAML(path string, cfg *BrokerConfig, drDataDir, propsPath string, start, end int, drServers, primaryCores []CoreServer) error {
+func writeDRYAML(path string, cfg *BrokerConfig, drDataDir, propsPath, realmPath string, start, end int, drServers, primaryCores []CoreServer) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -244,6 +245,7 @@ func writeDRYAML(path string, cfg *BrokerConfig, drDataDir, propsPath string, st
 	if isPrimary {
 		fmt.Fprintln(f, "  realm:")
 		fmt.Fprintf(f, "    data: %s\n", drDataDir)
+		fmt.Fprintf(f, "    initial.realm.config: %s\n", realmPath)
 	}
 	return nil
 }

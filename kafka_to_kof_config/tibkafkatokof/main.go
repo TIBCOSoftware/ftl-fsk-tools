@@ -2,7 +2,7 @@
 // artifacts needed to run a KOF-enabled pserver cluster:
 //
 //	kof-cluster.yaml          — FTL pserver cluster configuration (primary)
-//	kof-cluster-auxN.yaml     — Auxiliary pserver groups (when --num-pservers > 3)
+//	kof-cluster-auxN.yaml     — Auxiliary pserver groups (reserved; not used in initial release)
 //	kof-cluster-secure.yaml   — Secure variant with TLS/auth (when --tls-cert or --oauth-token-url provided)
 //	realm.json                — FTL realm configuration with kof.cluster definition
 //	kof.broker.properties     — Flat key=value broker properties (same format as server.properties)
@@ -28,7 +28,7 @@ func main() {
 	outputDir   := flag.String("output-dir",   "./kof-output",    "output directory for generated files")
 	realmName   := flag.String("realm-name",   "_default_realm",  "realm name written into realm.json")
 	dataDir     := flag.String("data-dir",     "/var/kof/data",   "KOF data directory path on pserver hosts")
-	numPservers := flag.Int("num-pservers",    3,                  "number of pservers to generate (must be a positive odd number)")
+	numPservers := flag.Int("num-pservers",    3,                  "number of pservers to generate (must be a positive odd number ≤ 3; initial release supports one kof cluster only)")
 	coreServersFlag := flag.String("core-servers", "",
 		"comma-separated NAME=host:port list for globals.core.servers\n"+
 			"    e.g. SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602\n"+
@@ -70,7 +70,7 @@ func main() {
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Output files:")
 		fmt.Fprintln(os.Stderr, "  kof-cluster.yaml          FTL pserver cluster configuration (primary, first 3 pservers)")
-		fmt.Fprintln(os.Stderr, "  kof-cluster-auxN.yaml     Additional pserver groups (when --num-pservers > 3)")
+		fmt.Fprintln(os.Stderr, "  kof-cluster-auxN.yaml     Additional pserver groups (reserved, not used in initial release)")
 		fmt.Fprintln(os.Stderr, "  kof-cluster-secure.yaml   Secure variant with TLS/auth settings for FTL server")
 		fmt.Fprintln(os.Stderr, "  realm.json                FTL realm configuration with kof.cluster")
 		fmt.Fprintln(os.Stderr, "  kof.broker.properties     Flat key=value broker properties")
@@ -86,7 +86,11 @@ func main() {
 		os.Exit(1)
 	}
 	if *numPservers < 1 || *numPservers%2 == 0 {
-		fmt.Fprintln(os.Stderr, "error: --num-pservers must be a positive odd number (e.g. 3, 5, 7)")
+		fmt.Fprintln(os.Stderr, "error: --num-pservers must be a positive odd number (e.g. 1, 3)")
+		os.Exit(1)
+	}
+	if *numPservers > 3 {
+		fmt.Fprintln(os.Stderr, "error: --num-pservers must not exceed 3 (initial release supports only one kof cluster)")
 		os.Exit(1)
 	}
 
@@ -103,6 +107,7 @@ func main() {
 
 	ports := generatePorts(*numPservers)
 	propsPath := filepath.Join(*outputDir, "kof.broker.properties")
+	realmPath := filepath.Join(*outputDir, "realm.json")
 
 	// Parse --core-servers flag into CoreServer slice.
 	coreServers := parseCoreServers(*coreServersFlag)
@@ -135,13 +140,13 @@ func main() {
 		AuthUsersFile:       *authUsersFile,
 	}
 
-	if err := translator.WriteKOFClusterYAML(cfg, *outputDir, *dataDir, propsPath, *numPservers, ports, coreServers, drOpts); err != nil {
+	if err := translator.WriteKOFClusterYAML(cfg, *outputDir, *dataDir, propsPath, realmPath, *numPservers, ports, coreServers, drOpts); err != nil {
 		fmt.Fprintln(os.Stderr, "error writing kof-cluster.yaml:", err)
 		os.Exit(1)
 	}
 
 	if translator.ShouldWriteSecure(cfg, secureOpts) {
-		if err := translator.WriteKOFSecureYAML(cfg, *outputDir, *dataDir, propsPath, *numPservers, ports, coreServers, secureOpts, drOpts); err != nil {
+		if err := translator.WriteKOFSecureYAML(cfg, *outputDir, *dataDir, propsPath, realmPath, *numPservers, ports, coreServers, secureOpts, drOpts); err != nil {
 			fmt.Fprintln(os.Stderr, "error writing kof-cluster-secure.yaml:", err)
 			os.Exit(1)
 		}

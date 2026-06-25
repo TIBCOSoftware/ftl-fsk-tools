@@ -4,11 +4,9 @@ Translates a Kafka KRaft broker `server.properties` file into the FTL KOF artifa
 
 | Output file | Purpose |
 |---|---|
-| `kof-cluster.yaml` | FTL primary cluster config (realm servers + first 3 pservers) |
-| `kof-cluster-auxN.yaml` | Auxiliary pserver groups (generated when `-num-pservers > 3`) |
+| `kof-cluster.yaml` | FTL primary cluster config (realm servers + up to 3 pservers) |
 | `kof-cluster-secure.yaml` | Secure variant with TLS/auth blocks (generated when TLS/OAuth flags are provided) |
 | `kof-cluster-dr.yaml` | DR replica cluster config (generated when `-dr-servers` is provided) |
-| `kof-cluster-dr-auxN.yaml` | Auxiliary DR pserver groups (generated when `-num-pservers > 3` and DR is enabled) |
 | `realm.json` | FTL realm config with `kof.cluster`, stores, and pserver definitions |
 | `kof.broker.properties` | Flat key=value properties file (same format as the input `server.properties`) |
 
@@ -134,7 +132,7 @@ With `-num-pservers 9`, DR aux files are also produced:
 
 ## Examples
 
-Each example starts from a `server.properties` file in the `examples/` directory. Run the tool from the repository root after building.
+Each example starts from a `server.properties` file in the `examples/` directory. Run the tool from the `tibkafkatokof/` directory (where `examples/` is located) so that generated file paths are relative and portable.
 
 ---
 
@@ -296,47 +294,15 @@ tibkafkatokof \
 
 ---
 
-### 09 — 10-broker, 9 pservers, 3 KOF clusters (topology demo)
+### 09 — 10-broker input (input reference only — initial release does not support > 3 pservers)
 
-**Kafka config:** 10 nodes, nodes 1–3 are broker+controller, nodes 4–10 are broker-only; SASL_SSL + OAuth2 + mTLS listeners. 9 pservers → 3 KOF clusters. Demonstrates multi-cluster split with explicit `--core-servers`.
-
-```sh
-tibkafkatokof \
-  --output-dir ./out/09 \
-  --realm-name prod_realm \
-  --data-dir /var/kof \
-  --num-pservers 9 \
-  --core-servers SRV1=kof-realm-1:5600,SRV2=kof-realm-2:5601,SRV3=kof-realm-3:5602 \
-  examples/09-10broker-scale/server-1.properties
-```
-
-**Output:** `kof-cluster.yaml`, `kof-cluster-aux1.yaml`, `kof-cluster-aux2.yaml`, `realm.json`, `kof.broker.properties`
+**Kafka config:** 10 nodes, nodes 1–3 are broker+controller, nodes 4–10 are broker-only; SASL_SSL + OAuth2 + mTLS listeners. Input `server.properties` files are kept as a reference for future multi-shard support. Running this example against the current tool requires `--num-pservers 3`.
 
 ---
 
-### 10 — 10-broker, 9 pservers, 3 KOF clusters — full security stack
+### 10 — 10-broker, full security stack (input reference only — initial release does not support > 3 pservers)
 
-**Kafka config:** 10 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–10 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). 9 pservers → 3 KOF clusters.
-
-```sh
-tibkafkatokof \
-  --num-pservers 9 \
-  --output-dir ./out/10 \
-  --tls-cert /etc/ftl/certs/server.pem \
-  --tls-key /etc/ftl/certs/server.key \
-  --tls-ca /etc/ftl/certs/ca.pem \
-  --tls-server-trust /etc/ftl/certs/client-ca.pem \
-  --tls-client-cert /etc/ftl/certs/internal.pem \
-  --tls-client-key /etc/ftl/certs/internal.key \
-  --oauth-token-url https://auth.example.com/oauth/token \
-  --oauth-jwks-url file:/etc/ftl/oauth.json \
-  --oauth-client-id ftl-server \
-  --oauth-client-secret env:OAUTH_CLIENT_SECRET \
-  --oauth-provider-trust /etc/ftl/certs/oauth-provider.pem \
-  examples/10-10broker-secure/server-1.properties
-```
-
-**Output:** `kof-cluster.yaml`, `kof-cluster-aux1.yaml`, `kof-cluster-aux2.yaml`, `kof-cluster-secure.yaml` (auth mode: oauth2 + mTLS), `realm.json`, `kof.broker.properties`
+**Kafka config:** 10 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–10 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). Input `server.properties` files are kept as a reference for future multi-shard support. Running this example against the current tool requires `--num-pservers 3`.
 
 ---
 
@@ -390,7 +356,7 @@ servers:
       name: drpserver1  ...
 ```
 
-`realm.json` — `kof.cluster.0` with `dr_enabled: true`, `_setA` (pserver1–3) + `_DRset` (drpserver1–3)
+`realm.json` — `kof.cluster` with `dr_enabled: true`, `_setA` (pserver1–3) + `_DRset` (drpserver1–3)
 
 ---
 
@@ -418,42 +384,9 @@ realm.json           (dr_enabled: true; _setA primary + _DRset DR pserver sets)
 kof.broker.properties
 ```
 
-### Secure 10-broker, 3 KOF clusters + DR
+### Secure 10-broker + DR (input reference only — initial release does not support > 3 pservers)
 
-Generated reference output: [`examples/10-10broker-secure/output-dr/`](examples/10-10broker-secure/output-dr/)
-
-```sh
-tibkafkatokof \
-  --num-pservers 9 \
-  --output-dir examples/10-10broker-secure/output-dr \
-  --dr-servers DRSRV1=dr-host-1:5800,DRSRV2=dr-host-2:5801,DRSRV3=dr-host-3:5802 \
-  --dr-data-dir /var/kof/dr \
-  --tls-cert /etc/ftl/certs/server.pem \
-  --tls-key /etc/ftl/certs/server.key \
-  --tls-ca /etc/ftl/certs/ca.pem \
-  --tls-server-trust /etc/ftl/certs/client-ca.pem \
-  --tls-client-cert /etc/ftl/certs/internal.pem \
-  --tls-client-key /etc/ftl/certs/internal.key \
-  --oauth-token-url https://auth.example.com/oauth/token \
-  --oauth-jwks-url file:/etc/ftl/oauth.json \
-  --oauth-client-id ftl-server \
-  --oauth-client-secret env:OAUTH_CLIENT_SECRET \
-  --oauth-provider-trust /etc/ftl/certs/oauth-provider.pem \
-  examples/10-10broker-secure/server-1.properties
-```
-
-**Output:**
-```
-kof-cluster.yaml           (primary pserver1–3 + realm; PRIMARY_SERVER labels)
-kof-cluster-aux1.yaml      (primary pserver4–6)
-kof-cluster-aux2.yaml      (primary pserver7–9)
-kof-cluster-dr.yaml        (DR drpserver1–3 + realm; DR_SERVER labels)
-kof-cluster-dr-aux1.yaml   (DR drpserver4–6)
-kof-cluster-dr-aux2.yaml   (DR drpserver7–9)
-kof-cluster-secure.yaml    (oauth2 + mTLS; PRIMARY_SERVER labels)
-realm.json                 (3 clusters, each with dr_enabled: true, _setA + _DRset)
-kof.broker.properties
-```
+This scenario requires `--num-pservers 9` which exceeds the initial-release limit of 3. The `server.properties` files in `examples/10-10broker-secure/` are kept as a reference for future multi-shard DR support.
 
 ---
 
