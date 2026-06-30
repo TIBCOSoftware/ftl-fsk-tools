@@ -28,10 +28,11 @@ type BrokerConfig struct {
 	ProcessRoles string
 	Listeners    []ListenerDef
 	IsSecure     bool
-	KOFHost      string // advertised host of first non-controller listener
-	KOFPort      int    // advertised port of first non-controller listener
+	KOFHost      string            // advertised host of first non-controller listener
+	KOFPort      int               // advertised port of first non-controller listener
 	Settings     map[string]string // all properties not in the listener structural set
 	SettingKeys  []string          // insertion-ordered keys for Settings
+	SettingLines map[string]int    // 1-based source line where each key's entry begins
 	SourceFile   string
 }
 
@@ -43,11 +44,12 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 	}
 	defer f.Close()
 
-	raw, orderedKeys := readProperties(f)
+	raw, orderedKeys, lines := readProperties(f)
 
 	cfg := &BrokerConfig{
-		SourceFile: path,
-		Settings:   map[string]string{},
+		SourceFile:   path,
+		Settings:     map[string]string{},
+		SettingLines: lines,
 	}
 
 	if v, ok := raw["node.id"]; ok {
@@ -132,12 +134,16 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 }
 
 // readProperties parses a Java .properties file, handling line continuations.
-func readProperties(f *os.File) (map[string]string, []string) {
+// It returns the key/value map, the keys in insertion order, and the 1-based
+// source line where each key's (possibly continued) entry begins.
+func readProperties(f *os.File) (map[string]string, []string, map[string]int) {
 	raw := map[string]string{}
 	var orderedKeys []string
+	lines := map[string]int{}
 
 	sc := bufio.NewScanner(f)
 	var pending strings.Builder
+	var startLine int
 	flush := func() {
 		line := strings.TrimSpace(pending.String())
 		pending.Reset()
@@ -155,12 +161,18 @@ func readProperties(f *os.File) (map[string]string, []string) {
 		v := strings.TrimSpace(line[idx+1:])
 		if _, exists := raw[k]; !exists {
 			orderedKeys = append(orderedKeys, k)
+			lines[k] = startLine
 		}
 		raw[k] = v
 	}
 
+	lineNo := 0
 	for sc.Scan() {
+		lineNo++
 		line := sc.Text()
+		if pending.Len() == 0 {
+			startLine = lineNo
+		}
 		trimmed := strings.TrimRight(line, " \t")
 		if strings.HasSuffix(trimmed, "\\") {
 			pending.WriteString(trimmed[:len(trimmed)-1])
@@ -173,7 +185,7 @@ func readProperties(f *os.File) (map[string]string, []string) {
 	if pending.Len() > 0 {
 		flush()
 	}
-	return raw, orderedKeys
+	return raw, orderedKeys, lines
 }
 
 type addrPort struct {

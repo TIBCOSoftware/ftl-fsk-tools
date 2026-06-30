@@ -41,7 +41,7 @@ func buildDRString(servers []CoreServer) string {
 // WriteKOFClusterYAML generates kof-cluster.yaml (primary) and, when numPservers > 3,
 // one or more kof-cluster-auxN.yaml files for additional pserver groups.
 // When drOpts.Enabled(), also generates kof-cluster-dr.yaml (and aux DR files).
-func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, drOpts DROpts) error {
+func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, drOpts DROpts) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
@@ -54,14 +54,14 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath, realm
 	// Primary cluster: first 3 pservers with realm servers.
 	primaryCount := min3(numPservers)
 	primaryPath := filepath.Join(outputDir, "kof-cluster.yaml")
-	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPath, realmPath, primaryCount, ports, cores, drOpts); err != nil {
+	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPaths, realmPath, primaryCount, ports, cores, drOpts); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "wrote %s\n", primaryPath)
 
 	if drOpts.Enabled() {
 		drPath := filepath.Join(outputDir, "kof-cluster-dr.yaml")
-		if err := writeDRYAML(drPath, cfg, drOpts.DRDataDir, propsPath, realmPath, 0, primaryCount, drOpts.DRServers, cores); err != nil {
+		if err := writeDRYAML(drPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, 0, primaryCount, drOpts.DRServers, cores); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stdout, "wrote %s\n", drPath)
@@ -75,14 +75,14 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath, realm
 			end = numPservers
 		}
 		auxPath := filepath.Join(outputDir, fmt.Sprintf("kof-cluster-aux%d.yaml", auxIdx))
-		if err := writeAuxYAML(auxPath, cfg, dataDir, propsPath, start, end, ports, cores, drOpts); err != nil {
+		if err := writeAuxYAML(auxPath, cfg, dataDir, propsPaths, start, end, ports, cores, drOpts); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stdout, "wrote %s\n", auxPath)
 
 		if drOpts.Enabled() {
 			drAuxPath := filepath.Join(outputDir, fmt.Sprintf("kof-cluster-dr-aux%d.yaml", auxIdx))
-			if err := writeDRYAML(drAuxPath, cfg, drOpts.DRDataDir, propsPath, realmPath, start, end, drOpts.DRServers, cores); err != nil {
+			if err := writeDRYAML(drAuxPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, start, end, drOpts.DRServers, cores); err != nil {
 				return err
 			}
 			fmt.Fprintf(os.Stdout, "wrote %s\n", drAuxPath)
@@ -92,7 +92,7 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath, realm
 	return nil
 }
 
-func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir, propsPath, realmPath string, numPservers int, _ PortMap, cores []CoreServer, drOpts DROpts) error {
+func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, realmPath string, numPservers int, _ PortMap, cores []CoreServer, drOpts DROpts) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -131,7 +131,7 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir, propsPath, realmP
 		fmt.Fprintln(f, "  - persistence:")
 		fmt.Fprintf(f, "      name: pserver%d\n", i+1)
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
-		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPath)
+		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
 		fmt.Fprintln(f, "      loglevel: connections:info;kof:info;durables:info;store:info")
 		fmt.Fprintln(f)
 	}
@@ -145,7 +145,7 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir, propsPath, realmP
 	return nil
 }
 
-func writeAuxYAML(path string, cfg *BrokerConfig, dataDir, propsPath string, start, end int, ports PortMap, cores []CoreServer, drOpts DROpts) error {
+func writeAuxYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, start, end int, ports PortMap, cores []CoreServer, drOpts DROpts) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -181,7 +181,7 @@ func writeAuxYAML(path string, cfg *BrokerConfig, dataDir, propsPath string, sta
 		fmt.Fprintln(f, "  - persistence:")
 		fmt.Fprintf(f, "      name: pserver%d\n", i+1)
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
-		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPath)
+		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
 		fmt.Fprintln(f, "      loglevel: connections:info;kof:info;durables:info;store:info")
 		fmt.Fprintln(f)
 	}
@@ -197,7 +197,7 @@ func writeAuxYAML(path string, cfg *BrokerConfig, dataDir, propsPath string, sta
 // start=0 produces the primary DR YAML with realm entries; start>0 produces an aux DR file.
 // drServers is the list of DR server names/addresses; primaryCores is the primary core.servers list
 // (used as the back-reference in globals.dr of the DR YAML).
-func writeDRYAML(path string, cfg *BrokerConfig, drDataDir, propsPath, realmPath string, start, end int, drServers, primaryCores []CoreServer) error {
+func writeDRYAML(path string, cfg *BrokerConfig, drDataDir string, propsPaths []string, realmPath string, start, end int, drServers, primaryCores []CoreServer) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -234,7 +234,7 @@ func writeDRYAML(path string, cfg *BrokerConfig, drDataDir, propsPath, realmPath
 		fmt.Fprintln(f, "  - persistence:")
 		fmt.Fprintf(f, "      name: drpserver%d\n", drPserverNum)
 		fmt.Fprintf(f, "      data: %s/drpserver%d\n", drDataDir, drPserverNum)
-		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPath)
+		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
 		fmt.Fprintln(f, "      loglevel: connections:info;kof:info;durables:info;store:info")
 		fmt.Fprintln(f)
 	}

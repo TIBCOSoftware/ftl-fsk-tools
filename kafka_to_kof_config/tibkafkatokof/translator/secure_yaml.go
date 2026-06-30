@@ -41,7 +41,7 @@ func ShouldWriteSecure(cfg *BrokerConfig, opts SecureOpts) bool {
 }
 
 // WriteKOFSecureYAML generates kof-cluster-secure.yaml for the primary cluster (first 3 pservers).
-func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, opts SecureOpts, drOpts DROpts) error {
+func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, opts SecureOpts, drOpts DROpts) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
@@ -107,7 +107,7 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir, propsPath, realmP
 		fmt.Fprintln(f, "  - persistence:")
 		fmt.Fprintf(f, "      name: pserver%d\n", i+1)
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
-		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPath)
+		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
 		fmt.Fprintln(f, "      loglevel: connections:info;kof:info;durables:info;store:info")
 		fmt.Fprintln(f)
 	}

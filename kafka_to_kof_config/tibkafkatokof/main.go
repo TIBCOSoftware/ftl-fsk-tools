@@ -1,23 +1,25 @@
-// tibkafkatokof translates a Kafka broker server.properties into the FTL
-// artifacts needed to run a KOF-enabled pserver cluster:
+// tibkafkatokof translates one or more Kafka broker server.properties files into
+// the FTL artifacts needed to run a KOF-enabled pserver cluster:
 //
 //	kof-cluster.yaml          — FTL pserver cluster configuration (primary)
 //	kof-cluster-auxN.yaml     — Auxiliary pserver groups (reserved; not used in initial release)
 //	kof-cluster-secure.yaml   — Secure variant with TLS/auth (when --tls-cert or --oauth-token-url provided)
 //	realm.json                — FTL realm configuration with kof.cluster definition
-//	kof.broker.properties     — Flat key=value broker properties (same format as server.properties)
+//	kof.broker.N.properties   — Per-pserver broker properties (one file per input, N is 1-based)
 //
 // Usage:
 //
-//	tibkafkatokof [flags] <server.properties>
+//	tibkafkatokof [flags] <server.properties...>
 package main
 
 import (
 	"flag"
 	"fmt"
+	"io"
 	rand "math/rand/v2"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"tibco.com/ftl-support/tibkafkatokof/translator"
@@ -25,36 +27,40 @@ import (
 
 func main() {
 	// Core flags
-	outputDir   := flag.String("output-dir",   "./kof-output",    "output directory for generated files")
-	realmName   := flag.String("realm-name",   "_default_realm",  "realm name written into realm.json")
-	dataDir     := flag.String("data-dir",     "/var/kof/data",   "KOF data directory path on pserver hosts")
-	numPservers := flag.Int("num-pservers",    3,                  "number of pservers to generate (must be a positive odd number ≤ 3; initial release supports one kof cluster only)")
+	outputDir := flag.String("output-dir", "./kof-output", "output directory for generated files")
+	realmName := flag.String("realm-name", "_default_realm", "realm name written into realm.json")
+	dataDir := flag.String("data-dir", "/var/kof/data", "KOF data directory path on pserver hosts")
 	coreServersFlag := flag.String("core-servers", "",
 		"comma-separated NAME=host:port list for globals.core.servers\n"+
 			"    e.g. SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602\n"+
 			"    if omitted, ports are randomly generated in range 5600-5699")
 
 	// TLS flags
-	tlsCert        := flag.String("tls-cert",         "", "server TLS certificate PEM file path")
-	tlsKey         := flag.String("tls-key",          "", "server TLS private key PEM file path")
+	tlsCert := flag.String("tls-cert", "", "server TLS certificate PEM file path")
+	tlsKey := flag.String("tls-key", "", "server TLS private key PEM file path")
 	tlsKeyPassword := flag.String("tls-key-password", "", "TLS private key passphrase")
-	tlsCA          := flag.String("tls-ca",           "", "CA/trust PEM file path for connecting to other FTL servers")
+	tlsCA := flag.String("tls-ca", "", "CA/trust PEM file path for connecting to other FTL servers")
 
 	// mTLS flags (needed when a Kafka mTLS listener is present)
-	tlsServerTrust    := flag.String("tls-server-trust",        "", "CA PEM to verify inbound client certificates (tls.server.trust.file)")
-	tlsClientCert     := flag.String("tls-client-cert",         "", "client cert PEM for server-to-server connections (tls.client.cert)")
-	tlsClientKey      := flag.String("tls-client-key",          "", "client private key PEM for server-to-server connections (tls.client.private.key)")
-	tlsClientKeyPass  := flag.String("tls-client-key-password", "", "passphrase for tls-client-key")
+	tlsServerTrust := flag.String("tls-server-trust", "", "CA PEM to verify inbound client certificates (tls.server.trust.file)")
+	tlsClientCert := flag.String("tls-client-cert", "", "client cert PEM for server-to-server connections (tls.client.cert)")
+	tlsClientKey := flag.String("tls-client-key", "", "client private key PEM for server-to-server connections (tls.client.private.key)")
+	tlsClientKeyPass := flag.String("tls-client-key-password", "", "passphrase for tls-client-key")
 
 	// OAuth2 flags
-	oauthTokenURL      := flag.String("oauth-token-url",      "", "OAuth2 token endpoint URL (server-to-server)")
-	oauthJWKSURL       := flag.String("oauth-jwks-url",       "", "OAuth2 JWKS or validation key (file: path or URL)")
-	oauthClientID      := flag.String("oauth-client-id",      "", "OAuth2 client ID")
-	oauthClientSecret  := flag.String("oauth-client-secret",  "", "OAuth2 client secret")
+	oauthTokenURL := flag.String("oauth-token-url", "", "OAuth2 token endpoint URL (server-to-server)")
+	oauthJWKSURL := flag.String("oauth-jwks-url", "", "OAuth2 JWKS or validation key (file: path or URL)")
+	oauthClientID := flag.String("oauth-client-id", "", "OAuth2 client ID")
+	oauthClientSecret := flag.String("oauth-client-secret", "", "OAuth2 client secret")
 	oauthProviderTrust := flag.String("oauth-provider-trust", "", "OAuth2 provider trust PEM file")
 
 	// Basic auth flag
 	authUsersFile := flag.String("auth-users-file", "", "path to FTL users.txt for file-based authentication")
+
+	// Documentation flag: print the line-by-line listener/security property account and exit.
+	listProps := flag.Bool("list-properties", false, "print how each Kafka listener/security property is treated, then exit")
+	colorMode := flag.String("color", "auto", "colorize --list-properties output: auto|always|never")
+	autoMode := flag.Bool("auto", false, "run the mechanical conversions automatically (JKS/PKCS12 keystores -> PEM via keytool/openssl); items needing a human stay RESOLVE-REQUIRED")
 
 	// DR flags
 	drServersFlag := flag.String("dr-servers", "",
@@ -64,50 +70,58 @@ func main() {
 		"data directory for DR pservers (default: <data-dir>/dr)")
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: tibkafkatokof [flags] <server.properties>")
+		fmt.Fprintln(os.Stderr, "Usage: tibkafkatokof [flags] <server.properties...>")
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Translates a Kafka broker server.properties into FTL KOF artifacts.")
+		fmt.Fprintln(os.Stderr, "Translates one or more Kafka broker server.properties into FTL KOF artifacts.")
+		fmt.Fprintln(os.Stderr, "Pass one file per broker (1-9 files); pserver count is derived from the file count.")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Output files:")
 		fmt.Fprintln(os.Stderr, "  kof-cluster.yaml          FTL pserver cluster configuration (primary, first 3 pservers)")
 		fmt.Fprintln(os.Stderr, "  kof-cluster-auxN.yaml     Additional pserver groups (reserved, not used in initial release)")
 		fmt.Fprintln(os.Stderr, "  kof-cluster-secure.yaml   Secure variant with TLS/auth settings for FTL server")
 		fmt.Fprintln(os.Stderr, "  realm.json                FTL realm configuration with kof.cluster")
-		fmt.Fprintln(os.Stderr, "  kof.broker.properties     Flat key=value broker properties")
+		fmt.Fprintln(os.Stderr, "  kof.broker.N.properties   Per-pserver broker properties (N is 1-based)")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Flags:")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
+	if *listProps {
+		translator.WriteSupportList(os.Stdout, useColor(*colorMode))
+		return
+	}
+
 	args := flag.Args()
-	if len(args) != 1 {
+	if len(args) < 1 || len(args) > 9 {
 		flag.Usage()
 		os.Exit(1)
 	}
-	if *numPservers < 1 || *numPservers%2 == 0 {
-		fmt.Fprintln(os.Stderr, "error: --num-pservers must be a positive odd number (e.g. 1, 3)")
-		os.Exit(1)
-	}
-	if *numPservers > 3 {
-		fmt.Fprintln(os.Stderr, "error: --num-pservers must not exceed 3 (initial release supports only one kof cluster)")
-		os.Exit(1)
-	}
 
-	cfg, err := translator.ParseBrokerConfig(args[0])
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+	cfgs := make([]*translator.BrokerConfig, 0, len(args))
+	for _, arg := range args {
+		cfg, err := translator.ParseBrokerConfig(arg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		cfgs = append(cfgs, cfg)
 	}
+	numPservers := len(cfgs)
 
 	if err := os.MkdirAll(*outputDir, 0o755); err != nil {
 		fmt.Fprintln(os.Stderr, "error creating output directory:", err)
 		os.Exit(1)
 	}
 
-	ports := generatePorts(*numPservers)
-	propsPath := filepath.Join(*outputDir, "kof.broker.properties")
+	ports := generatePorts(numPservers)
 	realmPath := filepath.Join(*outputDir, "realm.json")
+
+	// Build per-pserver properties file paths (1-based index).
+	propsPaths := make([]string, numPservers)
+	for i := range propsPaths {
+		propsPaths[i] = filepath.Join(*outputDir, fmt.Sprintf("kof.broker.%d.properties", i+1))
+	}
 
 	// Parse --core-servers flag into CoreServer slice.
 	coreServers := parseCoreServers(*coreServersFlag)
@@ -124,43 +138,184 @@ func main() {
 
 	// Build SecureOpts from flags.
 	secureOpts := translator.SecureOpts{
-		TLSCert:             *tlsCert,
-		TLSKey:              *tlsKey,
-		TLSKeyPassword:      *tlsKeyPassword,
-		TLSCA:               *tlsCA,
-		TLSServerTrust:      *tlsServerTrust,
-		TLSClientCert:       *tlsClientCert,
-		TLSClientKey:        *tlsClientKey,
+		TLSCert:              *tlsCert,
+		TLSKey:               *tlsKey,
+		TLSKeyPassword:       *tlsKeyPassword,
+		TLSCA:                *tlsCA,
+		TLSServerTrust:       *tlsServerTrust,
+		TLSClientCert:        *tlsClientCert,
+		TLSClientKey:         *tlsClientKey,
 		TLSClientKeyPassword: *tlsClientKeyPass,
-		OAuthTokenURL:       *oauthTokenURL,
-		OAuthJWKSURL:        *oauthJWKSURL,
-		OAuthClientID:       *oauthClientID,
-		OAuthClientSecret:   *oauthClientSecret,
-		OAuthProviderTrust:  *oauthProviderTrust,
-		AuthUsersFile:       *authUsersFile,
+		OAuthTokenURL:        *oauthTokenURL,
+		OAuthJWKSURL:         *oauthJWKSURL,
+		OAuthClientID:        *oauthClientID,
+		OAuthClientSecret:    *oauthClientSecret,
+		OAuthProviderTrust:   *oauthProviderTrust,
+		AuthUsersFile:        *authUsersFile,
 	}
 
-	if err := translator.WriteKOFClusterYAML(cfg, *outputDir, *dataDir, propsPath, realmPath, *numPservers, ports, coreServers, drOpts); err != nil {
+	// --auto: run the mechanical conversions (keystores) for each broker config.
+	if *autoMode {
+		for _, cfg := range cfgs {
+			r := translator.AutoResolve(cfg, os.Stderr)
+			if r.KeystoresConverted > 0 || r.KeystoresFailed > 0 {
+				fmt.Fprintf(os.Stderr, "auto: %d keystore converted, %d failed\n\n",
+					r.KeystoresConverted, r.KeystoresFailed)
+			}
+		}
+	}
+
+	// Write per-pserver broker properties files and collect status.
+	statuses := make([]translator.ConfigStatus, numPservers)
+	for i, cfg := range cfgs {
+		status, err := translator.WriteKOFBrokerProperties(cfg, *outputDir, i+1)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error writing kof.broker.%d.properties: %v\n", i+1, err)
+			os.Exit(1)
+		}
+		statuses[i] = status
+	}
+
+	// The cluster and realm artifacts derive from the listener layout, independent
+	// of the security resolution in broker.properties, so they are always written --
+	// even when broker.properties is still INVALID.
+	if err := translator.WriteKOFClusterYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, drOpts); err != nil {
 		fmt.Fprintln(os.Stderr, "error writing kof-cluster.yaml:", err)
 		os.Exit(1)
 	}
-
-	if translator.ShouldWriteSecure(cfg, secureOpts) {
-		if err := translator.WriteKOFSecureYAML(cfg, *outputDir, *dataDir, propsPath, realmPath, *numPservers, ports, coreServers, secureOpts, drOpts); err != nil {
+	if translator.ShouldWriteSecure(cfgs[0], secureOpts) {
+		if err := translator.WriteKOFSecureYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, secureOpts, drOpts); err != nil {
 			fmt.Fprintln(os.Stderr, "error writing kof-cluster-secure.yaml:", err)
 			os.Exit(1)
 		}
 	}
-
-	if err := translator.WriteRealmJSON(cfg, *outputDir, *realmName, *numPservers, drOpts); err != nil {
+	if err := translator.WriteRealmJSON(cfgs[0], *outputDir, *realmName, numPservers, drOpts); err != nil {
 		fmt.Fprintln(os.Stderr, "error writing realm.json:", err)
 		os.Exit(1)
 	}
-	fmt.Println("wrote", filepath.Join(*outputDir, "realm.json"))
 
-	if err := translator.WriteKOFBrokerProperties(cfg, *outputDir, *dataDir, 1); err != nil {
-		fmt.Fprintln(os.Stderr, "error writing kof.broker.properties:", err)
-		os.Exit(1)
+	// Heads-up about keys/values KoF does not honor (informational; does not block).
+	for _, cfg := range cfgs {
+		if items := translator.UnsupportedScan(cfg); len(items) > 0 {
+			printUnsupported(os.Stderr, items)
+		}
+	}
+
+	anyInvalid := false
+	for i, status := range statuses {
+		if status == translator.StatusInvalid {
+			anyInvalid = true
+			printResolveSummary(os.Stderr, translator.Summarize(cfgs[i]), *outputDir, *autoMode, i+1)
+		}
+	}
+	if anyInvalid {
+		os.Exit(2)
+	}
+	fmt.Fprintln(os.Stderr, "\nAll kof.broker.N.properties files are ACCEPTED.")
+}
+
+// printUnsupported prints the keys/values KoF does not honor, so the operator
+// learns it here instead of from the FTL docs. They do not block ACCEPTED -- they
+// are kept in the file but will not take effect.
+func printUnsupported(w io.Writer, items []translator.UnsupportedItem) {
+	fmt.Fprintf(w, "\nNot supported in KoF -- kept for reference, but they will NOT take effect:\n")
+	for _, it := range items {
+		fmt.Fprintf(w, "  - %s\n      %s\n", it.What, it.Reason)
+	}
+}
+
+// printResolveSummary prints, after an INVALID run, a numbered list of the
+// unresolved settings -- each as "line N: key = value" with what's wrong and the
+// fix -- then points --auto at the lines it can fix and lists the lines that need a
+// human. The operator runs --auto and/or edits the >>>>>>> blocks, then re-runs.
+func printResolveSummary(w io.Writer, s translator.ResolveSummary, outputDir string, autoRan bool, n int) {
+	brokerPath := filepath.Join(outputDir, fmt.Sprintf("kof.broker.%d.properties", n))
+	fmt.Fprintf(w, "\nINVALID -- %d setting(s) to fix in %s:\n", s.Total(), brokerPath)
+
+	var autoLines, youLines []int
+	for i, it := range s.Items {
+		val := it.Value
+		if it.Note != "" {
+			val += "   (file: " + it.Note + ")"
+		}
+		what, fix, autoFixable := resolveExplain(it.Kind, autoRan)
+		fmt.Fprintf(w, "\n  %d. line %d:  %s = %s\n", i+1, it.Line, it.Key, val)
+		fmt.Fprintf(w, "        %s\n", what)
+		fmt.Fprintf(w, "        %s\n", fix)
+		if autoFixable && !autoRan {
+			autoLines = append(autoLines, it.Line)
+		} else {
+			youLines = append(youLines, it.Line)
+		}
+	}
+
+	fmt.Fprintln(w)
+	if len(autoLines) > 0 {
+		fmt.Fprintf(w, "Run with --auto to convert line(s) %s for you (keystore -> PEM).\n", joinInts(autoLines))
+	}
+	if len(youLines) > 0 {
+		fmt.Fprintf(w, "Line(s) needing you: %s -- edit the >>>>>>> block in the file.\n", joinInts(youLines))
+	}
+	fmt.Fprintf(w, "Then re-run the same command:\n  tibkafkatokof -output-dir %s %s\n", outputDir, brokerPath)
+}
+
+// resolveExplain returns, for a resolve kind, a one-line "what's wrong", a one-line
+// "fix", and whether --auto can do it. autoRan tweaks the keystore wording (--auto
+// already tried but the .jks wasn't on this host).
+func resolveExplain(kind translator.ResolveKind, autoRan bool) (what, fix string, autoFixable bool) {
+	switch kind {
+	case translator.KindKeystore:
+		what = "a Java keystore (JKS/PKCS12); KoF reads PEM only."
+		if autoRan {
+			return what, "Fix: --auto couldn't here (file not on this host). Run --auto where the .jks is, or use the commands in the block.", true
+		}
+		return what, "Fix: run with --auto to convert it, or run the keytool/openssl commands in the block.", true
+	case translator.KindHandler:
+		return "a custom Java callback class KoF can't run.",
+			"Fix: in the block, set a backend (oauth/ldap/file/inline) and fill its params.", false
+	case translator.KindBackendParams:
+		return "a backend is selected but its params are missing.",
+			"Fix: in the block, fill the params (oauth: jwks url + issuer + audience; inline: jaas users).", false
+	case translator.KindMechanism:
+		return "a SASL mechanism KoF can't serve (it serves PLAIN and OAUTHBEARER only).",
+			"Fix: in the block, switch this listener to PLAIN or OAUTHBEARER.", false
+	case translator.KindAuthorizer:
+		return "a custom authorizer; KoF supports the standard one.",
+			"Fix: in the block, set the value to: standard.", false
+	}
+	return "", "", false
+}
+
+// joinInts formats line numbers as "45, 49".
+func joinInts(xs []int) string {
+	out := ""
+	for i, x := range xs {
+		if i > 0 {
+			out += ", "
+		}
+		out += strconv.Itoa(x)
+	}
+	return out
+}
+
+// useColor decides whether to colorize the --list-properties output. "always" and
+// "never" force it; "auto" (the default) colors only when stdout is a terminal and
+// NO_COLOR is not set, so piped or redirected output stays plain.
+func useColor(mode string) bool {
+	switch mode {
+	case "always":
+		return true
+	case "never":
+		return false
+	default:
+		if os.Getenv("NO_COLOR") != "" {
+			return false
+		}
+		fi, err := os.Stdout.Stat()
+		if err != nil {
+			return false
+		}
+		return fi.Mode()&os.ModeCharDevice != 0
 	}
 }
 
