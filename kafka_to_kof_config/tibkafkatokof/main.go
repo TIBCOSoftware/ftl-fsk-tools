@@ -30,6 +30,10 @@ func main() {
 	outputDir := flag.String("output-dir", "./kof-output", "output directory for generated files")
 	realmName := flag.String("realm-name", "_default_realm", "realm name written into realm.json")
 	dataDir := flag.String("data-dir", "/var/kof/data", "KOF data directory path on pserver hosts")
+	ftlLogLevel := flag.String("ftl-loglevel", translator.DefaultFTLLogLevel,
+		"loglevel for the generated FTL servers, written into each pserver in the "+
+			"cluster YAML (the output servers' logging, NOT this tool's own logging; "+
+			"e.g. connections:debug;kof:info;durables:info;store:info)")
 	coreServersFlag := flag.String("core-servers", "",
 		"comma-separated NAME=host:port list for globals.core.servers\n"+
 			"    e.g. SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602\n"+
@@ -47,12 +51,33 @@ func main() {
 	tlsClientKey := flag.String("tls-client-key", "", "client private key PEM for server-to-server connections (tls.client.private.key)")
 	tlsClientKeyPass := flag.String("tls-client-key-password", "", "passphrase for tls-client-key")
 
-	// OAuth2 flags
-	oauthTokenURL := flag.String("oauth-token-url", "", "OAuth2 token endpoint URL (server-to-server)")
-	oauthJWKSURL := flag.String("oauth-jwks-url", "", "OAuth2 JWKS or validation key (file: path or URL)")
-	oauthClientID := flag.String("oauth-client-id", "", "OAuth2 client ID")
-	oauthClientSecret := flag.String("oauth-client-secret", "", "OAuth2 client secret")
-	oauthProviderTrust := flag.String("oauth-provider-trust", "", "OAuth2 provider trust PEM file")
+	// OAuth2 flags — server-to-server
+	oauthTokenURL := flag.String("oauth-token-url", "", "OAuth2 token endpoint URL (server-to-server, oauth2.svr.endpoint.token)")
+	oauthJWKSURL := flag.String("oauth-jwks-url", "", "OAuth2 JWKS or validation key (file: path or URL, oauth2.validation.key)")
+	oauthClientID := flag.String("oauth-client-id", "", "OAuth2 client ID for server-to-server (oauth2.svr.client.id)")
+	oauthClientSecret := flag.String("oauth-client-secret", "", "OAuth2 client secret for server-to-server (oauth2.svr.client.secret)")
+	oauthProviderTrust := flag.String("oauth-provider-trust", "", "OAuth2 provider trust PEM file (oauth2.provider.trust.file)")
+
+	// OAuth2 flags — claim/audience (globals)
+	oauthClaimRoles := flag.String("oauth-claim-roles", "group", "OAuth2 claim mapped to FTL roles (oauth2.claim.roles)")
+	oauthClaimUsername := flag.String("oauth-claim-username", "preferred_username", "OAuth2 claim mapped to FTL user (oauth2.claim.username)")
+	oauthAudience := flag.String("oauth-audience", "ftl", "OAuth2 audience value (oauth2.audience)")
+
+	// OAuth2 flags — UI endpoints (globals)
+	oauthUIAuthURL := flag.String("oauth-ui-auth-url", "", "OAuth2 auth endpoint for UI (oauth2.ui.endpoint.auth)")
+	oauthUITokenURL := flag.String("oauth-ui-token-url", "", "OAuth2 token endpoint for UI (oauth2.ui.endpoint.token)")
+	oauthUILogoutURL := flag.String("oauth-ui-logout-url", "", "OAuth2 logout endpoint for UI (oauth2.ui.endpoint.logout)")
+
+	// OAuth2 flags — UI client credentials (per-server ftlserver.properties)
+	oauthUIClientID := flag.String("oauth-ui-client-id", "", "OAuth2 client ID for UI authorization code flow (oauth2.ui.client.id)")
+	oauthUIClientSecret := flag.String("oauth-ui-client-secret", "", "OAuth2 client secret for UI (oauth2.ui.client.secret)")
+
+	// Shared auth flags
+	authRolemap := flag.String("auth-rolemap", "", "path to FTL role map file (auth.rolemap in ftlserver.properties for oauth2)")
+	realmServiceUser := flag.String("realm-service-user", "primary", "services.realm.user credential for oauth2 mode")
+	realmServicePassword := flag.String("realm-service-password", "primary-pw", "services.realm.password credential for oauth2 mode")
+	serverUser := flag.String("server-user", "internal", "user in ftlserver.properties for server-to-server connections (non-oauth2 modes)")
+	serverPassword := flag.String("server-password", "internal-pw", "password in ftlserver.properties for server-to-server connections (non-oauth2 modes)")
 
 	// Basic auth flag
 	authUsersFile := flag.String("auth-users-file", "", "path to FTL users.txt for file-based authentication")
@@ -151,6 +176,19 @@ func main() {
 		OAuthClientID:        *oauthClientID,
 		OAuthClientSecret:    *oauthClientSecret,
 		OAuthProviderTrust:   *oauthProviderTrust,
+		OAuthClaimRoles:      *oauthClaimRoles,
+		OAuthClaimUsername:   *oauthClaimUsername,
+		OAuthAudience:        *oauthAudience,
+		OAuthUIAuthURL:       *oauthUIAuthURL,
+		OAuthUITokenURL:      *oauthUITokenURL,
+		OAuthUILogoutURL:     *oauthUILogoutURL,
+		OAuthUIClientID:      *oauthUIClientID,
+		OAuthUIClientSecret:  *oauthUIClientSecret,
+		AuthRolemap:          *authRolemap,
+		RealmServiceUser:     *realmServiceUser,
+		RealmServicePassword: *realmServicePassword,
+		ServerUser:           *serverUser,
+		ServerPassword:       *serverPassword,
 		AuthUsersFile:        *authUsersFile,
 	}
 
@@ -166,25 +204,59 @@ func main() {
 	}
 
 	// Write per-pserver broker properties files and collect status.
+	// Unsupported key=value pairs are deduplicated across all brokers (by key) and
+	// written once to unsupported.properties.
 	statuses := make([]translator.ConfigStatus, numPservers)
+	seenUnsupported := make(map[string]bool)
+	var allUnsupported []string
 	for i, cfg := range cfgs {
-		status, err := translator.WriteKOFBrokerProperties(cfg, *outputDir, i+1)
+		status, unsupported, err := translator.WriteKOFBrokerProperties(cfg, *outputDir, i+1)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error writing kof.broker.%d.properties: %v\n", i+1, err)
 			os.Exit(1)
 		}
 		statuses[i] = status
+		for _, kv := range unsupported {
+			key := kv
+			if idx := strings.Index(kv, "="); idx >= 0 {
+				key = kv[:idx]
+			}
+			if !seenUnsupported[key] {
+				seenUnsupported[key] = true
+				allUnsupported = append(allUnsupported, kv)
+			}
+		}
+	}
+	if len(allUnsupported) > 0 {
+		if err := translator.WriteUnsupportedProperties(*outputDir, allUnsupported); err != nil {
+			fmt.Fprintln(os.Stderr, "error writing unsupported.properties:", err)
+			os.Exit(1)
+		}
 	}
 
 	// The cluster and realm artifacts derive from the listener layout, independent
 	// of the security resolution in broker.properties, so they are always written --
 	// even when broker.properties is still INVALID.
-	if err := translator.WriteKOFClusterYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, drOpts); err != nil {
+	// Policy: if any Kafka listener is secured, the FTL servers (the realm and the pservers) must
+	// require authentication too. Auto-provision FTL basic auth (a users file, self-contained, no
+	// operator certs) so the pserver-to-pserver connections are valid; this is separate from the
+	// Kafka listener security.
+	ftlUsersFile := *authUsersFile // operator-provided FTL users file, if any
+	if cfgs[0].IsSecure && ftlUsersFile == "" {
+		uf, uerr := translator.WriteFTLServerUsers(*outputDir)
+		if uerr != nil {
+			fmt.Fprintln(os.Stderr, "error writing ftl-users.txt:", uerr)
+			os.Exit(1)
+		}
+		ftlUsersFile = uf
+		fmt.Fprintf(os.Stdout, "wrote %s (FTL server basic auth; a Kafka listener is secured)\n", uf)
+	}
+	if err := translator.WriteKOFClusterYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, ftlUsersFile, drOpts, *ftlLogLevel); err != nil {
 		fmt.Fprintln(os.Stderr, "error writing kof-cluster.yaml:", err)
 		os.Exit(1)
 	}
 	if translator.ShouldWriteSecure(cfgs[0], secureOpts) {
-		if err := translator.WriteKOFSecureYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, secureOpts, drOpts); err != nil {
+		if err := translator.WriteKOFSecureYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, secureOpts, drOpts, *ftlLogLevel); err != nil {
 			fmt.Fprintln(os.Stderr, "error writing kof-cluster-secure.yaml:", err)
 			os.Exit(1)
 		}
@@ -272,7 +344,7 @@ func resolveExplain(kind translator.ResolveKind, autoRan bool) (what, fix string
 		return what, "Fix: run with --auto to convert it, or run the keytool/openssl commands in the block.", true
 	case translator.KindHandler:
 		return "a custom Java callback class KoF can't run.",
-			"Fix: in the block, set a backend (oauth/ldap/file/inline) and fill its params.", false
+			"Fix: in the block, set a backend (oauth/file/inline) and fill its params.", false
 	case translator.KindBackendParams:
 		return "a backend is selected but its params are missing.",
 			"Fix: in the block, fill the params (oauth: jwks url + issuer + audience; inline: jaas users).", false

@@ -111,14 +111,14 @@ func buildRealmProps(cfg *BrokerConfig) map[string]any {
 }
 
 // buildKOFCluster constructs the kof.cluster map per KOF requirements:
-//   - cluster name: "kof.cluster" (initial release: no site-id or shard-id suffix)
+//   - cluster name: "kof.cluster.N" where N is the 0-based cluster index
 //   - kof_enabled: true, disk_persistence: async
 //   - 3 required stores: kof.data.store, kof.sync.store, kof.meta.store
 //   - pserver_sets: one _setA set (non-DR) or _setA + _DRset (DR mode)
 func buildKOFCluster(cfg *BrokerConfig, clusterIdx, numPservers int, drOpts DROpts) map[string]any {
 	startPserver := clusterIdx*3 + 1
 	endPserver := min(startPserver+3, numPservers+1)
-	clusterName := "kof.cluster"
+	clusterName := fmt.Sprintf("kof.cluster.%d", clusterIdx)
 
 	var pserverSets []any
 	if drOpts.Enabled() {

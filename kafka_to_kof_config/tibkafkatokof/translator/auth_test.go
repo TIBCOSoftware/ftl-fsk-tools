@@ -62,11 +62,11 @@ func TestResolveListenerAuth(t *testing.T) {
 			wantRecog:   true,
 		},
 		{
-			name:        "unrecognized ldap handler -> flagged + ldap guess",
+			name:        "unrecognized ldap-named handler -> flagged, no guess",
 			handler:     "com.acme.LdapPlainServerCallbackHandler",
 			wantBackend: BackendNone,
 			wantRecog:   false,
-			wantGuess:   BackendLdap,
+			wantGuess:   BackendNone,
 		},
 		{
 			name:        "unrecognized opaque handler -> flagged, no guess",

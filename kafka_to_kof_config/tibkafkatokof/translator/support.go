@@ -60,13 +60,13 @@ var propSections = []struct {
 			{"listener.name.<listener>.<property>", DispAccept,
 				"Per-listener override of any property below. Honored for the listener it names."},
 			{"inter.broker.listener.name", DispNotApplicable,
-				"Inter-broker traffic uses the FTL fabric, not a Kafka listener. Filtered out, not bound."},
+				"Inter-broker traffic uses the FTL servers' own connections, not a Kafka listener. Filtered out, not bound."},
 			{"controller.listener.names", DispNotApplicable,
 				"The controller quorum is FTL-native (not KRaft over a Kafka listener). Filtered out."},
 			{"control.plane.listener.name", DispNotApplicable,
-				"Control-plane traffic is carried by the FTL fabric. Ignored."},
+				"Control-plane traffic is carried by the FTL servers' own connections. Ignored."},
 			{"sasl.mechanism.inter.broker.protocol", DispNotApplicable,
-				"The SASL mechanism for inter-broker traffic. Inter-broker is the FTL fabric, not a Kafka SASL listener, so it is ignored."},
+				"The SASL mechanism for inter-broker traffic. Inter-broker traffic uses the FTL servers' own connections, not a Kafka SASL listener, so it is ignored."},
 			{"sasl.mechanism.controller.protocol", DispNotApplicable,
 				"The SASL mechanism for controller traffic. The controller quorum is FTL-native, so it is ignored."},
 		},
@@ -75,7 +75,7 @@ var propSections = []struct {
 		Name: "TLS (server certificate and client-cert verification)",
 		Props: []PropSupport{
 			{"ssl.keystore.location", DispAccept,
-				"Path to the listener's server certificate/key used to terminate TLS at the Kafka edge."},
+				"Path to the listener's server certificate/key used to terminate TLS on the Kafka listener."},
 			{"ssl.keystore.password", DispAccept,
 				"Password for the server keystore. Honored."},
 			{"ssl.keystore.key", DispAccept,
@@ -184,8 +184,8 @@ var propSections = []struct {
 			{"sasl.oauthbearer.token.endpoint.url", DispNotApplicable,
 				"The IdP token endpoint used to OBTAIN a token, by a producer/consumer or by a broker acting as " +
 					"an OAuth client for inter-broker auth. The KoF listener only validates the token a client " +
-					"presents (against jwks.endpoint.url); it never acquires one, and inter-broker auth is the FTL " +
-					"fabric, not a Kafka SASL listener. So nothing at the KoF edge uses it."},
+					"presents (against jwks.endpoint.url); it never acquires one, and inter-broker auth uses the " +
+					"FTL servers' own connections, not a Kafka SASL listener. So nothing on the KoF Kafka listeners uses it."},
 			{"sasl.oauthbearer.unsecured.*", DispDepends,
 				"Options for the unsecured (no-signature) validator used in testing. The OAuthBearerUnsecuredValidatorCallbackHandler " +
 					"is recognized as a backend, but an unsecured token is for testing only and must not be relied on in production."},
@@ -224,7 +224,7 @@ var propSections = []struct {
 			{"connection.failed.authentication.delay.ms", DispUnsupported,
 				"A delay before closing a connection that failed authentication. Not implemented; a failed auth is closed immediately."},
 			{"connections.max.idle.ms", DispNotApplicable,
-				"Idle-connection timeout in the Java broker. KoF manages connection lifetime through the FTL fabric."},
+				"Idle-connection timeout in the Java broker. KoF manages connection lifetime through the FTL servers."},
 		},
 	},
 	{

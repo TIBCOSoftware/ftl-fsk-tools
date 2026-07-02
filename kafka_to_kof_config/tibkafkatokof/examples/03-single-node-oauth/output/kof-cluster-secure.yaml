@@ -13,6 +13,9 @@ globals:
   oauth2.claim.roles: group
   oauth2.claim.username: preferred_username
   oauth2.audience: ftl
+  oauth2.ui.endpoint.auth: https://auth.example.com/oauth/authorize
+  oauth2.ui.endpoint.token: https://auth.example.com/oauth/token
+  oauth2.ui.endpoint.logout: https://auth.example.com/oauth/logout
   oauth2.svr.endpoint.token: https://auth.example.com/oauth/token
 
 servers:
@@ -22,18 +25,23 @@ servers:
       tls.server.cert: /etc/ftl/certs/server.pem
       tls.server.private.key: /etc/ftl/certs/server.key
       oauth2.validation.key: file:/etc/ftl/oauth.json
+      oauth2.ui.client.id: ftl-ui
+      oauth2.ui.client.secret: env:OAUTH_UI_CLIENT_SECRET
       oauth2.provider.trust.file: /etc/ftl/certs/oauth-provider.pem
       oauth2.svr.client.id: ftl-server
       oauth2.svr.client.secret: env:OAUTH_CLIENT_SECRET
+      auth.rolemap: /etc/ftl/rolemap.txt
   - persistence:
       name: pserver1
       data: /var/kof/data/pserver1
-      kof.broker.properties: examples/03-single-node-oauth/output/kof.broker.properties
+      kof.broker.properties: examples/03-single-node-oauth/output/kof.broker.1.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
 services:
   persistence:
     data: /var/kof/data
   realm:
+    user: primary
+    password: primary-pw
     data: /var/kof/data
     initial.realm.config: examples/03-single-node-oauth/output/realm.json

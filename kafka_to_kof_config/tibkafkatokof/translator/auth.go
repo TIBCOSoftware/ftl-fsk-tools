@@ -7,13 +7,16 @@ import (
 
 // AuthBackend is the canonical credential backend a SASL listener resolves to.
 // It is what the kof-ready config records instead of a Java handler class.
+//
+// CANONICAL VOCABULARY: these strings are the canonical kof.broker.properties tokens the
+// pserver consumes. The single source of truth is the C header
+// hydra/header/private/kof/kofcanonical.h (KOF_CANON_AUTH_*); keep these in sync with it.
 type AuthBackend string
 
 const (
-	BackendInline AuthBackend = "inline" // inline user_X=Y entries in the jaas config
-	BackendFile   AuthBackend = "file"   // realm file provider
-	BackendLdap   AuthBackend = "ldap"   // realm ldap provider
-	BackendOauth  AuthBackend = "oauth"  // realm oauth2 provider (OAUTHBEARER)
+	BackendInline AuthBackend = "inline" // KOF_CANON_AUTH_INLINE -- inline user_X=Y entries in the jaas config
+	BackendFile   AuthBackend = "file"   // KOF_CANON_AUTH_FILE   -- realm file provider
+	BackendOauth  AuthBackend = "oauth"  // KOF_CANON_AUTH_OAUTH  -- realm oauth2 provider (OAUTHBEARER)
 	BackendNone   AuthBackend = ""       // no configured credential source
 )
 
@@ -33,7 +36,6 @@ var recognizedHandlers = map[string]AuthBackend{
 var canonicalBackends = map[string]AuthBackend{
 	string(BackendInline): BackendInline,
 	string(BackendFile):   BackendFile,
-	string(BackendLdap):   BackendLdap,
 	string(BackendOauth):  BackendOauth,
 }
 
@@ -49,8 +51,6 @@ func backendFromValue(value string) (AuthBackend, bool) {
 func guessBackendFromName(class string) AuthBackend {
 	l := strings.ToLower(class)
 	switch {
-	case strings.Contains(l, "ldap"):
-		return BackendLdap
 	case strings.Contains(l, "oauth"), strings.Contains(l, "oidc"):
 		return BackendOauth
 	default:
@@ -153,6 +153,10 @@ var recognizedAuthorizers = map[string]bool{
 
 // authorizerCanonical is the value the tool writes for authorizer.class.name when
 // a recognized authorizer is named: KoF turns on its native ACL enforcement.
+//
+// CANONICAL VOCABULARY: this token is the canonical kof.broker.properties value the pserver
+// consumes. The single source of truth is the C header hydra/header/private/kof/kofcanonical.h
+// (KOF_CANON_AUTHORIZER_STANDARD); keep in sync with it.
 const authorizerCanonical = "standard"
 
 // recognizedAuthorizerNames returns the recognized authorizer classes in sorted
@@ -234,8 +238,8 @@ type paramHint struct {
 // token (idempotent re-run), translates a recognized Java class, flags an
 // unrecognized custom class, and -- once a backend is known -- checks that the
 // backend's params are present (oauth needs a JWKS endpoint, inline needs jaas
-// users). ldap/file are configured in the realm, which this file cannot see, so
-// they are treated as resolved.
+// users). file is configured in the realm, which this file cannot see, so
+// it is treated as resolved.
 func resolveHandler(cfg *BrokerConfig, handlerKey string) HandlerOutcome {
 	value := cfg.Settings[handlerKey]
 	jaas := jaasForHandlerKey(cfg, handlerKey)
@@ -259,7 +263,7 @@ func resolveHandler(cfg *BrokerConfig, handlerKey string) HandlerOutcome {
 // checkBackendParams completes a HandlerOutcome once the backend is known, marking
 // it unresolved when the backend's required params are missing. The gate is the
 // minimum a backend needs to work: oauth needs a JWKS endpoint, inline needs jaas
-// users. ldap/file are configured in the realm, so they are treated as resolved.
+// users. file is configured in the realm, so it is treated as resolved.
 func checkBackendParams(cfg *BrokerConfig, handlerKey string, be AuthBackend, active string, fromClass bool, jaas string) HandlerOutcome {
 	o := HandlerOutcome{Backend: be, Active: active, FromClass: fromClass}
 	switch be {
@@ -323,7 +327,7 @@ func oauthParams(handlerKey string) []paramHint {
 }
 
 // backendParamHints returns the param lines to show for a chosen backend: the
-// oauth family, the inline jaas users, or a realm-provider note for ldap/file.
+// oauth family, the inline jaas users, or a realm-provider note for file.
 func backendParamHints(handlerKey string, be AuthBackend) []paramHint {
 	switch be {
 	case BackendOauth:
@@ -331,8 +335,6 @@ func backendParamHints(handlerKey string, be AuthBackend) []paramHint {
 	case BackendInline:
 		return []paramHint{{jaasConfigKey(handlerKey),
 			"a PlainLoginModule with user_<name>=\"<password>\" entries"}}
-	case BackendLdap:
-		return []paramHint{{"", "configure an ldap provider in the realm (auth.providers=ldap:...)"}}
 	case BackendFile:
 		return []paramHint{{"", "configure a file provider in the realm (auth.providers=file:<path>)"}}
 	}

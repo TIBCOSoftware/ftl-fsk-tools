@@ -30,22 +30,18 @@ type ResolveSummary struct {
 func (s ResolveSummary) Total() int { return len(s.Items) }
 
 // Summarize collects the unresolved settings from a parsed config, in file order,
-// using the same resolution the status computation uses.
+// using the same resolution the status computation uses. Only settings that appear
+// in kof.broker.properties (i.e. pass isSupportedBrokerProperty) are included.
 func Summarize(cfg *BrokerConfig) ResolveSummary {
 	var s ResolveSummary
 	add := func(kind ResolveKind, k, value, note string) {
 		s.Items = append(s.Items, ResolveItem{Kind: kind, Line: cfg.SettingLines[k], Key: k, Value: value, Note: note})
 	}
 	for _, k := range cfg.SettingKeys {
+		if !isSupportedBrokerProperty(k) {
+			continue
+		}
 		switch {
-		case isHandlerClassKey(k):
-			o := resolveHandler(cfg, k)
-			switch {
-			case o.NeedsPick:
-				add(KindHandler, k, cfg.Settings[k], "")
-			case !o.Resolved:
-				add(KindBackendParams, k, string(o.Backend), "")
-			}
 		case isAuthorizerKey(k):
 			if recognized, _ := resolveAuthorizer(cfg.Settings[k]); !recognized {
 				add(KindAuthorizer, k, cfg.Settings[k], "")

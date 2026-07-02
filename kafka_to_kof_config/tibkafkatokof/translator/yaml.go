@@ -19,6 +19,11 @@ type CoreServer struct {
 	Address string // e.g. "host:5600"
 }
 
+// DefaultFTLLogLevel is the loglevel written into each generated pserver in the
+// cluster YAML (the output FTL servers' logging) when --ftl-loglevel is not
+// supplied. It is not this tool's own logging level.
+const DefaultFTLLogLevel = "connections:info;kof:info;durables:info;store:info"
+
 // DROpts holds Disaster Recovery configuration for generated files.
 // DR mode is enabled when DRServers is non-empty (i.e. --dr-servers was provided).
 type DROpts struct {
@@ -41,7 +46,7 @@ func buildDRString(servers []CoreServer) string {
 // WriteKOFClusterYAML generates kof-cluster.yaml (primary) and, when numPservers > 3,
 // one or more kof-cluster-auxN.yaml files for additional pserver groups.
 // When drOpts.Enabled(), also generates kof-cluster-dr.yaml (and aux DR files).
-func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, drOpts DROpts) error {
+func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, authUsersFile string, drOpts DROpts, logLevel string) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
@@ -54,14 +59,14 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPath
 	// Primary cluster: first 3 pservers with realm servers.
 	primaryCount := min3(numPservers)
 	primaryPath := filepath.Join(outputDir, "kof-cluster.yaml")
-	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPaths, realmPath, primaryCount, ports, cores, drOpts); err != nil {
+	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPaths, realmPath, primaryCount, ports, cores, authUsersFile, drOpts, logLevel); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "wrote %s\n", primaryPath)
 
 	if drOpts.Enabled() {
 		drPath := filepath.Join(outputDir, "kof-cluster-dr.yaml")
-		if err := writeDRYAML(drPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, 0, primaryCount, drOpts.DRServers, cores); err != nil {
+		if err := writeDRYAML(drPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, 0, primaryCount, drOpts.DRServers, cores, logLevel); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stdout, "wrote %s\n", drPath)
@@ -75,14 +80,14 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPath
 			end = numPservers
 		}
 		auxPath := filepath.Join(outputDir, fmt.Sprintf("kof-cluster-aux%d.yaml", auxIdx))
-		if err := writeAuxYAML(auxPath, cfg, dataDir, propsPaths, start, end, ports, cores, drOpts); err != nil {
+		if err := writeAuxYAML(auxPath, cfg, dataDir, propsPaths, start, end, ports, cores, drOpts, logLevel); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stdout, "wrote %s\n", auxPath)
 
 		if drOpts.Enabled() {
 			drAuxPath := filepath.Join(outputDir, fmt.Sprintf("kof-cluster-dr-aux%d.yaml", auxIdx))
-			if err := writeDRYAML(drAuxPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, start, end, drOpts.DRServers, cores); err != nil {
+			if err := writeDRYAML(drAuxPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, start, end, drOpts.DRServers, cores, logLevel); err != nil {
 				return err
 			}
 			fmt.Fprintf(os.Stdout, "wrote %s\n", drAuxPath)
@@ -92,7 +97,7 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPath
 	return nil
 }
 
-func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, realmPath string, numPservers int, _ PortMap, cores []CoreServer, drOpts DROpts) error {
+func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, realmPath string, numPservers int, _ PortMap, cores []CoreServer, authUsersFile string, drOpts DROpts, logLevel string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -113,6 +118,12 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 	for _, c := range cores {
 		fmt.Fprintf(f, "    %s: %s\n", c.Name, c.Address)
 	}
+	// Auto-provisioned FTL server basic auth: present iff a Kafka listener is secured. The realm
+	// authenticates the FTL servers against this tool-generated users file. This is the FTL
+	// servers' own login, separate from the Kafka listener security.
+	if authUsersFile != "" {
+		fmt.Fprintf(f, "  auth.providers: file:%s\n", authUsersFile)
+	}
 	if drOpts.Enabled() {
 		fmt.Fprintf(f, "  dr: %s\n", buildDRString(drOpts.DRServers))
 		fmt.Fprintln(f, "  auto.init.primary.on.first.startup: true")
@@ -128,11 +139,18 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 		} else {
 			fmt.Fprintln(f, "  - realm: {}")
 		}
+		// Each server's login (ftl-internal role) for connecting to the other FTL servers, when
+		// the FTL servers require authentication.
+		if authUsersFile != "" {
+			fmt.Fprintln(f, "  - ftlserver.properties:")
+			fmt.Fprintf(f, "      user: %s\n", FTLInternalUser)
+			fmt.Fprintf(f, "      password: %s\n", FTLInternalPassword)
+		}
 		fmt.Fprintln(f, "  - persistence:")
 		fmt.Fprintf(f, "      name: pserver%d\n", i+1)
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
 		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
-		fmt.Fprintln(f, "      loglevel: connections:info;kof:info;durables:info;store:info")
+		fmt.Fprintf(f, "      loglevel: %s\n", logLevel)
 		fmt.Fprintln(f)
 	}
 
@@ -145,7 +163,7 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 	return nil
 }
 
-func writeAuxYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, start, end int, ports PortMap, cores []CoreServer, drOpts DROpts) error {
+func writeAuxYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, start, end int, ports PortMap, cores []CoreServer, drOpts DROpts, logLevel string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -182,7 +200,7 @@ func writeAuxYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []s
 		fmt.Fprintf(f, "      name: pserver%d\n", i+1)
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
 		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
-		fmt.Fprintln(f, "      loglevel: connections:info;kof:info;durables:info;store:info")
+		fmt.Fprintf(f, "      loglevel: %s\n", logLevel)
 		fmt.Fprintln(f)
 	}
 
@@ -197,7 +215,7 @@ func writeAuxYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []s
 // start=0 produces the primary DR YAML with realm entries; start>0 produces an aux DR file.
 // drServers is the list of DR server names/addresses; primaryCores is the primary core.servers list
 // (used as the back-reference in globals.dr of the DR YAML).
-func writeDRYAML(path string, cfg *BrokerConfig, drDataDir string, propsPaths []string, realmPath string, start, end int, drServers, primaryCores []CoreServer) error {
+func writeDRYAML(path string, cfg *BrokerConfig, drDataDir string, propsPaths []string, realmPath string, start, end int, drServers, primaryCores []CoreServer, logLevel string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -235,7 +253,7 @@ func writeDRYAML(path string, cfg *BrokerConfig, drDataDir string, propsPaths []
 		fmt.Fprintf(f, "      name: drpserver%d\n", drPserverNum)
 		fmt.Fprintf(f, "      data: %s/drpserver%d\n", drDataDir, drPserverNum)
 		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
-		fmt.Fprintln(f, "      loglevel: connections:info;kof:info;durables:info;store:info")
+		fmt.Fprintf(f, "      loglevel: %s\n", logLevel)
 		fmt.Fprintln(f)
 	}
 

@@ -29,15 +29,15 @@ var fixtures = []struct {
 	{"recognized-standard", translator.StatusAccepted},      // PLAIN handler (inline + jaas users) + StandardAuthorizer
 	{"authorizer-aclauthorizer", translator.StatusAccepted}, // AclAuthorizer -> standard
 	{"plaintext", translator.StatusAccepted},                // no security settings -- pass-through
-	{"inter-broker-only", translator.StatusAccepted},        // only IGNORED inter-broker keys
-	{"oauth-resolved", translator.StatusAccepted},           // oauth + JWKS endpoint present
-	{"handler-ldap-resolved", translator.StatusAccepted},    // operator picked ldap (realm-side; no broker params)
-	{"intervene-custom-ldap-handler", translator.StatusInvalid},
-	{"intervene-opaque-handler", translator.StatusInvalid},
-	{"intervene-custom-authorizer", translator.StatusInvalid},
-	{"oauth-missing-jwks", translator.StatusInvalid}, // oauth selected, no JWKS endpoint
-	{"inter-broker-and-jks", translator.StatusInvalid},
-	{"scram-only", translator.StatusInvalid}, // SCRAM-only listener: KoF can't serve it
+	{"inter-broker-only", translator.StatusAccepted},        // inter-broker keys → unsupported.properties, file has nothing to resolve
+	{"oauth-resolved", translator.StatusAccepted},           // oauth + JWKS endpoint → all go to unsupported.properties
+	{"handler-ldap-resolved", translator.StatusAccepted},    // handler class → unsupported.properties; no broker params to resolve
+	{"intervene-custom-ldap-handler", translator.StatusAccepted}, // handler → unsupported.properties
+	{"intervene-opaque-handler", translator.StatusAccepted},      // handler → unsupported.properties
+	{"intervene-custom-authorizer", translator.StatusInvalid},    // custom authorizer (whitelisted) → RESOLVE-REQUIRED
+	{"oauth-missing-jwks", translator.StatusAccepted},            // handler + jwks → unsupported.properties; nothing left to resolve
+	{"inter-broker-and-jks", translator.StatusInvalid},           // JKS keystores (whitelisted) → RESOLVE-REQUIRED
+	{"scram-only", translator.StatusInvalid},                     // SCRAM-only listener (sasl.enabled.mechanisms whitelisted, value invalid)
 }
 
 // generate runs the exported path on a fixture and returns the status, the
@@ -49,11 +49,11 @@ func generate(t *testing.T, name string) (translator.ConfigStatus, string, strin
 	if err != nil {
 		t.Fatalf("parse %s: %v", name, err)
 	}
-	status, err := translator.WriteKOFBrokerProperties(cfg, dir, "", 1)
+	status, _, err := translator.WriteKOFBrokerProperties(cfg, dir, 1)
 	if err != nil {
 		t.Fatalf("write %s: %v", name, err)
 	}
-	path := filepath.Join(dir, "kof.broker.properties")
+	path := filepath.Join(dir, "kof.broker.1.properties")
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

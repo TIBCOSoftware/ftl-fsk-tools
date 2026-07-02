@@ -8,8 +8,9 @@ import "strings"
 // status -- they are informational.
 
 // interBrokerKeys configure inter-broker or controller traffic. In KoF that
-// traffic is the FTL fabric, not a Kafka listener, so the ftlserver ignores these
-// keys. The tool keeps them for reference and notes that they are ignored.
+// traffic uses the FTL servers' own connections, not a Kafka listener, so the
+// ftlserver ignores these keys. The tool keeps them for reference and notes that
+// they are ignored.
 var interBrokerKeys = map[string]bool{
 	"inter.broker.listener.name":           true,
 	"controller.listener.names":            true,
