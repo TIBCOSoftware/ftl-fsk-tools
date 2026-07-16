@@ -46,7 +46,7 @@ func buildDRString(servers []CoreServer) string {
 // WriteKOFClusterYAML generates kof-cluster.yaml (primary) and, when numPservers > 3,
 // one or more kof-cluster-auxN.yaml files for additional pserver groups.
 // When drOpts.Enabled(), also generates kof-cluster-dr.yaml (and aux DR files).
-func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, authUsersFile string, drOpts DROpts, logLevel string) error {
+func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, authUsersFile, kafkaUsersFile string, drOpts DROpts, logLevel string) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
@@ -59,7 +59,7 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPath
 	// Primary cluster: first 3 pservers with realm servers.
 	primaryCount := min3(numPservers)
 	primaryPath := filepath.Join(outputDir, "kof-cluster.yaml")
-	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPaths, realmPath, primaryCount, ports, cores, authUsersFile, drOpts, logLevel); err != nil {
+	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPaths, realmPath, primaryCount, ports, cores, authUsersFile, kafkaUsersFile, drOpts, logLevel); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "wrote %s\n", primaryPath)
@@ -97,7 +97,7 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPath
 	return nil
 }
 
-func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, realmPath string, numPservers int, _ PortMap, cores []CoreServer, authUsersFile string, drOpts DROpts, logLevel string) error {
+func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, realmPath string, numPservers int, _ PortMap, cores []CoreServer, authUsersFile, kafkaUsersFile string, drOpts DROpts, logLevel string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -120,9 +120,15 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 	}
 	// Auto-provisioned FTL server basic auth: present iff a Kafka listener is secured. The realm
 	// authenticates the FTL servers against this tool-generated users file. This is the FTL
-	// servers' own login, separate from the Kafka listener security.
+	// servers' own login, separate from the Kafka listener security. The Kafka client users
+	// (the inline JAAS user_X entries, materialized as kafka-users.txt) ride the same
+	// provider list as a second file: provider.
 	if authUsersFile != "" {
-		fmt.Fprintf(f, "  auth.providers: file:%s\n", authUsersFile)
+		fmt.Fprintf(f, "  auth.providers: file:%s", authUsersFile)
+		if kafkaUsersFile != "" {
+			fmt.Fprintf(f, ",file:%s", kafkaUsersFile)
+		}
+		fmt.Fprintln(f)
 	}
 	if drOpts.Enabled() {
 		fmt.Fprintf(f, "  dr: %s\n", buildDRString(drOpts.DRServers))

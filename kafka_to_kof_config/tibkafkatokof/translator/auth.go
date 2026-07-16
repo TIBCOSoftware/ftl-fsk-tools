@@ -79,6 +79,17 @@ func resolveListenerAuth(jaas, handlerClass string) ListenerAuth {
 	a := ListenerAuth{HandlerClass: handlerClass}
 
 	if handlerClass != "" {
+		// The tool's own resolved output (and operator edits) carry a canonical
+		// backend token instead of a Java class; recognize it so a re-run over
+		// generated output resolves the same way.
+		if be, ok := backendFromValue(handlerClass); ok {
+			a.Backend = be
+			a.Recognized = true
+			if be == BackendInline {
+				a.InlineUsers, a.InlinePasswords = parsePlainJaasUsers(jaas)
+			}
+			return a
+		}
 		if be, ok := recognizedHandlers[handlerClass]; ok {
 			a.Backend = be
 			a.Recognized = true
@@ -157,7 +168,7 @@ var recognizedAuthorizers = map[string]bool{
 // CANONICAL VOCABULARY: this token is the canonical kof.broker.properties value the pserver
 // consumes. The single source of truth is the C header hydra/header/private/kof/kofcanonical.h
 // (KOF_CANON_AUTHORIZER_STANDARD); keep in sync with it.
-const authorizerCanonical = "standard"
+const authorizerCanonical = "KofAuthorizer"
 
 // recognizedAuthorizerNames returns the recognized authorizer classes in sorted
 // order, for listing in messages.

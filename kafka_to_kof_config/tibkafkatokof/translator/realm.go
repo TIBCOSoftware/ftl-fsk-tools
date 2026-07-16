@@ -7,11 +7,9 @@ import (
 	"path/filepath"
 )
 
-// WriteRealmJSON generates realm.json containing a single kof.cluster definition
-// with fully configured pserver_sets modeled after the ftl-cluster.json reference.
-//
-// In the initial release only one kof cluster is permitted per realm (numPservers ≤ 3).
-func WriteRealmJSON(cfg *BrokerConfig, outputDir, realmName string, numPservers int, drOpts DROpts) error {
+// WriteRealmJSON generates realm.json with one kof.cluster per group of 3 pservers.
+// transportType sets the transport_type field for all pserver connections ("auto" or "dtcp").
+func WriteRealmJSON(cfg *BrokerConfig, outputDir, realmName string, numPservers int, drOpts DROpts, transportType string) error {
 	path := filepath.Join(outputDir, "realm.json")
 	f, err := os.Create(path)
 	if err != nil {
@@ -19,13 +17,13 @@ func WriteRealmJSON(cfg *BrokerConfig, outputDir, realmName string, numPservers 
 	}
 	defer f.Close()
 
-	realm := buildRealm(cfg, realmName, numPservers, drOpts)
+	realm := buildRealm(cfg, realmName, numPservers, drOpts, transportType)
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", " ")
 	return enc.Encode(realm)
 }
 
-func buildRealm(cfg *BrokerConfig, realmName string, numPservers int, drOpts DROpts) map[string]any {
+func buildRealm(cfg *BrokerConfig, realmName string, numPservers int, drOpts DROpts, transportType string) map[string]any {
 	name := realmName
 	if name == "" {
 		name = "_default_realm"
@@ -37,7 +35,7 @@ func buildRealm(cfg *BrokerConfig, realmName string, numPservers int, drOpts DRO
 	}
 	clusters := make([]any, numClusters)
 	for i := range clusters {
-		clusters[i] = buildKOFCluster(cfg, i, numPservers, drOpts)
+		clusters[i] = buildKOFCluster(cfg, i, numPservers, drOpts, transportType)
 	}
 
 	return map[string]any{
@@ -113,18 +111,18 @@ func buildRealmProps(cfg *BrokerConfig) map[string]any {
 // buildKOFCluster constructs the kof.cluster map per KOF requirements:
 //   - cluster name: "kof.cluster.N" where N is the 0-based cluster index
 //   - kof_enabled: true, disk_persistence: async
-//   - 3 required stores: kof.data.store, kof.sync.store, kof.meta.store
+//   - 3 required stores: kof.data.store.N, kof.sync.store.N, kof.meta.store.N
 //   - pserver_sets: one _setA set (non-DR) or _setA + _DRset (DR mode)
-func buildKOFCluster(cfg *BrokerConfig, clusterIdx, numPservers int, drOpts DROpts) map[string]any {
+func buildKOFCluster(cfg *BrokerConfig, clusterIdx, numPservers int, drOpts DROpts, transportType string) map[string]any {
 	startPserver := clusterIdx*3 + 1
 	endPserver := min(startPserver+3, numPservers+1)
 	clusterName := fmt.Sprintf("kof.cluster.%d", clusterIdx)
 
 	var pserverSets []any
 	if drOpts.Enabled() {
-		pserverSets = buildPserverSetsWithDR(clusterIdx, clusterName, startPserver, endPserver, cfg.IsSecure)
+		pserverSets = buildPserverSetsWithDR(clusterIdx, clusterName, startPserver, endPserver, cfg.IsSecure, transportType)
 	} else {
-		pserverSets = buildPserverSets(clusterIdx, clusterName, startPserver, endPserver, cfg.IsSecure)
+		pserverSets = buildPserverSets(clusterIdx, clusterName, startPserver, endPserver, cfg.IsSecure, transportType)
 	}
 
 	return map[string]any{
@@ -156,16 +154,16 @@ func buildKOFCluster(cfg *BrokerConfig, clusterIdx, numPservers int, drOpts DROp
 		"pserver_pserver_heartbeat": 0.5,
 		"pserver_sets":              pserverSets,
 		"pserver_timeout_pserver":   3,
-		"stores":                    buildKOFStores(),
+		"stores":                    buildKOFStores(clusterIdx),
 	}
 }
 
 // buildPserverSets returns a single _setA pserver set containing pservers
 // from startPserver (inclusive) to endPserver (exclusive).
-func buildPserverSets(clusterIdx int, clusterName string, startPserver, endPserver int, isSecure bool) []any {
+func buildPserverSets(clusterIdx int, clusterName string, startPserver, endPserver int, isSecure bool, transportType string) []any {
 	pservers := make([]any, endPserver-startPserver)
 	for i := 0; i < endPserver-startPserver; i++ {
-		pservers[i] = buildPserver(clusterIdx, clusterName, startPserver+i, isSecure)
+		pservers[i] = buildPserver(clusterIdx, clusterName, startPserver+i, isSecure, transportType)
 	}
 	return []any{map[string]any{
 		"description":  "",
@@ -178,14 +176,14 @@ func buildPserverSets(clusterIdx int, clusterName string, startPserver, endPserv
 
 // buildPserverSetsWithDR returns two pserver sets (_setA primary + _DRset DR replicas).
 // In DR mode: dr_transport is populated; inter_cluster_transport is empty (roles swap vs. non-DR).
-func buildPserverSetsWithDR(clusterIdx int, clusterName string, startPserver, endPserver int, isSecure bool) []any {
+func buildPserverSetsWithDR(clusterIdx int, clusterName string, startPserver, endPserver int, isSecure bool, transportType string) []any {
 	count := endPserver - startPserver
 	primary := make([]any, count)
 	dr := make([]any, count)
 	for i := 0; i < count; i++ {
 		pnum := startPserver + i
-		primary[i] = buildPserverDRMode(clusterIdx, clusterName, pnum, isSecure)
-		dr[i] = buildDRPserver(clusterIdx, clusterName, pnum, isSecure)
+		primary[i] = buildPserverDRMode(clusterIdx, clusterName, pnum, isSecure, transportType)
+		dr[i] = buildDRPserver(clusterIdx, clusterName, pnum, isSecure, transportType)
 	}
 	return []any{
 		map[string]any{
@@ -207,7 +205,7 @@ func buildPserverSetsWithDR(clusterIdx int, clusterName string, startPserver, en
 
 // buildPserverDRMode builds a primary pserver in DR mode:
 // dr_transport is populated; inter_cluster_transport is empty.
-func buildPserverDRMode(clusterIdx int, clusterName string, pserverNum int, isSecure bool) map[string]any {
+func buildPserverDRMode(clusterIdx int, clusterName string, pserverNum int, isSecure bool, transportType string) map[string]any {
 	pserverName := fmt.Sprintf("pserver%d", pserverNum)
 	prefix := fmt.Sprintf("kof_cluster_%d_pserver%d", clusterIdx, pserverNum)
 	drTransportName := fmt.Sprintf("_disaster_recovery_transport_kof_cluster_%d_pserver%d", clusterIdx, pserverNum)
@@ -219,19 +217,19 @@ func buildPserverDRMode(clusterIdx int, clusterName string, pserverNum int, isSe
 		"last_modified":           "0001-01-01T00:00:00Z",
 		"last_modified_by":        "",
 		"last_modified_millis":    0,
-		"dr_transport":            buildPserverTransport(drTransportName, "DR transport for "+clusterName, isSecure),
-		"cluster_transport":       buildPserverTransport("_cluster_transport_"+prefix, "cluster transport for "+clusterName, isSecure),
+		"dr_transport":            buildPserverTransport(drTransportName, "DR transport for "+clusterName, isSecure, transportType),
+		"cluster_transport":       buildPserverTransport("_cluster_transport_"+prefix, "cluster transport for "+clusterName, isSecure, transportType),
 		"inter_cluster_transport": map[string]any{},
 		"client_transports": []any{map[string]any{
 			"matchers":  []any{},
-			"transport": buildTransportDef("_client_pri_transport_"+prefix, "client primary transport for "+clusterName, isSecure),
+			"transport": buildTransportDef("_client_pri_transport_"+prefix, "client primary transport for "+clusterName, isSecure, transportType),
 		}},
 	}
 }
 
 // buildDRPserver builds a DR replica pserver entry.
 // Named drpserverN; dr_transport populated; inter_cluster_transport empty.
-func buildDRPserver(clusterIdx int, clusterName string, pserverNum int, isSecure bool) map[string]any {
+func buildDRPserver(clusterIdx int, clusterName string, pserverNum int, isSecure bool, transportType string) map[string]any {
 	pserverName := fmt.Sprintf("drpserver%d", pserverNum)
 	prefix := fmt.Sprintf("kof_cluster_%d_drpserver%d", clusterIdx, pserverNum)
 	drTransportName := fmt.Sprintf("_disaster_recovery_transport_kof_cluster_%d_drpserver%d", clusterIdx, pserverNum)
@@ -243,19 +241,19 @@ func buildDRPserver(clusterIdx int, clusterName string, pserverNum int, isSecure
 		"last_modified":           "0001-01-01T00:00:00Z",
 		"last_modified_by":        "",
 		"last_modified_millis":    0,
-		"dr_transport":            buildPserverTransport(drTransportName, "DR transport for "+clusterName, isSecure),
-		"cluster_transport":       buildPserverTransport("_cluster_transport_"+prefix, "cluster transport for "+clusterName, isSecure),
+		"dr_transport":            buildPserverTransport(drTransportName, "DR transport for "+clusterName, isSecure, transportType),
+		"cluster_transport":       buildPserverTransport("_cluster_transport_"+prefix, "cluster transport for "+clusterName, isSecure, transportType),
 		"inter_cluster_transport": map[string]any{},
 		"client_transports": []any{map[string]any{
 			"matchers":  []any{},
-			"transport": buildTransportDef("_client_pri_transport_"+prefix, "client primary transport for "+clusterName, isSecure),
+			"transport": buildTransportDef("_client_pri_transport_"+prefix, "client primary transport for "+clusterName, isSecure, transportType),
 		}},
 	}
 }
 
 // buildPserver builds one pserver entry following the ftl-cluster.json model.
 // Transport names embed cluster index and pserver number for global uniqueness.
-func buildPserver(clusterIdx int, clusterName string, pserverNum int, isSecure bool) map[string]any {
+func buildPserver(clusterIdx int, clusterName string, pserverNum int, isSecure bool, transportType string) map[string]any {
 	pserverName := fmt.Sprintf("pserver%d", pserverNum)
 	// Dot-free prefix ensures unique transport names across the realm.
 	prefix := fmt.Sprintf("kof_cluster_%d_pserver%d", clusterIdx, pserverNum)
@@ -272,11 +270,13 @@ func buildPserver(clusterIdx int, clusterName string, pserverNum int, isSecure b
 			"_cluster_transport_"+prefix,
 			"cluster transport for "+clusterName,
 			isSecure,
+			transportType,
 		),
 		"inter_cluster_transport": buildPserverTransport(
 			"_inter_cluster_transport_"+prefix,
 			"inter cluster transport for "+clusterName,
 			isSecure,
+			transportType,
 		),
 		"client_transports": []any{map[string]any{
 			"matchers": []any{},
@@ -284,23 +284,25 @@ func buildPserver(clusterIdx int, clusterName string, pserverNum int, isSecure b
 				"_client_pri_transport_"+prefix,
 				"client primary transport for "+clusterName,
 				isSecure,
+				transportType,
 			),
 		}},
 	}
 }
 
-func buildPserverTransport(name, desc string, isSecure bool) map[string]any {
-	return map[string]any{"transport": buildTransportDef(name, desc, isSecure)}
+func buildPserverTransport(name, desc string, isSecure bool, transportType string) map[string]any {
+	return map[string]any{"transport": buildTransportDef(name, desc, isSecure, transportType)}
 }
 
 // buildTransportDef returns a transport definition matching the ftl-cluster.json reference:
-// transport_type auto, 256mb backlog. isSecure adds "secure": true for encrypted realms.
-func buildTransportDef(name, desc string, isSecure bool) map[string]any {
+// 256mb backlog; transportType sets transport_type ("auto" or "dtcp").
+// isSecure adds "secure": true for encrypted realms.
+func buildTransportDef(name, desc string, isSecure bool, transportType string) map[string]any {
 	config := map[string]any{
 		"backlog_full_wait": "0",
 		"backlog_size":      "256mb",
 		"recv_spin_limit":   "0",
-		"transport_type":    "auto",
+		"transport_type":    transportType,
 	}
 	if isSecure {
 		config["secure"] = true
@@ -317,11 +319,11 @@ func buildTransportDef(name, desc string, isSecure bool) map[string]any {
 }
 
 // buildKOFStores returns the three required KOF stores with their durable templates.
-func buildKOFStores() []any {
+func buildKOFStores(clusterIdx int) []any {
 	return []any{
-		buildStore("kof.data.store", buildTemplate("kof.data.template", "shared")),
-		buildStore("kof.sync.store", buildTemplate("kof.sync.template", "shared")),
-		buildStore("kof.meta.store", buildTemplate("kof.meta.template", "lastvalue")),
+		buildStore(fmt.Sprintf("kof.data.store.%d", clusterIdx), buildTemplate("kof.data.template", "shared")),
+		buildStore(fmt.Sprintf("kof.sync.store.%d", clusterIdx), buildTemplate("kof.sync.template", "shared")),
+		buildStore(fmt.Sprintf("kof.meta.store.%d", clusterIdx), buildTemplate("kof.meta.template", "lastvalue")),
 	}
 }
 

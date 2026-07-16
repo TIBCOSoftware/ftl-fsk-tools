@@ -24,8 +24,8 @@ func TestResolveAuthorizer(t *testing.T) {
 		if recognized != c.recognize {
 			t.Errorf("resolveAuthorizer(%q) recognized=%v, want %v", c.value, recognized, c.recognize)
 		}
-		if recognized && canonical != "standard" {
-			t.Errorf("resolveAuthorizer(%q) canonical=%q, want \"standard\"", c.value, canonical)
+		if recognized && canonical != authorizerCanonical {
+			t.Errorf("resolveAuthorizer(%q) canonical=%q, want %q", c.value, canonical, authorizerCanonical)
 		}
 	}
 }

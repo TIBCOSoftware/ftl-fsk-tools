@@ -119,7 +119,7 @@ func TestSummarize(t *testing.T) {
 	}
 
 	// A fully-resolved config has nothing to resolve.
-	clean := "node.id=1\nlisteners=PLAINTEXT://0.0.0.0:9092\nauthorizer.class.name=standard\n"
+	clean := "node.id=1\nlisteners=PLAINTEXT://0.0.0.0:9092\nauthorizer.class.name=" + authorizerCanonical + "\n"
 	if got := Summarize(parseSrc(t, clean)).Total(); got != 0 {
 		t.Errorf("clean config Total() = %d, want 0", got)
 	}
@@ -197,12 +197,12 @@ func TestUnrecognizedHandler_GoesToUnsupported(t *testing.T) {
 // Handler classes and oauth params go to unsupported and do not participate in idempotency.
 func TestIdempotent_CanonicalAuthorizer(t *testing.T) {
 	src := "node.id=1\nlisteners=SASL://0.0.0.0:9092\n" +
-		"authorizer.class.name=standard\n"
+		"authorizer.class.name=" + authorizerCanonical + "\n"
 	out1, _ := renderProps(t, src)
 	if !hasMarker(out1, StatusAccepted) {
 		t.Fatalf("canonical authorizer not ACCEPTED:\n%s", out1)
 	}
-	if !strings.Contains(out1, "authorizer.class.name=standard\n") {
+	if !strings.Contains(out1, "authorizer.class.name="+authorizerCanonical+"\n") {
 		t.Errorf("canonical authorizer value not preserved:\n%s", out1)
 	}
 	// Re-run on the generated output: still ACCEPTED.

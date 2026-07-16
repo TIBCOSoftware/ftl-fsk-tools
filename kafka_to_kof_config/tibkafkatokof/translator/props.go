@@ -207,9 +207,26 @@ func emitProp(f *os.File, cfg *BrokerConfig, k string) {
 		emitJavaKeystore(f, cfg, k, v)
 	case isMechanismsKey(k) && mechanismsUnservable(v):
 		emitMechanisms(f, cfg, k, v)
+	case runtimeRejects(k):
+		emitRejected(f, k, v)
 	default:
 		fmt.Fprintf(f, "%s=%s\n", k, v)
 	}
+}
+
+// emitRejected comments out a key the ftlserver runtime would reject at startup
+// (a KRaft/control key or an unsupported security key). The key is kept for
+// reference, commented, so the generated file boots. Inter-broker/controller keys
+// get the fuller note that KoF secures that traffic through the FTL servers.
+func emitRejected(f *os.File, k, v string) {
+	if isInterBrokerKey(k) {
+		fmt.Fprintf(f, "# IGNORED by the ftlserver: %s configures inter-broker/controller traffic,\n", k)
+		fmt.Fprintf(f, "# which in KoF uses the FTL servers' own connections, not a Kafka listener.\n")
+		fmt.Fprintf(f, "# Secure the FTL servers separately (realm tls.server.*/auth.providers).\n")
+	} else {
+		fmt.Fprintf(f, "# NOT a supported KoF property; the ftlserver rejects it. Kept for reference only.\n")
+	}
+	fmt.Fprintf(f, "#%s=%s\n", k, v)
 }
 
 // emitMechanisms flags a listener whose SASL mechanisms KoF cannot serve at all
@@ -224,16 +241,6 @@ func emitMechanisms(f *os.File, cfg *BrokerConfig, k, v string) {
 	fmt.Fprintf(f, "# Switch this listener to one of those (and configure its backend), then uncomment:\n")
 	fmt.Fprintf(f, "#%s=<PLAIN|OAUTHBEARER>\n", k)
 	fmt.Fprintln(f, resolveBandClose)
-}
-
-// emitInterBroker keeps an inter-broker/controller key unchanged but notes that
-// the ftlserver ignores it: that traffic uses the FTL servers' own connections,
-// not a Kafka listener.
-func emitInterBroker(f *os.File, k, v string) {
-	fmt.Fprintf(f, "# IGNORED by the ftlserver: %s configures inter-broker/controller traffic,\n", k)
-	fmt.Fprintf(f, "# which in KoF uses the FTL servers' own connections, not a Kafka listener. Kept for reference only.\n")
-	fmt.Fprintf(f, "# Secure the FTL servers separately (realm tls.server.*/auth.providers).\n")
-	fmt.Fprintf(f, "%s=%s\n", k, v)
 }
 
 // emitJavaKeystore flags a JKS/PKCS12 keystore type as RESOLVE-REQUIRED: KoF reads
@@ -283,11 +290,10 @@ func emitJavaKeystore(f *os.File, cfg *BrokerConfig, k, v string) {
 	fmt.Fprintln(f, resolveBandClose)
 }
 
-// emitAuthorizer rewrites authorizer.class.name. Kafka's StandardAuthorizer is
-// replaced with the canonical value 'standard' and KoF enforces the same ACL model
-// (default-deny, super.users bypass, per-principal allow rules). Any other class is
-// a custom Java authorizer KoF cannot run, so it is left with no active value and
-// the file is INVALID until the operator resolves it.
+// emitAuthorizer rewrites authorizer.class.name. A recognized Kafka authorizer
+// class is replaced with authorizerCanonical; KoF enforces the same ACL model.
+// Any other class is a custom Java authorizer KoF cannot run, so it is left with
+// no active value and the file is INVALID until the operator resolves it.
 func emitAuthorizer(f *os.File, cfg *BrokerConfig, k, v string) {
 	src := cfg.SettingLines[k]
 	recognized, canonical := resolveAuthorizer(v)

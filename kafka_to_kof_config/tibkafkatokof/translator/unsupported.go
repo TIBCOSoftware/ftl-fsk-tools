@@ -24,6 +24,15 @@ func UnsupportedScan(cfg *BrokerConfig) []UnsupportedItem {
 		items = append(items, UnsupportedItem{what, reason})
 	}
 
+	// Listener entries the parser removed from listeners/advertised.listeners/
+	// listener.security.protocol.map: the FTL servers carry that traffic natively
+	// (cluster transport / metadata quorum), so the listener is not brought up.
+	for _, rl := range cfg.RemovedListeners {
+		add("listeners="+rl.Entry,
+			"named by "+rl.NamedBy+"; FTL carries this traffic natively -- removed from "+
+				"listeners, advertised.listeners, and listener.security.protocol.map")
+	}
+
 	for _, k := range cfg.SettingKeys {
 		kl := strings.ToLower(k)
 		switch {

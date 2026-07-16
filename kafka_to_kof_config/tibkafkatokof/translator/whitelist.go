@@ -18,12 +18,20 @@ var section1Keys = map[string]bool{
 	"ssl.principal.mapping.rules":     true,
 	"sasl.enabled.mechanisms":         true,
 	"plain.connections.max.reauth.ms": true,
-	// per-mechanism (OAUTHBEARER) listener-scoped form of oauth2.connections.max.reauth.ms
+	// per-mechanism (OAUTHBEARER) listener-scoped reauth deadline; the mechanism name
+	// is the lowercase Kafka spelling. The non-Kafka "oauth2." form is deliberately not
+	// accepted (the runtime rejects it), matching kofbroker/whitelist.go.
 	"oauthbearer.connections.max.reauth.ms": true,
-	"oauth2.connections.max.reauth.ms":      true,
 	"authorizer.class.name":                 true,
 	"super.users":                           true,
 	"allow.everyone.if.no.acl.found":        true,
+}
+
+// perListenerReauth: per-mechanism reauth keys honored only with a listener.name.<l>.
+// prefix; the bare broker-wide form is ignored by the pserver.
+var perListenerReauth = map[string]bool{
+	"plain.connections.max.reauth.ms":       true,
+	"oauthbearer.connections.max.reauth.ms": true,
 }
 
 // section3Keys are KRaft/cluster-control keys always rejected outright — KoF owns
@@ -104,7 +112,94 @@ func isSupportedBrokerProperty(k string) bool {
 	}
 	base := stripListenerPrefix(k)
 	if isSecurityDomainKey(base) {
+		// bare per-mechanism reauth is per-listener only; pserver ignores the broker-wide form
+		if perListenerReauth[strings.ToLower(base)] && !strings.HasPrefix(strings.ToLower(k), "listener.name.") {
+			return false
+		}
 		return isSection1Whitelisted(base)
 	}
 	return true
+}
+
+// runtimeSecurityWhitelist mirrors the ftlserver runtime's fail-closed security-key
+// whitelist (tibftlserver/kofbroker/whitelist.go). The runtime rejects any KRaft/control
+// key or unsupported security key at startup; the tool must therefore never EMIT
+// such a key as an active line, or its "ACCEPTED" output would fail to boot.
+// Keep it in sync with the runtime list.
+var runtimeSecurityWhitelist = map[string]bool{
+	"listener.security.protocol.map":       true,
+	"ssl.keystore.location":                true,
+	"ssl.keystore.type":                    true,
+	"ssl.key.password":                     true,
+	"ssl.truststore.location":              true,
+	"ssl.truststore.type":                  true,
+	"ssl.client.auth":                      true,
+	"ssl.enabled.protocols":                true,
+	"ssl.cipher.suites":                    true,
+	"ssl.principal.mapping.rules":          true,
+	"sasl.enabled.mechanisms":              true,
+	"connections.max.reauth.ms":            true,
+	"plain.connections.max.reauth.ms":      true,
+	"oauthbearer.connections.max.reauth.ms": true,
+	"authorizer.class.name":                true,
+	"super.users":                          true,
+	"allow.everyone.if.no.acl.found":       true,
+}
+
+var runtimeKraftKeys = map[string]bool{
+	"process.roles":               true,
+	"controller.quorum.voters":    true,
+	"controller.listener.names":   true,
+	"inter.broker.listener.name":  true,
+	"control.plane.listener.name": true,
+	"early.start.listeners":       true,
+}
+
+// runtimeBareKey strips a "listener.name.<name>." prefix.
+func runtimeBareKey(key string) string {
+	const p = "listener.name."
+	kl := strings.ToLower(key)
+	if strings.HasPrefix(kl, p) {
+		if i := strings.IndexByte(kl[len(p):], '.'); i > 0 && len(kl) > len(p)+i+1 {
+			return kl[len(p)+i+1:]
+		}
+	}
+	return kl
+}
+
+func runtimeIsSecurityDomainKey(bare string) bool {
+	switch {
+	case strings.HasPrefix(bare, "ssl."),
+		strings.HasPrefix(bare, "sasl."),
+		strings.HasPrefix(bare, "plain."),
+		strings.HasPrefix(bare, "oauthbearer."),
+		strings.HasPrefix(bare, "oauth2."):
+		return true
+	}
+	switch bare {
+	case "connections.max.reauth.ms",
+		"listener.security.protocol.map",
+		"authorizer.class.name",
+		"super.users",
+		"allow.everyone.if.no.acl.found":
+		return true
+	}
+	return false
+}
+
+// runtimeRejects reports whether the ftlserver runtime would reject this key at
+// startup: a KRaft/control key, or a security-domain key not on the whitelist.
+// The tool must not emit such a key active.
+func runtimeRejects(key string) bool {
+	bare := runtimeBareKey(key)
+	if runtimeKraftKeys[bare] {
+		return true
+	}
+	if perListenerReauth[bare] && !strings.HasPrefix(strings.ToLower(key), "listener.name.") {
+		return true
+	}
+	if runtimeIsSecurityDomainKey(bare) && !runtimeSecurityWhitelist[bare] {
+		return true
+	}
+	return false
 }

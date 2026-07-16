@@ -2,7 +2,7 @@
 // the FTL artifacts needed to run a KOF-enabled pserver cluster:
 //
 //	kof-cluster.yaml          — FTL pserver cluster configuration (primary)
-//	kof-cluster-auxN.yaml     — Auxiliary pserver groups (reserved; not used in initial release)
+//	kof-cluster-auxN.yaml     — Auxiliary pserver groups (one per additional group of 3 pservers)
 //	kof-cluster-secure.yaml   — Secure variant with TLS/auth (when --tls-cert or --oauth-token-url provided)
 //	realm.json                — FTL realm configuration with kof.cluster definition
 //	kof.broker.N.properties   — Per-pserver broker properties (one file per input, N is 1-based)
@@ -34,6 +34,9 @@ func main() {
 		"loglevel for the generated FTL servers, written into each pserver in the "+
 			"cluster YAML (the output servers' logging, NOT this tool's own logging; "+
 			"e.g. connections:debug;kof:info;durables:info;store:info)")
+	transportType := flag.String("transport-type", "auto",
+		"transport type for all pserver connections in realm.json: auto|dtcp\n"+
+			"    auto uses OS-selected transport; dtcp is optimized for low latency")
 	coreServersFlag := flag.String("core-servers", "",
 		"comma-separated NAME=host:port list for globals.core.servers\n"+
 			"    e.g. SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602\n"+
@@ -102,7 +105,7 @@ func main() {
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Output files:")
 		fmt.Fprintln(os.Stderr, "  kof-cluster.yaml          FTL pserver cluster configuration (primary, first 3 pservers)")
-		fmt.Fprintln(os.Stderr, "  kof-cluster-auxN.yaml     Additional pserver groups (reserved, not used in initial release)")
+		fmt.Fprintln(os.Stderr, "  kof-cluster-auxN.yaml     Additional pserver groups (one per group of 3 pservers beyond the first)")
 		fmt.Fprintln(os.Stderr, "  kof-cluster-secure.yaml   Secure variant with TLS/auth settings for FTL server")
 		fmt.Fprintln(os.Stderr, "  realm.json                FTL realm configuration with kof.cluster")
 		fmt.Fprintln(os.Stderr, "  kof.broker.N.properties   Per-pserver broker properties (N is 1-based)")
@@ -111,6 +114,11 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *transportType != "auto" && *transportType != "dtcp" {
+		fmt.Fprintf(os.Stderr, "error: --transport-type must be auto or dtcp (got %q)\n", *transportType)
+		os.Exit(1)
+	}
 
 	if *listProps {
 		translator.WriteSupportList(os.Stdout, useColor(*colorMode))
@@ -251,7 +259,22 @@ func main() {
 		ftlUsersFile = uf
 		fmt.Fprintf(os.Stdout, "wrote %s (FTL server basic auth; a Kafka listener is secured)\n", uf)
 	}
-	if err := translator.WriteKOFClusterYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, ftlUsersFile, drOpts, *ftlLogLevel); err != nil {
+	// Kafka client users: the inline JAAS user_X entries of the SASL/PLAIN listeners,
+	// materialized as a second file: provider. Only relevant when the FTL servers
+	// authenticate (ftlUsersFile set), which any secured listener implies.
+	kafkaUsersFile := ""
+	if ftlUsersFile != "" {
+		kuf, kerr := translator.WriteKafkaClientUsers(*outputDir, cfgs)
+		if kerr != nil {
+			fmt.Fprintln(os.Stderr, "error writing kafka-users.txt:", kerr)
+			os.Exit(1)
+		}
+		if kuf != "" {
+			kafkaUsersFile = kuf
+			fmt.Fprintf(os.Stdout, "wrote %s (Kafka client users from the inline jaas entries)\n", kuf)
+		}
+	}
+	if err := translator.WriteKOFClusterYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, ftlUsersFile, kafkaUsersFile, drOpts, *ftlLogLevel); err != nil {
 		fmt.Fprintln(os.Stderr, "error writing kof-cluster.yaml:", err)
 		os.Exit(1)
 	}
@@ -261,7 +284,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if err := translator.WriteRealmJSON(cfgs[0], *outputDir, *realmName, numPservers, drOpts); err != nil {
+	if err := translator.WriteRealmJSON(cfgs[0], *outputDir, *realmName, numPservers, drOpts, *transportType); err != nil {
 		fmt.Fprintln(os.Stderr, "error writing realm.json:", err)
 		os.Exit(1)
 	}

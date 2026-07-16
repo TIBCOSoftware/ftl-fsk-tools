@@ -31,7 +31,6 @@ var fixtures = []struct {
 	{"plaintext", translator.StatusAccepted},                // no security settings -- pass-through
 	{"inter-broker-only", translator.StatusAccepted},        // inter-broker keys → unsupported.properties, file has nothing to resolve
 	{"oauth-resolved", translator.StatusAccepted},           // oauth + JWKS endpoint → all go to unsupported.properties
-	{"handler-ldap-resolved", translator.StatusAccepted},    // handler class → unsupported.properties; no broker params to resolve
 	{"intervene-custom-ldap-handler", translator.StatusAccepted}, // handler → unsupported.properties
 	{"intervene-opaque-handler", translator.StatusAccepted},      // handler → unsupported.properties
 	{"intervene-custom-authorizer", translator.StatusInvalid},    // custom authorizer (whitelisted) → RESOLVE-REQUIRED

@@ -139,7 +139,7 @@
      "last_modified_millis": 0,
      "max_message_size": "",
      "message_limit": 0,
-     "name": "kof.data.store",
+     "name": "kof.data.store.0",
      "publisher_settings": {
       "mode": "store_confirm_send"
      },
@@ -181,7 +181,7 @@
      "last_modified_millis": 0,
      "max_message_size": "",
      "message_limit": 0,
-     "name": "kof.sync.store",
+     "name": "kof.sync.store.0",
      "publisher_settings": {
       "mode": "store_confirm_send"
      },
@@ -223,7 +223,7 @@
      "last_modified_millis": 0,
      "max_message_size": "",
      "message_limit": 0,
-     "name": "kof.meta.store",
+     "name": "kof.meta.store.0",
      "publisher_settings": {
       "mode": "store_confirm_send"
      },

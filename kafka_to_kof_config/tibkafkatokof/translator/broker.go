@@ -22,6 +22,13 @@ type ListenerDef struct {
 	IsController bool
 }
 
+// RemovedListener records one FTL-native listener entry stripped from the
+// client-facing listener properties, for the unsupported.properties report.
+type RemovedListener struct {
+	Entry   string // the original "NAME://host:port" entry
+	NamedBy string // the key that marked it internal (inter.broker.listener.name / controller.listener.names)
+}
+
 // BrokerConfig holds all information parsed from one server.properties file.
 type BrokerConfig struct {
 	NodeID       int
@@ -34,6 +41,10 @@ type BrokerConfig struct {
 	SettingKeys  []string          // insertion-ordered keys for Settings
 	SettingLines map[string]int    // 1-based source line where each key's entry begins
 	SourceFile   string
+
+	// RemovedListeners lists the inter-broker/controller listener entries dropped
+	// from listeners/advertised.listeners/listener.security.protocol.map.
+	RemovedListeners []RemovedListener
 }
 
 // ParseBrokerConfig reads a Kafka broker server.properties file.
@@ -59,16 +70,53 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 	}
 	cfg.ProcessRoles = raw["process.roles"]
 
+	controllerSet := map[string]bool{}
+	for _, n := range splitCSV(strings.ToUpper(raw["controller.listener.names"])) {
+		controllerSet[n] = true
+	}
+
+	// Remove the listeners named by inter.broker.listener.name and
+	// controller.listener.names from listeners, advertised.listeners, and
+	// listener.security.protocol.map before cfg.Listeners is built, so
+	// cfg.Listeners and its derived fields (IsSecure, KOFHost/KOFPort) hold
+	// only the listeners Kafka clients connect to. Removed entries are
+	// recorded on cfg for the unsupported.properties report.
+	internalListeners := map[string]bool{}
+	for n := range controllerSet {
+		internalListeners[n] = true
+	}
+	ib := strings.ToUpper(strings.TrimSpace(raw["inter.broker.listener.name"]))
+	if ib != "" {
+		internalListeners[ib] = true
+	}
+	if len(internalListeners) > 0 {
+		for _, part := range splitCSV(raw["listeners"]) {
+			p := strings.TrimSpace(part)
+			idx := strings.Index(p, "://")
+			if idx < 0 {
+				continue
+			}
+			n := strings.ToUpper(strings.TrimSpace(p[:idx]))
+			if !internalListeners[n] {
+				continue
+			}
+			namedBy := "controller.listener.names"
+			if n == ib {
+				namedBy = "inter.broker.listener.name"
+			}
+			cfg.RemovedListeners = append(cfg.RemovedListeners,
+				RemovedListener{Entry: p, NamedBy: namedBy})
+		}
+		raw["listeners"] = dropInternalListeners(raw["listeners"], internalListeners)
+		raw["advertised.listeners"] = dropInternalListeners(raw["advertised.listeners"], internalListeners)
+		raw["listener.security.protocol.map"] = dropInternalProtocolMap(raw["listener.security.protocol.map"], internalListeners)
+	}
+
 	bindMap := parseListenerAddrs(raw["listeners"])
 	advMap := parseListenerAddrs(raw["advertised.listeners"])
 	protocolMap := parseColonCSV(raw["listener.security.protocol.map"])
 	mechMap := parsePerListenerSASL(raw)
 	clientAuthMap := parsePerListenerClientAuth(raw)
-
-	controllerSet := map[string]bool{}
-	for _, n := range splitCSV(strings.ToUpper(raw["controller.listener.names"])) {
-		controllerSet[n] = true
-	}
 
 	// Collect listener names in declaration order from the listeners property.
 	var names []string
@@ -131,6 +179,45 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// dropInternalListeners removes entries whose listener name (the token before
+// "://") is in exclude, returning the remaining "NAME://addr" entries comma-joined.
+// Used to strip the inter-broker/controller listeners, which are FTL-native in KoF.
+func dropInternalListeners(s string, exclude map[string]bool) string {
+	if strings.TrimSpace(s) == "" {
+		return s
+	}
+	var kept []string
+	for _, part := range splitCSV(s) {
+		p := strings.TrimSpace(part)
+		idx := strings.Index(p, "://")
+		if idx >= 0 && exclude[strings.ToUpper(strings.TrimSpace(p[:idx]))] {
+			continue
+		}
+		kept = append(kept, p)
+	}
+	return strings.Join(kept, ",")
+}
+
+// dropInternalProtocolMap removes entries whose listener name (the token before the
+// first ":") is in exclude, from a "NAME:PROTOCOL,..." map. Standard protocol
+// self-mappings (PLAINTEXT:PLAINTEXT, SSL:SSL, ...) are not listener names, so they
+// are kept.
+func dropInternalProtocolMap(s string, exclude map[string]bool) string {
+	if strings.TrimSpace(s) == "" {
+		return s
+	}
+	var kept []string
+	for _, part := range splitCSV(s) {
+		p := strings.TrimSpace(part)
+		idx := strings.Index(p, ":")
+		if idx >= 0 && exclude[strings.ToUpper(strings.TrimSpace(p[:idx]))] {
+			continue
+		}
+		kept = append(kept, p)
+	}
+	return strings.Join(kept, ",")
 }
 
 // readProperties parses a Java .properties file, handling line continuations.

@@ -5,7 +5,7 @@ Translates a Kafka KRaft broker `server.properties` file into the FTL KOF artifa
 | Output file | Purpose |
 |---|---|
 | `kof-cluster.yaml` | FTL primary cluster config (realm servers + up to 3 pservers) |
-| `kof-cluster-secure.yaml` | Secure variant with TLS/auth blocks (generated when TLS/OAuth/SASL flags are provided) |
+| `kof-cluster-secure.yaml` | Secure variant with TLS/auth blocks (generated when TLS/OAuth flags are provided) |
 | `kof-cluster-dr.yaml` | DR replica cluster config (generated when `-dr-servers` is provided) |
 | `realm.json` | FTL realm config with `kof.cluster.N` (N is 0-based), stores, and pserver definitions |
 | `kof.broker.N.properties` | Per-broker properties file (N is 1-based, one per pserver); only contains properties in the KoF whitelist |
@@ -44,6 +44,7 @@ tibkafkatokof [flags] <server.properties>
 | `-realm-name` | `_default_realm` | Realm name in `realm.json` |
 | `-data-dir` | `/var/kof/data` | KOF data directory path on pserver hosts |
 | `-num-pservers` | `3` | Number of pservers to generate (must be a positive odd number) |
+| `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` lets the OS choose; `dtcp` is optimized for low latency |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are randomly generated in range 5600–5699 |
 
 ### TLS flags
@@ -70,38 +71,13 @@ Required when a Kafka mTLS listener (`ssl.client.auth=required`) is present and 
 
 ### OAuth2 flags
 
-**Server-to-server:**
-
 | Flag | Description |
 |---|---|
-| `-oauth-token-url` | OAuth2 token endpoint URL for server-to-server connections (`oauth2.svr.endpoint.token`) |
-| `-oauth-jwks-url` | OAuth2 JWKS or validation key — `file:` path or URL (`oauth2.validation.key`) |
-| `-oauth-client-id` | OAuth2 client ID for server-to-server auth (`oauth2.svr.client.id`) |
-| `-oauth-client-secret` | OAuth2 client secret for server-to-server auth (`oauth2.svr.client.secret`) |
-| `-oauth-provider-trust` | OAuth2 provider trust PEM file (`oauth2.provider.trust.file`) |
-
-**Token claims and audience** (written as globals; defaults match the FTL sample):
-
-| Flag | Default | Description |
-|---|---|---|
-| `-oauth-claim-roles` | `group` | OAuth2 claim mapped to FTL roles (`oauth2.claim.roles`) |
-| `-oauth-claim-username` | `preferred_username` | OAuth2 claim mapped to FTL user (`oauth2.claim.username`) |
-| `-oauth-audience` | `ftl` | OAuth2 audience value (`oauth2.audience`) |
-
-**UI endpoints** (written as globals):
-
-| Flag | Description |
-|---|---|
-| `-oauth-ui-auth-url` | OAuth2 authorization endpoint for the FTL UI (`oauth2.ui.endpoint.auth`) |
-| `-oauth-ui-token-url` | OAuth2 token endpoint for the FTL UI (`oauth2.ui.endpoint.token`) |
-| `-oauth-ui-logout-url` | OAuth2 logout endpoint for the FTL UI (`oauth2.ui.endpoint.logout`) |
-
-**UI client credentials** (per-server `ftlserver.properties`):
-
-| Flag | Description |
-|---|---|
-| `-oauth-ui-client-id` | OAuth2 client ID for UI authorization code flow (`oauth2.ui.client.id`) |
-| `-oauth-ui-client-secret` | OAuth2 client secret for the FTL UI (`oauth2.ui.client.secret`) |
+| `-oauth-token-url` | OAuth2 token endpoint URL (server-to-server) |
+| `-oauth-jwks-url` | OAuth2 JWKS or validation key (`file:` path or URL) |
+| `-oauth-client-id` | OAuth2 client ID |
+| `-oauth-client-secret` | OAuth2 client secret |
+| `-oauth-provider-trust` | OAuth2 provider trust PEM file |
 
 ### Basic auth flag
 
@@ -109,17 +85,7 @@ Required when a Kafka mTLS listener (`ssl.client.auth=required`) is present and 
 |---|---|
 | `-auth-users-file` | Path to FTL `users.txt` for file-based authentication (PLAIN SASL → file auth) |
 
-### Shared auth flags
-
-| Flag | Default | Description |
-|---|---|---|
-| `-auth-rolemap` | _(none)_ | Path to FTL role map file (`auth.rolemap`; in `ftlserver.properties` for OAuth2) |
-| `-realm-service-user` | `primary` | `services.realm.user` credential (OAuth2 mode only) |
-| `-realm-service-password` | `primary-pw` | `services.realm.password` credential (OAuth2 mode only) |
-| `-server-user` | `internal` | `user` in `ftlserver.properties` for server-to-server connections (non-OAuth2 modes) |
-| `-server-password` | `internal-pw` | `password` in `ftlserver.properties` for server-to-server connections (non-OAuth2 modes) |
-
-`kof-cluster-secure.yaml` is emitted when security is detected in the input props AND at least one of `-tls-cert`, `-oauth-token-url`, or `-auth-users-file` is provided.
+`kof-cluster-secure.yaml` is only emitted when **security is detected** in the input props AND at least one of `-tls-cert`, `-oauth-token-url`, or `-auth-users-file` is provided.
 
 ### DR (Disaster Recovery) flags
 
@@ -130,16 +96,15 @@ Required when a Kafka mTLS listener (`ssl.client.auth=required`) is present and 
 
 ---
 
-## Multi-cluster split (`-num-pservers > 3`)
+## Multi-cluster split (9 input files → 3 shards)
 
-The primary `kof-cluster.yaml` always holds the first 3 pservers with FTL realm servers.
-Every additional group of up to 3 pservers goes into `kof-cluster-aux1.yaml`, `kof-cluster-aux2.yaml`, etc.
-Auxiliary files contain **no realm server entries** — pservers connect to the primary realm cluster via `globals.core.servers`.
+The number of shards is determined by the number of `server.properties` files passed on the command line. Every 3 input files → 1 KOF cluster (shard). The primary `kof-cluster.yaml` always holds the first 3 pservers with FTL realm servers. Every additional group of up to 3 pservers goes into `kof-cluster-aux1.yaml`, `kof-cluster-aux2.yaml`, etc. Auxiliary files contain **no realm server entries** — pservers connect to the primary realm cluster via `globals.core.servers`.
 
 ```
--num-pservers 9 → kof-cluster.yaml      (pserver1–3 + SRV1–3 realm servers)
-                  kof-cluster-aux1.yaml  (pserver4–6, no realm)
-                  kof-cluster-aux2.yaml  (pserver7–9, no realm)
+9 input files → kof-cluster.yaml      (pserver1–3 + SRV1–3 realm servers)
+                kof-cluster-aux1.yaml  (pserver4–6, no realm)
+                kof-cluster-aux2.yaml  (pserver7–9, no realm)
+                realm.json             (kof.cluster.0, kof.cluster.1, kof.cluster.2)
 ```
 
 ---
@@ -152,16 +117,17 @@ When `-dr-servers` is provided, DR mode is activated for all output files:
 - **`kof-cluster-dr.yaml`** is generated with DR servers as `core.servers`, a back-reference `globals.dr:` to the primary servers, and `label: DR_SERVER` on realm blocks. Pservers are named `drpserver1..N`.
 - **`realm.json`** clusters get `dr_enabled: true`, a second pserver set `_DRset` with DR replicas, and transport roles swapped (`dr_transport` populated, `inter_cluster_transport` empty for all pservers).
 
-With `-num-pservers 9`, DR aux files are also produced:
+With 9 input files, DR aux files are also produced:
 
 ```
--num-pservers 9 + -dr-servers ... →
+9 files + -dr-servers ... →
     kof-cluster.yaml           (primary: pserver1–3)
     kof-cluster-aux1.yaml      (primary: pserver4–6)
     kof-cluster-aux2.yaml      (primary: pserver7–9)
     kof-cluster-dr.yaml        (DR: drpserver1–3)
     kof-cluster-dr-aux1.yaml   (DR: drpserver4–6)
     kof-cluster-dr-aux2.yaml   (DR: drpserver7–9)
+    realm.json                 (kof.cluster.0/1/2 with dr_enabled: true)
 ```
 
 ---
@@ -209,30 +175,21 @@ tibkafkatokof \
 
 **Kafka config:** 1 node, KRaft, SASL_SSL OAUTHBEARER on broker listener, SSL on controller.
 
-Generated reference output: [`examples/03-single-node-oauth/output/`](examples/03-single-node-oauth/output/)
-
 ```sh
 tibkafkatokof \
-  --output-dir examples/03-single-node-oauth/output \
-  --core-servers SRV1=kafka-single-1:5673 \
+  --num-pservers 1 \
+  --output-dir ./out/03 \
   --tls-cert /etc/ftl/certs/server.pem \
   --tls-key /etc/ftl/certs/server.key \
   --oauth-token-url https://auth.example.com/oauth/token \
-  --oauth-ui-auth-url https://auth.example.com/oauth/authorize \
-  --oauth-ui-token-url https://auth.example.com/oauth/token \
-  --oauth-ui-logout-url https://auth.example.com/oauth/logout \
   --oauth-jwks-url file:/etc/ftl/oauth.json \
-  --oauth-ui-client-id ftl-ui \
-  --oauth-ui-client-secret env:OAUTH_UI_CLIENT_SECRET \
   --oauth-client-id ftl-server \
   --oauth-client-secret env:OAUTH_CLIENT_SECRET \
   --oauth-provider-trust /etc/ftl/certs/oauth-provider.pem \
-  --auth-rolemap /etc/ftl/rolemap.txt \
   examples/03-single-node-oauth/server-1.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (auth mode: oauth2; includes UI endpoints,
-UI client credentials, `auth.rolemap`, and `services.realm` credentials), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
+**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (auth mode: oauth2), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
 
 ---
 
@@ -339,231 +296,64 @@ tibkafkatokof \
 
 ---
 
-### 09 — 10-broker input (input reference only — initial release does not support > 3 pservers)
+### 09 — 10-broker scale-out (3 shards)
 
-**Kafka config:** 10 nodes, nodes 1–3 are broker+controller, nodes 4–10 are broker-only; SASL_SSL + OAuth2 + mTLS listeners. Input `server.properties` files are kept as a reference for future multi-shard support. Running this example against the current tool requires `--num-pservers 3`.
+**Kafka config:** 10 nodes — nodes 1–3 are broker+controller, nodes 4–10 are broker-only; SASL_SSL PLAIN + OAuth2 + mTLS listeners. 9 input files map to 9 pservers across 3 KOF shards (`kof.cluster.0` / `.1` / `.2`).
 
----
-
-### 10 — 10-broker, full security stack (input reference only — initial release does not support > 3 pservers)
-
-**Kafka config:** 10 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–10 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). Input `server.properties` files are kept as a reference for future multi-shard support. Running this example against the current tool requires `--num-pservers 3`.
-
----
-
----
-
-## 3-node secure cluster examples (multi-listener)
-
-The following 15 examples cover all four FTL auth types — individually and in every pair, triple,
-and full combination — using 3-broker KRaft clusters. Each Kafka `server.properties` uses distinct
-named listeners for each auth mechanism.
-
-**Multiple auth providers:** When a Kafka cluster exposes multiple auth listeners, tibkafkatokof
-configures ALL applicable FTL auth providers simultaneously. Provide the relevant flags for each
-mechanism you want to activate — they are combined into a comma-separated `auth.providers` string:
-
-| Flag(s) | FTL auth provider added | Requires |
-|---|---|---|
-| `--auth-users-file` | `file:<path>` | `sasl_tls` listener in input config |
-| `--tls-server-trust` | `mtls` | (any TLS listener) |
-| `--oauth-token-url` | `oauth2` | `oauth_tls` listener in input config |
-
-All active providers are combined: e.g. `--auth-users-file + --tls-server-trust + --oauth-token-url`
-produces `auth.providers: file:/etc/ftl/users.txt,mtls,oauth2`.
-
-Run all these examples from the `tibkafkatokof/` directory so paths in output files are relative.
-
-Generated reference output is checked into each example's `output/` directory.
-
----
-
-### 12 — 3-broker, SASL basic (SASL_SSL PLAIN only)
-
-**Kafka config:** 3 nodes, KRaft, single `SASL_AUTH` listener (SASL_SSL PLAIN), SSL controller.
-
-Generated reference output: [`examples/12-3broker-sasl-basic/output/`](examples/12-3broker-sasl-basic/output/)
+Generated reference output: [`examples/09-10broker-scale/output/`](examples/09-10broker-scale/output/)
 
 ```sh
 tibkafkatokof \
-  --output-dir examples/12-3broker-sasl-basic/output \
-  --core-servers SRV1=kafka-sasl-1:5680,SRV2=kafka-sasl-2:5681,SRV3=kafka-sasl-3:5682 \
-  --tls-cert /etc/ftl/certs/server.pem \
-  --tls-key /etc/ftl/certs/server.key \
-  --tls-ca /etc/ftl/certs/ca.pem \
-  --auth-users-file /etc/ftl/users.txt \
-  --server-user internal --server-password env:SERVER_PASSWORD \
-  examples/12-3broker-sasl-basic/server-1.properties \
-  examples/12-3broker-sasl-basic/server-2.properties \
-  examples/12-3broker-sasl-basic/server-3.properties
+  --output-dir examples/09-10broker-scale/output \
+  --core-servers SRV1=kafka-cluster-1:5601,SRV2=kafka-cluster-2:5602,SRV3=kafka-cluster-3:5603 \
+  examples/09-10broker-scale/server-1.properties \
+  examples/09-10broker-scale/server-2.properties \
+  examples/09-10broker-scale/server-3.properties \
+  examples/09-10broker-scale/server-4.properties \
+  examples/09-10broker-scale/server-5.properties \
+  examples/09-10broker-scale/server-6.properties \
+  examples/09-10broker-scale/server-7.properties \
+  examples/09-10broker-scale/server-8.properties \
+  examples/09-10broker-scale/server-9.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (`auth.providers: file:/etc/ftl/users.txt`), `realm.json`, `kof.broker.{1,2,3}.properties`
+**Output:** `kof-cluster.yaml` (SRV1–3 + pserver1–3), `kof-cluster-aux1.yaml` (pserver4–6), `kof-cluster-aux2.yaml` (pserver7–9), `realm.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `unsupported.properties`
 
 ---
 
-### 13 — 3-broker, mTLS (SSL, client.auth=required)
+### 10 — 10-broker, full security stack (3 shards)
 
-**Kafka config:** 3 nodes, KRaft, single `MTLS` listener (SSL with `ssl.client.auth=required` enforced per-listener), SSL controller.
+**Kafka config:** 10 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–10 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). 9 input files map to 9 pservers across 3 KOF shards.
 
-Generated reference output: [`examples/13-3broker-mtls/output/`](examples/13-3broker-mtls/output/)
+Generated reference output: [`examples/10-10broker-secure/output/`](examples/10-10broker-secure/output/)
 
 ```sh
 tibkafkatokof \
-  --output-dir examples/13-3broker-mtls/output \
-  --core-servers SRV1=kafka-mtls-1:5683,SRV2=kafka-mtls-2:5684,SRV3=kafka-mtls-3:5685 \
+  --output-dir examples/10-10broker-secure/output \
+  --core-servers SRV1=kafka-cluster-1:5601,SRV2=kafka-cluster-2:5602,SRV3=kafka-cluster-3:5603 \
   --tls-cert /etc/ftl/certs/server.pem \
   --tls-key /etc/ftl/certs/server.key \
   --tls-ca /etc/ftl/certs/ca.pem \
   --tls-server-trust /etc/ftl/certs/client-ca.pem \
-  --tls-client-cert /etc/ftl/certs/client.pem \
-  --tls-client-key /etc/ftl/certs/client.key \
-  examples/13-3broker-mtls/server-1.properties \
-  examples/13-3broker-mtls/server-2.properties \
-  examples/13-3broker-mtls/server-3.properties
-```
-
-**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (`auth.providers: mtls`), `realm.json`, `kof.broker.{1,2,3}.properties`
-
----
-
-### 14 — 3-broker, OAuth2 (SASL_SSL OAUTHBEARER only)
-
-**Kafka config:** 3 nodes, KRaft, single `OAUTH` listener (SASL_SSL OAUTHBEARER), SSL controller.
-
-Generated reference output: [`examples/14-3broker-oauth2/output/`](examples/14-3broker-oauth2/output/)
-
-```sh
-tibkafkatokof \
-  --output-dir examples/14-3broker-oauth2/output \
-  --core-servers SRV1=kafka-oauth-1:5686,SRV2=kafka-oauth-2:5687,SRV3=kafka-oauth-3:5688 \
-  --tls-cert /etc/ftl/certs/server.pem \
-  --tls-key /etc/ftl/certs/server.key \
-  --tls-ca /etc/ftl/certs/ca.pem \
+  --tls-client-cert /etc/ftl/certs/internal.pem \
+  --tls-client-key /etc/ftl/certs/internal.key \
   --oauth-token-url https://auth.example.com/oauth/token \
   --oauth-jwks-url file:/etc/ftl/oauth.json \
   --oauth-client-id ftl-server \
   --oauth-client-secret env:OAUTH_CLIENT_SECRET \
-  --oauth-ui-auth-url https://auth.example.com/oauth/authorize \
-  --oauth-ui-token-url https://auth.example.com/oauth/token \
-  --oauth-ui-logout-url https://auth.example.com/oauth/logout \
-  --oauth-ui-client-id ftl-ui \
-  --oauth-ui-client-secret env:OAUTH_UI_CLIENT_SECRET \
   --oauth-provider-trust /etc/ftl/certs/oauth-provider.pem \
-  --auth-rolemap /etc/ftl/rolemap.txt \
-  examples/14-3broker-oauth2/server-1.properties \
-  examples/14-3broker-oauth2/server-2.properties \
-  examples/14-3broker-oauth2/server-3.properties
+  examples/10-10broker-secure/server-1.properties \
+  examples/10-10broker-secure/server-2.properties \
+  examples/10-10broker-secure/server-3.properties \
+  examples/10-10broker-secure/server-4.properties \
+  examples/10-10broker-secure/server-5.properties \
+  examples/10-10broker-secure/server-6.properties \
+  examples/10-10broker-secure/server-7.properties \
+  examples/10-10broker-secure/server-8.properties \
+  examples/10-10broker-secure/server-9.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (`auth.providers: oauth2`), `realm.json`, `kof.broker.{1,2,3}.properties`
-
----
-
-### 15 — 3-broker, SASL basic + mTLS
-
-**Kafka config:** 3 nodes, KRaft, two listeners: `SASL_AUTH` (SASL_SSL PLAIN) + `MTLS` (SSL, client.auth=required).
-
-Generated reference output: [`examples/15-3broker-sasl+mtls/output/`](examples/15-3broker-sasl+mtls/output/)
-
-```sh
-tibkafkatokof \
-  --output-dir "examples/15-3broker-sasl+mtls/output" \
-  --core-servers SRV1=kafka-sasl-mtls-1:5692,SRV2=kafka-sasl-mtls-2:5693,SRV3=kafka-sasl-mtls-3:5694 \
-  --tls-cert /etc/ftl/certs/server.pem --tls-key /etc/ftl/certs/server.key --tls-ca /etc/ftl/certs/ca.pem \
-  --tls-server-trust /etc/ftl/certs/client-ca.pem --tls-client-cert /etc/ftl/certs/client.pem --tls-client-key /etc/ftl/certs/client.key \
-  --auth-users-file /etc/ftl/users.txt --server-user internal --server-password env:SERVER_PASSWORD \
-  "examples/15-3broker-sasl+mtls/server-1.properties" \
-  "examples/15-3broker-sasl+mtls/server-2.properties" \
-  "examples/15-3broker-sasl+mtls/server-3.properties"
-```
-
-**Output:** `kof-cluster-secure.yaml` (`auth.providers: file:/etc/ftl/users.txt,mtls`)
-
----
-
-### 16 — 3-broker, SASL basic + OAuth2
-
-**Kafka config:** 3 nodes, two listeners: `SASL_AUTH` (SASL_SSL PLAIN) + `OAUTH` (SASL_SSL OAUTHBEARER). Both providers are configured in KOF.
-
-Generated reference output: [`examples/16-3broker-sasl+oauth2/output/`](examples/16-3broker-sasl+oauth2/output/)
-
-```sh
-tibkafkatokof \
-  --output-dir "examples/16-3broker-sasl+oauth2/output" \
-  --core-servers SRV1=kafka-sasl-oauth-1:5695,SRV2=kafka-sasl-oauth-2:5696,SRV3=kafka-sasl-oauth-3:5697 \
-  --tls-cert /etc/ftl/certs/server.pem --tls-key /etc/ftl/certs/server.key --tls-ca /etc/ftl/certs/ca.pem \
-  --auth-users-file /etc/ftl/users.txt --server-user internal --server-password env:SERVER_PASSWORD \
-  --oauth-token-url https://auth.example.com/oauth/token --oauth-jwks-url file:/etc/ftl/oauth.json \
-  --oauth-client-id ftl-server --oauth-client-secret env:OAUTH_CLIENT_SECRET \
-  --oauth-ui-auth-url https://auth.example.com/oauth/authorize \
-  --oauth-ui-token-url https://auth.example.com/oauth/token \
-  --oauth-ui-logout-url https://auth.example.com/oauth/logout \
-  --oauth-ui-client-id ftl-ui --oauth-ui-client-secret env:OAUTH_UI_CLIENT_SECRET \
-  --oauth-provider-trust /etc/ftl/certs/oauth-provider.pem --auth-rolemap /etc/ftl/rolemap.txt \
-  "examples/16-3broker-sasl+oauth2/server-1.properties" \
-  "examples/16-3broker-sasl+oauth2/server-2.properties" \
-  "examples/16-3broker-sasl+oauth2/server-3.properties"
-```
-
-**Output:** `kof-cluster-secure.yaml` (`auth.providers: file:/etc/ftl/users.txt,oauth2`)
-
----
-
-### 17 — 3-broker, mTLS + OAuth2
-
-**Kafka config:** 3 nodes, two listeners: `MTLS` (SSL, client.auth=required) + `OAUTH` (SASL_SSL OAUTHBEARER). Both mTLS and OAuth2 providers are configured in KOF.
-
-Generated reference output: [`examples/17-3broker-mtls+oauth2/output/`](examples/17-3broker-mtls+oauth2/output/)
-
-```sh
-tibkafkatokof \
-  --output-dir "examples/17-3broker-mtls+oauth2/output" \
-  --core-servers SRV1=kafka-mtls-oauth-1:5701,SRV2=kafka-mtls-oauth-2:5702,SRV3=kafka-mtls-oauth-3:5703 \
-  --tls-cert /etc/ftl/certs/server.pem --tls-key /etc/ftl/certs/server.key --tls-ca /etc/ftl/certs/ca.pem \
-  --tls-server-trust /etc/ftl/certs/client-ca.pem --tls-client-cert /etc/ftl/certs/client.pem --tls-client-key /etc/ftl/certs/client.key \
-  --oauth-token-url https://auth.example.com/oauth/token --oauth-jwks-url file:/etc/ftl/oauth.json \
-  --oauth-client-id ftl-server --oauth-client-secret env:OAUTH_CLIENT_SECRET \
-  --oauth-ui-auth-url https://auth.example.com/oauth/authorize \
-  --oauth-ui-token-url https://auth.example.com/oauth/token \
-  --oauth-ui-logout-url https://auth.example.com/oauth/logout \
-  --oauth-ui-client-id ftl-ui --oauth-ui-client-secret env:OAUTH_UI_CLIENT_SECRET \
-  --oauth-provider-trust /etc/ftl/certs/oauth-provider.pem --auth-rolemap /etc/ftl/rolemap.txt \
-  "examples/17-3broker-mtls+oauth2/server-1.properties" \
-  "examples/17-3broker-mtls+oauth2/server-2.properties" \
-  "examples/17-3broker-mtls+oauth2/server-3.properties"
-```
-
-**Output:** `kof-cluster-secure.yaml` (`auth.providers: mtls,oauth2`)
-
----
-
-### 18 — 3-broker, SASL basic + mTLS + OAuth2
-
-**Kafka config:** 3 nodes, three listeners: `SASL_AUTH` (SASL_SSL PLAIN) + `MTLS` (SSL mTLS) + `OAUTH` (SASL_SSL OAUTHBEARER). All three providers are configured in KOF.
-
-Generated reference output: [`examples/18-3broker-sasl+mtls+oauth2/output/`](examples/18-3broker-sasl+mtls+oauth2/output/)
-
-```sh
-tibkafkatokof \
-  --output-dir "examples/18-3broker-sasl+mtls+oauth2/output" \
-  --core-servers SRV1=kafka-s-m-o-1:5710,SRV2=kafka-s-m-o-2:5711,SRV3=kafka-s-m-o-3:5712 \
-  --tls-cert /etc/ftl/certs/server.pem --tls-key /etc/ftl/certs/server.key --tls-ca /etc/ftl/certs/ca.pem \
-  --tls-server-trust /etc/ftl/certs/client-ca.pem --tls-client-cert /etc/ftl/certs/client.pem --tls-client-key /etc/ftl/certs/client.key \
-  --auth-users-file /etc/ftl/users.txt --server-user internal --server-password env:SERVER_PASSWORD \
-  --oauth-token-url https://auth.example.com/oauth/token --oauth-jwks-url file:/etc/ftl/oauth.json \
-  --oauth-client-id ftl-server --oauth-client-secret env:OAUTH_CLIENT_SECRET \
-  --oauth-ui-auth-url https://auth.example.com/oauth/authorize \
-  --oauth-ui-token-url https://auth.example.com/oauth/token \
-  --oauth-ui-logout-url https://auth.example.com/oauth/logout \
-  --oauth-ui-client-id ftl-ui --oauth-ui-client-secret env:OAUTH_UI_CLIENT_SECRET \
-  --oauth-provider-trust /etc/ftl/certs/oauth-provider.pem --auth-rolemap /etc/ftl/rolemap.txt \
-  "examples/18-3broker-sasl+mtls+oauth2/server-1.properties" \
-  "examples/18-3broker-sasl+mtls+oauth2/server-2.properties" \
-  "examples/18-3broker-sasl+mtls+oauth2/server-3.properties"
-```
-
-**Output:** `kof-cluster-secure.yaml` (`auth.providers: file:/etc/ftl/users.txt,mtls,oauth2`)
+**Output:** `kof-cluster.yaml`, `kof-cluster-aux1.yaml`, `kof-cluster-aux2.yaml`, `kof-cluster-secure.yaml` (auth mode: oauth2 + mTLS), `realm.json` (3 clusters), `kof.broker.{1–9}.properties`, `unsupported.properties`
 
 ---
 
@@ -646,9 +436,9 @@ kof.broker.{1,2,3}.properties
 unsupported.properties
 ```
 
-### Secure 10-broker + DR (input reference only — initial release does not support > 3 pservers)
+### Secure 10-broker + DR (3 shards)
 
-This scenario requires `--num-pservers 9` which exceeds the initial-release limit of 3. The `server.properties` files in `examples/10-10broker-secure/` are kept as a reference for future multi-shard DR support.
+Combine the example 10 flags above with `-dr-servers` to generate DR-enabled output for a 9-pserver, 3-shard deployment. Produces six cluster YAML files (primary + DR, each across three files) and a `realm.json` with `dr_enabled: true` on all three clusters.
 
 ---
 
@@ -684,22 +474,19 @@ tibftlserver --yaml kof-cluster-dr.yaml --server DRSRV3
 
 ### `kof-cluster-secure.yaml`
 
-Adds `ftlserver.properties` blocks (TLS, auth) to each realm server. All active auth providers
-are combined into a single comma-separated `auth.providers` global:
+Adds `ftlserver.properties` blocks (TLS, auth) to each realm server. Auth mode is determined by the Kafka listener types:
 
-| Flag(s) provided | Contribution to `auth.providers` |
+| Kafka auth | FTL secure YAML mode |
 |---|---|
-| `-auth-users-file` + `sasl_tls` listener | `file:<auth-users-file>` |
-| `-tls-server-trust` | `mtls` |
-| `-oauth-token-url` + `oauth_tls` listener | `oauth2` + all `oauth2.*` globals and per-server props |
-| TLS flags only, no auth flag | TLS fields in `ftlserver.properties`; no `auth.providers` |
+| `sasl_tls` (PLAIN) | `auth.providers: file:<auth-users-file>` + TLS fields |
+| `oauth_tls` (OAUTHBEARER) | `auth.providers: oauth2` + `oauth2.*` globals and per-server properties |
+| `tls` / `mtls` only | TLS fields only, no `auth.providers` |
 
-Multiple providers can be active at once, e.g. `-auth-users-file + -tls-server-trust + -oauth-token-url`
-produces `auth.providers: file:/etc/ftl/users.txt,mtls,oauth2`.
+When mTLS flags are provided alongside OAuth, the secure YAML includes both sets of FTL properties.
 
 ### `realm.json`
 
-Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores (`kof.data.store`, `kof.sync.store`, `kof.meta.store`), and one pserver per `-num-pservers`. Upload after the realm server starts:
+Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores per cluster (`kof.data.store.N`, `kof.sync.store.N`, `kof.meta.store.N`), and pservers distributed across clusters. Upload after the realm server starts:
 
 ```sh
 tibrealmadmin --server localhost:5600 --realm _default_realm upload-realm realm.json
@@ -729,13 +516,6 @@ Written when any input properties are not in the KoF whitelist. Contains KRaft c
 | `examples/06-3broker-tls-only/` | 3 (broker+controller) | SSL only (no SASL) | 3 |
 | `examples/07-3broker-multi-sasl/` | 3 (broker+controller) | PLAIN + OAuth2 + mTLS | 3 |
 | `examples/08-3broker-multi-listener/` | 3 (broker+controller) | PLAIN + OAuth2 + mTLS (per-listener client auth) | 3 |
-| `examples/09-10broker-scale/` | 10 (nodes 1–3 controller) | SASL_SSL PLAIN + OAuth2 + mTLS | 9 |
-| `examples/10-10broker-secure/` | 10 (nodes 1–3 controller) | PLAIN + OAuth2 + mTLS (full stack) | 9 |
+| `examples/09-10broker-scale/` | 10 (nodes 1–3 controller) | SASL_SSL PLAIN + OAuth2 + mTLS | 9 (3 shards) |
+| `examples/10-10broker-secure/` | 10 (nodes 1–3 controller) | PLAIN + OAuth2 + mTLS (full stack) | 9 (3 shards) |
 | `examples/11-3broker-dr/` | 3 (broker+controller) | PLAINTEXT + DR | 3 |
-| `examples/12-3broker-sasl-basic/` | 3 (broker+controller) | SASL_SSL PLAIN | 3 |
-| `examples/13-3broker-mtls/` | 3 (broker+controller) | SSL mTLS (client.auth=required) | 3 |
-| `examples/14-3broker-oauth2/` | 3 (broker+controller) | SASL_SSL OAUTHBEARER | 3 |
-| `examples/15-3broker-sasl+mtls/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS | 3 |
-| `examples/16-3broker-sasl+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SASL_SSL OAUTHBEARER | 3 |
-| `examples/17-3broker-mtls+oauth2/` | 3 (broker+controller) | SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
-| `examples/18-3broker-sasl+mtls+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS + OAUTHBEARER | 3 |

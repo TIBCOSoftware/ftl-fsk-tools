@@ -197,7 +197,7 @@ var propSections = []struct {
 			{"authorizer.class.name", DispDepends,
 				"The built-in ACL authorizers are recognized: org.apache.kafka.metadata.authorizer.StandardAuthorizer " +
 					"(KRaft mode) and kafka.security.authorizer.AclAuthorizer (ZooKeeper mode). When one of these is named, " +
-					"the tool rewrites the value to 'standard' and KoF enforces the same ACL model: default-deny, super.users " +
+					"the tool rewrites the value to 'KofAuthorizer' and KoF enforces the same ACL model: default-deny, super.users " +
 					"bypass, and per-principal allow rules. Any other authorizer is a custom Java class KoF cannot run, so it " +
 					"is flagged RESOLVE-REQUIRED."},
 			{"super.users", DispAccept,
