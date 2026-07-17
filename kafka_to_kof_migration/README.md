@@ -83,7 +83,7 @@ bash demo/populate-kafka.sh             # sends 10 000 JSON messages
 
 To stop: `bash demo/stop-kafka.sh`
 
-### Option B — Manual KRaft setup (Kafka 4.x, no ZooKeeper)
+### Option B — Manual KRaft setup (Kafka 4.x KRaft, no ZooKeeper)
 
 Format storage on each broker (first time only):
 
