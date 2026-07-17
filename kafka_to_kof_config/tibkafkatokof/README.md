@@ -46,6 +46,7 @@ tibkafkatokof [flags] <server.properties>
 | `-num-pservers` | `3` | Number of pservers to generate (must be a positive odd number) |
 | `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` lets the OS choose; `dtcp` is optimized for low latency |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are randomly generated in range 5600–5699 |
+| `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `kafka_to_kof_migration` data migration tool) |
 
 ### TLS flags
 

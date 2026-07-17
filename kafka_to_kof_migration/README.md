@@ -38,6 +38,7 @@ bash demo/populate-kafka.sh             # sends 10 000 sample JSON messages
 tibkafkatokof \
   --output-dir ./kof-output \
   --realm-name insurance-demo \
+  --migration-config \
   demo/kraft/server-1.properties \
   demo/kraft/server-2.properties \
   demo/kraft/server-3.properties
@@ -151,6 +152,7 @@ broker `server.properties` files — one file per broker:
 tibkafkatokof \
   --output-dir ./kof-output \
   --realm-name my-realm \
+  --migration-config \
   /path/to/broker-1/server.properties \
   /path/to/broker-2/server.properties \
   /path/to/broker-3/server.properties

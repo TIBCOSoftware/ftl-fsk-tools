@@ -6,6 +6,7 @@
 #   bash demo/run-migration.sh [--output-dir ./kof-output] [--dry-run-only]
 
 set -euo pipefail
+set -x
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATION_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"  # tibkafkatokof_migration root

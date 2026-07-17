@@ -97,6 +97,9 @@ func main() {
 	drDataDirFlag := flag.String("dr-data-dir", "",
 		"data directory for DR pservers (default: <data-dir>/dr)")
 
+	writeMigrationConfig := flag.Bool("migration-config", false,
+		"write kafka-to-kof.properties to the output directory (migration tool configuration)")
+
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: tibkafkatokof [flags] <server.properties...>")
 		fmt.Fprintln(os.Stderr)
@@ -288,9 +291,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error writing realm.json:", err)
 		os.Exit(1)
 	}
-	if err := translator.WriteMigrationConfig(cfgs, *outputDir); err != nil {
-		fmt.Fprintln(os.Stderr, "error writing kafka-to-kof.properties:", err)
-		os.Exit(1)
+	if *writeMigrationConfig {
+		if err := translator.WriteMigrationConfig(cfgs, *outputDir); err != nil {
+			fmt.Fprintln(os.Stderr, "error writing kafka-to-kof.properties:", err)
+			os.Exit(1)
+		}
 	}
 
 	// Heads-up about keys/values KoF does not honor (informational; does not block).
