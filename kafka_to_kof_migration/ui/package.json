@@ -1,0 +1,12 @@
+{
+  "name": "kafka-to-kof-ui",
+  "version": "1.0.0",
+  "description": "Migration dashboard for Kafka → KOF (insurance demo)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}

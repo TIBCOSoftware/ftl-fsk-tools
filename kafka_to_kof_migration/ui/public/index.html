@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kafka → KOF Migration Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f1117;
+    color: #e1e4e8;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: .5px; }
+  header .subtitle { font-size: .8rem; color: #8b949e; margin-top: 2px; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .5px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .badge-running  { background: #1f6feb; color: #fff; }
+  .badge-idle     { background: #30363d; color: #8b949e; }
+
+  main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 16px;
+    padding: 20px 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* ── cluster panels ────────────────────────────────────────────────────── */
+  .panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel-header {
+    background: #1c2128;
+    padding: 12px 16px;
+    border-bottom: 1px solid #30363d;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .panel-header h2 { font-size: .9rem; font-weight: 600; }
+  .panel-header .host { font-size: .78rem; color: #8b949e; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+  }
+  th {
+    text-align: left;
+    padding: 8px 16px;
+    color: #8b949e;
+    font-weight: 500;
+    border-bottom: 1px solid #21262d;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  td {
+    padding: 8px 16px;
+    border-bottom: 1px solid #21262d;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1c2128; }
+
+  .count { font-variant-numeric: tabular-nums; text-align: right; }
+  .topic-name { font-family: 'SF Mono', 'Fira Code', monospace; font-size: .78rem; }
+
+  /* status dot */
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot-grey   { background: #484f58; }
+  .dot-green  { background: #3fb950; }
+  .dot-yellow { background: #d29922; }
+  .dot-error  { background: #f85149; }
+
+  /* ── log panel ─────────────────────────────────────────────────────────── */
+  .log-panel {
+    grid-column: 1 / -1;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .log-header {
+    background: #1c2128;
+    padding: 10px 16px;
+    border-bottom: 1px solid #30363d;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .log-header h2 { font-size: .9rem; font-weight: 600; }
+  .btn-group { display: flex; gap: 8px; }
+  button {
+    padding: 6px 16px;
+    border-radius: 6px;
+    font-size: .8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: opacity .15s;
+  }
+  button:hover { opacity: .85; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-primary { background: #238636; color: #fff; border-color: #2ea043; }
+  .btn-secondary { background: #21262d; color: #c9d1d9; border-color: #30363d; }
+  .btn-danger { background: #da3633; color: #fff; border-color: #f85149; }
+
+  #log-output {
+    flex: 1;
+    padding: 12px 16px;
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    font-size: .75rem;
+    line-height: 1.6;
+    color: #c9d1d9;
+    overflow-y: auto;
+    min-height: 220px;
+    max-height: 340px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  #log-output .log-line-ok  { color: #3fb950; }
+  #log-output .log-line-err { color: #f85149; }
+  #log-output .log-line-hdr { color: #58a6ff; font-weight: bold; }
+
+  .stat-bar {
+    display: flex;
+    gap: 24px;
+    padding: 8px 24px;
+    background: #0f1117;
+    border-top: 1px solid #21262d;
+    font-size: .75rem;
+    color: #8b949e;
+  }
+  .stat-bar span { font-variant-numeric: tabular-nums; }
+  .stat-bar strong { color: #e1e4e8; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Kafka &#8594; KOF Migration Dashboard</h1>
+    <div class="subtitle">Insurance Provider Demo &mdash; 10 topics, 3 partitions each</div>
+  </div>
+  <div id="status-badge" class="badge badge-idle">IDLE</div>
+</header>
+
+<main>
+
+  <!-- Source panel -->
+  <div class="panel" id="source-panel">
+    <div class="panel-header">
+      <h2>Source &mdash; Apache Kafka</h2>
+      <span class="host" id="source-host">localhost:9092</span>
+    </div>
+    <table>
+      <thead><tr><th>Topic</th><th class="count">Messages</th><th>Status</th></tr></thead>
+      <tbody id="source-tbody"><tr><td colspan="3" style="color:#8b949e;padding:20px">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Target panel -->
+  <div class="panel" id="target-panel">
+    <div class="panel-header">
+      <h2>Target &mdash; KOF (Kafka on FTL)</h2>
+      <span class="host" id="target-host">localhost:9092</span>
+    </div>
+    <table>
+      <thead><tr><th>Topic</th><th class="count">Messages</th><th>Status</th></tr></thead>
+      <tbody id="target-tbody"><tr><td colspan="3" style="color:#8b949e;padding:20px">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Log panel -->
+  <div class="log-panel">
+    <div class="log-header">
+      <h2>Migration Log</h2>
+      <div class="btn-group">
+        <button class="btn-secondary" id="btn-dry-run" onclick="startMigration(true)">Dry Run</button>
+        <button class="btn-primary"   id="btn-run"     onclick="startMigration(false)">&#9654; Migrate</button>
+        <button class="btn-secondary"                  onclick="clearLog()">Clear</button>
+      </div>
+    </div>
+    <div id="log-output">Ready. Click &ldquo;Dry Run&rdquo; to preview or &ldquo;Migrate&rdquo; to start.</div>
+  </div>
+
+</main>
+
+<div class="stat-bar">
+  <span>Source topics: <strong id="stat-src-topics">—</strong></span>
+  <span>Source messages: <strong id="stat-src-msgs">—</strong></span>
+  <span>Target topics: <strong id="stat-tgt-topics">—</strong></span>
+  <span>Target messages: <strong id="stat-tgt-msgs">—</strong></span>
+  <span id="stat-last-refresh" style="margin-left:auto">Never refreshed</span>
+</div>
+
+<script>
+'use strict';
+
+let lastLogLine = 0;
+let pollLogInterval = null;
+let lastStatus = null;
+
+// ── Formatting ────────────────────────────────────────────────────────────────
+function fmtCount(n) {
+  return n.toLocaleString();
+}
+
+// ── Status polling ────────────────────────────────────────────────────────────
+async function refreshStatus() {
+  try {
+    const resp = await fetch('/api/status');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    lastStatus = data;
+    renderTopics('source-tbody', data.source.topics, null, 'source');
+    renderTopics('target-tbody', data.target.topics, data.source.topics, 'target');
+    document.getElementById('source-host').textContent = data.source.bootstrap;
+    document.getElementById('target-host').textContent = data.target.bootstrap;
+
+    const srcTotal = data.source.topics.reduce((s, t) => s + t.messageCount, 0);
+    const tgtTotal = data.target.topics.reduce((s, t) => s + t.messageCount, 0);
+    document.getElementById('stat-src-topics').textContent = data.source.topics.length;
+    document.getElementById('stat-src-msgs').textContent   = fmtCount(srcTotal);
+    document.getElementById('stat-tgt-topics').textContent = data.target.topics.length;
+    document.getElementById('stat-tgt-msgs').textContent   = fmtCount(tgtTotal);
+    document.getElementById('stat-last-refresh').textContent =
+      'Updated ' + new Date().toLocaleTimeString();
+  } catch (_) {}
+}
+
+function renderTopics(tbodyId, topics, sourceTopics, side) {
+  const tbody = document.getElementById(tbodyId);
+  if (!topics.length) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:#8b949e;padding:16px">No topics found</td></tr>';
+    return;
+  }
+
+  // Build a map of source counts for comparison (target side only)
+  const srcMap = {};
+  if (sourceTopics) {
+    for (const t of sourceTopics) srcMap[t.name] = t.messageCount;
+  }
+
+  tbody.innerHTML = topics.map(t => {
+    let dotClass = 'dot-grey';
+    let label    = 'pending';
+    if (side === 'source') {
+      dotClass = t.messageCount > 0 ? 'dot-green' : 'dot-grey';
+      label    = t.messageCount > 0 ? 'populated' : 'empty';
+    } else {
+      const srcCount = srcMap[t.name] ?? null;
+      if (t.messageCount === 0 && srcCount === 0) {
+        dotClass = 'dot-grey'; label = 'empty';
+      } else if (srcCount !== null && t.messageCount >= srcCount && srcCount > 0) {
+        dotClass = 'dot-green'; label = 'complete';
+      } else if (t.messageCount > 0) {
+        dotClass = 'dot-yellow'; label = 'partial';
+      } else {
+        dotClass = 'dot-grey'; label = 'pending';
+      }
+    }
+    return `<tr>
+      <td class="topic-name">${t.name}</td>
+      <td class="count">${fmtCount(t.messageCount)}</td>
+      <td><span class="dot ${dotClass}"></span>${label}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Log polling ───────────────────────────────────────────────────────────────
+async function pollLog() {
+  try {
+    const resp = await fetch('/api/migrate/log');
+    if (!resp.ok) return;
+    const { lines } = await resp.json();
+    if (lines.length <= lastLogLine) return;
+
+    const el = document.getElementById('log-output');
+    const newLines = lines.slice(lastLogLine);
+    lastLogLine = lines.length;
+
+    for (const raw of newLines) {
+      const div = document.createElement('div');
+      if (/✓|done|complete|success/i.test(raw))   div.className = 'log-line-ok';
+      else if (/error|fail|exception/i.test(raw)) div.className = 'log-line-err';
+      else if (/^=====/.test(raw))                div.className = 'log-line-hdr';
+      div.textContent = raw;
+      el.appendChild(div);
+    }
+    el.scrollTop = el.scrollHeight;
+  } catch (_) {}
+}
+
+async function checkMigrationStatus() {
+  try {
+    const resp = await fetch('/api/migrate/status');
+    const { running } = await resp.json();
+    const badge = document.getElementById('status-badge');
+    if (running) {
+      badge.textContent = 'RUNNING';
+      badge.className   = 'badge badge-running';
+      document.getElementById('btn-dry-run').disabled = true;
+      document.getElementById('btn-run').disabled     = true;
+      if (!pollLogInterval) pollLogInterval = setInterval(pollLog, 1500);
+    } else {
+      badge.textContent = 'IDLE';
+      badge.className   = 'badge badge-idle';
+      document.getElementById('btn-dry-run').disabled = false;
+      document.getElementById('btn-run').disabled     = false;
+      if (pollLogInterval) {
+        clearInterval(pollLogInterval);
+        pollLogInterval = null;
+        // Final log pull
+        await pollLog();
+      }
+    }
+  } catch (_) {}
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+async function startMigration(dryRun) {
+  const url = dryRun ? '/api/migrate/dry-run' : '/api/migrate/run';
+  const el  = document.getElementById('log-output');
+  el.innerHTML = '';
+  lastLogLine  = 0;
+
+  try {
+    const resp = await fetch(url, { method: 'POST' });
+    if (!resp.ok) {
+      const err = await resp.json();
+      el.textContent = 'Error: ' + (err.error || resp.statusText);
+      return;
+    }
+    el.textContent = dryRun ? 'Dry run started...\n' : 'Migration started...\n';
+    await checkMigrationStatus();
+  } catch (e) {
+    el.textContent = 'Failed to start: ' + e.message;
+  }
+}
+
+function clearLog() {
+  document.getElementById('log-output').innerHTML =
+    'Log cleared. Click &ldquo;Dry Run&rdquo; or &ldquo;Migrate&rdquo; to begin.';
+  lastLogLine = 0;
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+refreshStatus();
+checkMigrationStatus();
+setInterval(refreshStatus, 5000);
+setInterval(checkMigrationStatus, 2000);
+</script>
+</body>
+</html>

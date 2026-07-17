@@ -4,6 +4,39 @@ This tool copies all records from a source Apache Kafka cluster to a target KOF 
 
 ---
 
+## Demo scenario — Insurance Provider
+
+The `demo/` directory contains a ready-to-run insurance provider scenario with 10 topics
+(3 partitions each, 1 000 messages each — 10 000 messages total):
+
+| Topic | Description |
+|---|---|
+| `insurance.auto.claims` | Auto accident reports, damage assessments |
+| `insurance.home.claims` | Homeowner property damage / theft claims |
+| `insurance.life.events` | Policy enrollment, beneficiary changes, death claims |
+| `insurance.health.claims` | Medical procedures and prescription claims |
+| `insurance.commercial.claims` | Business / commercial insurance claims |
+| `insurance.policy.updates` | Renewals, amendments, cancellations |
+| `insurance.customer.profiles` | New customer records and profile updates |
+| `insurance.premium.payments` | Premium payment transactions |
+| `insurance.fraud.alerts` | Fraud detection events and risk scores |
+| `insurance.audit.log` | System-wide audit trail |
+
+**Quick start (demo):**
+
+```bash
+export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
+export KAFKA_CLASSPATH="/path/kafka-clients.jar:/path/slf4j-api.jar:/path/slf4j-simple.jar"
+
+bash demo/setup-kafka-kraft.sh          # start 3-broker KRaft Kafka
+bash demo/create-topics.sh              # create 10 insurance topics
+bash demo/populate-kafka.sh             # send 10 000 sample messages
+# ... then follow Steps 1–7 below to generate KOF config, start KOF, and migrate
+bash demo/run-migration.sh              # dry-run then live migration
+```
+
+---
+
 ## Prerequisites
 
 - JDK 11+
@@ -16,6 +49,67 @@ Set the classpath in your shell before running any commands:
 
 ```bash
 export KAFKA_CLASSPATH="/path/to/kafka-clients.jar:/path/to/slf4j-api.jar:/path/to/slf4j-simple.jar"
+```
+
+---
+
+## Step 0 — Ensure your source Kafka cluster is running
+
+The migration tool reads from a live Kafka cluster, so the brokers must be accessible before you start. If your Kafka cluster is already running, skip to Step 1.
+
+Set `KAFKA_HOME` to your Kafka installation directory first:
+
+```bash
+export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
+```
+
+### Option A — Use the demo script (recommended for the insurance scenario)
+
+```bash
+bash demo/setup-kafka-kraft.sh          # formats storage + starts 3 KRaft brokers
+bash demo/create-topics.sh              # creates 10 insurance topics (3 partitions each)
+bash demo/populate-kafka.sh             # sends 10 000 JSON messages
+```
+
+To stop: `bash demo/stop-kafka.sh`
+
+### Option B — Manual KRaft setup (Kafka 4.x, no ZooKeeper)
+
+Format storage on each broker (first time only):
+
+```bash
+KAFKA_CLUSTER_ID="$($KAFKA_HOME/bin/kafka-storage.sh random-uuid)"
+$KAFKA_HOME/bin/kafka-storage.sh format -t "$KAFKA_CLUSTER_ID" -c /path/to/server.properties
+```
+
+Start each broker:
+
+```bash
+$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-1/server.properties
+$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-2/server.properties
+$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-3/server.properties
+```
+
+### Option C — ZooKeeper mode (Kafka 2.x – 3.x)
+
+Start ZooKeeper first:
+
+```bash
+$KAFKA_HOME/bin/zookeeper-server-start.sh $KAFKA_HOME/config/zookeeper.properties
+```
+
+Then start each broker:
+
+```bash
+$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-1/server.properties
+$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-2/server.properties
+$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-3/server.properties
+```
+
+Verify the cluster is healthy before migrating:
+
+```bash
+$KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server <broker-host>:9092 --list
 ```
 
 ---
@@ -214,3 +308,50 @@ target.admin.ssl.ca.location=/path/to/ca.pem
 target.producer.security.protocol=SSL
 target.producer.ssl.ca.location=/path/to/ca.pem
 ```
+
+---
+
+## Starting KOF brokers (demo helper)
+
+For the demo scenario, use:
+
+```bash
+export TIBFTLSERVER=/opt/tibco/ftl/bin/tibftlserver   # or put tibftlserver on PATH
+bash demo/start-kof-brokers.sh --output-dir ./kof-output
+```
+
+This starts SRV1 / SRV2 / SRV3 from `kof-output/kof-cluster.yaml` and saves PIDs to
+`demo/kof-brokers.pid`.
+
+To stop: `bash demo/stop-kof-brokers.sh`
+
+---
+
+## Migration UI
+
+A web dashboard is available in the `ui/` directory. It shows live topic message counts
+for both the source Kafka cluster and target KOF cluster, and lets you trigger a dry run
+or full migration from the browser.
+
+**Start the UI:**
+
+```bash
+cd ui
+npm install          # first time only — installs Express
+node server.js
+```
+
+Open **http://localhost:3000** in your browser.
+
+**Environment variables:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `SOURCE_BOOTSTRAP` | `localhost:9092` | Source Kafka bootstrap address |
+| `TARGET_BOOTSTRAP` | `localhost:9092` | Target KOF bootstrap address |
+| `KAFKA_HOME` | `/usr/local/Cellar/kafka/4.2.0/libexec` | Path to Kafka installation |
+| `PORT` | `3000` | HTTP port for the dashboard |
+
+The dashboard polls `/api/status` every 5 seconds, colour-codes each topic
+(grey = pending, green = counts match, yellow = partial), and streams the migration log
+in real time when a migration is running.
