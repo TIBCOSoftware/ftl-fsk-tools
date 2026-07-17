@@ -11,6 +11,7 @@ package test
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,6 +124,67 @@ func assertNoActiveJavaClass(t *testing.T, path string) {
 			}
 		}
 	}
+}
+
+// TestWriteMigrationConfig verifies that kafka-to-kof.properties is generated
+// with the correct source and target broker addresses.
+func TestWriteMigrationConfig(t *testing.T) {
+	t.Run("single-broker", func(t *testing.T) {
+		cfg, err := translator.ParseBrokerConfig(filepath.Join("testdata", "plaintext.properties"))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		dir := t.TempDir()
+		if err := translator.WriteMigrationConfig([]*translator.BrokerConfig{cfg}, dir); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, "kafka-to-kof.properties"))
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		out := string(b)
+		if !strings.Contains(out, "source.bootstrap.servers=broker1:9092") {
+			t.Errorf("expected source.bootstrap.servers=broker1:9092 in output:\n%s", out)
+		}
+		if !strings.Contains(out, "target.bootstrap.servers=<KOF-HOST-1>:9092") {
+			t.Errorf("expected target.bootstrap.servers=<KOF-HOST-1>:9092 in output:\n%s", out)
+		}
+	})
+
+	t.Run("multi-broker", func(t *testing.T) {
+		// Build three minimal configs inline.
+		hosts := []string{"kafka-a", "kafka-b", "kafka-c"}
+		cfgs := make([]*translator.BrokerConfig, len(hosts))
+		for i, h := range hosts {
+			tmp := filepath.Join(t.TempDir(), "server.properties")
+			content := fmt.Sprintf("node.id=%d\nlisteners=PLAINTEXT://0.0.0.0:9092\nadvertised.listeners=PLAINTEXT://%s:9092\n", i+1, h)
+			if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+				t.Fatalf("write tmp: %v", err)
+			}
+			cfg, err := translator.ParseBrokerConfig(tmp)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			cfgs[i] = cfg
+		}
+		dir := t.TempDir()
+		if err := translator.WriteMigrationConfig(cfgs, dir); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, "kafka-to-kof.properties"))
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		out := string(b)
+		want := "source.bootstrap.servers=kafka-a:9092,kafka-b:9092,kafka-c:9092"
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in output:\n%s", want, out)
+		}
+		want = "target.bootstrap.servers=<KOF-HOST-1>:9092,<KOF-HOST-2>:9092,<KOF-HOST-3>:9092"
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in output:\n%s", want, out)
+		}
+	})
 }
 
 func goldenCompare(t *testing.T, goldenPath, got string) {

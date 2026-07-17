@@ -35,8 +35,10 @@ type BrokerConfig struct {
 	ProcessRoles string
 	Listeners    []ListenerDef
 	IsSecure     bool
-	KOFHost      string            // advertised host of first non-controller listener
-	KOFPort      int               // advertised port of first non-controller listener
+	KOFHost      string            // advertised host of first non-controller, non-inter-broker listener
+	KOFPort      int               // advertised port of first non-controller, non-inter-broker listener
+	KafkaHost    string            // advertised host of first non-controller listener (includes inter-broker); used by migration config
+	KafkaPort    int               // advertised port of first non-controller listener (includes inter-broker)
 	Settings     map[string]string // all properties not in the listener structural set
 	SettingKeys  []string          // insertion-ordered keys for Settings
 	SettingLines map[string]int    // 1-based source line where each key's entry begins
@@ -73,6 +75,27 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 	controllerSet := map[string]bool{}
 	for _, n := range splitCSV(strings.ToUpper(raw["controller.listener.names"])) {
 		controllerSet[n] = true
+	}
+
+	// Capture KafkaHost/KafkaPort from the first non-controller advertised listener
+	// before any stripping. This includes inter-broker listeners that are also
+	// client-capable (e.g. PLAINTEXT in simple single-listener setups). The
+	// migration config uses this to populate target.bootstrap.servers.
+	preStripAdvMap := parseListenerAddrs(raw["advertised.listeners"])
+	for _, part := range splitCSV(raw["listeners"]) {
+		idx := strings.Index(part, "://")
+		if idx < 0 {
+			continue
+		}
+		n := strings.ToUpper(strings.TrimSpace(part[:idx]))
+		if controllerSet[n] {
+			continue
+		}
+		if ap, ok := preStripAdvMap[n]; ok && ap.port != 0 && ap.addr != "" && ap.addr != "0.0.0.0" {
+			cfg.KafkaHost = ap.addr
+			cfg.KafkaPort = ap.port
+			break
+		}
 	}
 
 	// Remove the listeners named by inter.broker.listener.name and

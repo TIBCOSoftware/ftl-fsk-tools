@@ -288,6 +288,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error writing realm.json:", err)
 		os.Exit(1)
 	}
+	if err := translator.WriteMigrationConfig(cfgs, *outputDir); err != nil {
+		fmt.Fprintln(os.Stderr, "error writing kafka-to-kof.properties:", err)
+		os.Exit(1)
+	}
 
 	// Heads-up about keys/values KoF does not honor (informational; does not block).
 	for _, cfg := range cfgs {

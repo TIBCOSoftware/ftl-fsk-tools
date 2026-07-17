@@ -27,6 +27,32 @@ var section1Keys = map[string]bool{
 	"allow.everyone.if.no.acl.found":        true,
 }
 
+// section2Keys is every non-security broker property KoF accepts (general, producer,
+// consumer, default-topic). A non-security key not listed here is unsupported and is
+// routed to unsupported.properties. Mirrors generalWhitelist in the ftlserver runtime
+// (tibftlserver/kofbroker/whitelist.go) -- keep in sync.
+var section2Keys = map[string]bool{
+	"node.id":                             true,
+	"listeners":                           true,
+	"advertised.listeners":                true,
+	"producer.id.expiration.ms":           true,
+	"group.initial.rebalance.delay.ms":    true,
+	"num.partitions":                      true,
+	"log.cleanup.policy":                  true,
+	"compression.type":                    true,
+	"log.cleaner.delete.retention.ms":     true,
+	"log.index.interval.bytes":            true,
+	"message.max.bytes":                   true,
+	"log.message.timestamp.after.max.ms":  true,
+	"log.message.timestamp.before.max.ms": true,
+	"log.message.timestamp.type":          true,
+	"log.retention.bytes":                 true,
+	"log.retention.ms":                    true,
+	"log.retention.minutes":               true,
+	"log.retention.hours":                 true,
+	"socket.request.max.bytes":            true,
+}
+
 // perListenerReauth: per-mechanism reauth keys honored only with a listener.name.<l>.
 // prefix; the bare broker-wide form is ignored by the pserver.
 var perListenerReauth = map[string]bool{
@@ -105,7 +131,7 @@ func isSection3Rejected(k string) bool {
 //   - Section 3 keys (KRaft cluster-control): always rejected → unsupported.properties
 //   - Security-domain keys (ssl.*, sasl.*, plain.*, oauthbearer.*, authz):
 //     must appear in the section 1 whitelist → otherwise unsupported.properties
-//   - Everything else (section 2): accepted as-is
+//   - Any other key must appear in the section 2 allowlist → otherwise unsupported.properties
 func isSupportedBrokerProperty(k string) bool {
 	if isSection3Rejected(k) {
 		return false
@@ -118,7 +144,7 @@ func isSupportedBrokerProperty(k string) bool {
 		}
 		return isSection1Whitelisted(base)
 	}
-	return true
+	return section2Keys[strings.ToLower(base)]
 }
 
 // runtimeSecurityWhitelist mirrors the ftlserver runtime's fail-closed security-key
