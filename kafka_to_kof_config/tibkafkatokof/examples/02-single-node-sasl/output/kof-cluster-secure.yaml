@@ -21,13 +21,13 @@ servers:
       tls.server.private.key: /etc/ftl/certs/server.key
   - persistence:
       name: pserver1
-      data: /var/kof/data/pserver1
+      data: /var/tmp/kof/data/pserver1
       kof.broker.properties: examples/02-single-node-sasl/output/kof.broker.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
 services:
   persistence:
-    data: /var/kof/data
+    data: /var/tmp/kof/data
   realm:
-    data: /var/kof/data
+    data: /var/tmp/kof/data
     initial.realm.config: examples/02-single-node-sasl/output/realm.json

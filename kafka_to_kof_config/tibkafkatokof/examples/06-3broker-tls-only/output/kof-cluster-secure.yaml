@@ -25,7 +25,7 @@ servers:
       tls.client.trust.file: /etc/ftl/certs/ca.pem
   - persistence:
       name: pserver1
-      data: /var/kof/data/pserver1
+      data: /var/tmp/kof/data/pserver1
       kof.broker.properties: examples/06-3broker-tls-only/output/kof.broker.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
@@ -39,7 +39,7 @@ servers:
       tls.client.trust.file: /etc/ftl/certs/ca.pem
   - persistence:
       name: pserver2
-      data: /var/kof/data/pserver2
+      data: /var/tmp/kof/data/pserver2
       kof.broker.properties: examples/06-3broker-tls-only/output/kof.broker.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
@@ -53,13 +53,13 @@ servers:
       tls.client.trust.file: /etc/ftl/certs/ca.pem
   - persistence:
       name: pserver3
-      data: /var/kof/data/pserver3
+      data: /var/tmp/kof/data/pserver3
       kof.broker.properties: examples/06-3broker-tls-only/output/kof.broker.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
 services:
   persistence:
-    data: /var/kof/data
+    data: /var/tmp/kof/data
   realm:
-    data: /var/kof/data
+    data: /var/tmp/kof/data
     initial.realm.config: examples/06-3broker-tls-only/output/realm.json

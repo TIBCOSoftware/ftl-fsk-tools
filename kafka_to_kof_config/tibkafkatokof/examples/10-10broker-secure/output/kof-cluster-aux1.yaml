@@ -16,7 +16,7 @@ servers:
       server: kafka-broker-1:5782
   - persistence:
       name: pserver4
-      data: /var/kof/data/pserver4
+      data: /var/tmp/kof/data/pserver4
       kof.broker.properties: output/kof.broker.4.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
@@ -25,7 +25,7 @@ servers:
       server: kafka-broker-1:5762
   - persistence:
       name: pserver5
-      data: /var/kof/data/pserver5
+      data: /var/tmp/kof/data/pserver5
       kof.broker.properties: output/kof.broker.5.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
@@ -34,10 +34,10 @@ servers:
       server: kafka-broker-1:5755
   - persistence:
       name: pserver6
-      data: /var/kof/data/pserver6
+      data: /var/tmp/kof/data/pserver6
       kof.broker.properties: output/kof.broker.6.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
 services:
   persistence:
-    data: /var/kof/data
+    data: /var/tmp/kof/data

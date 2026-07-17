@@ -33,15 +33,15 @@ servers:
       auth.rolemap: /etc/ftl/rolemap.txt
   - persistence:
       name: pserver1
-      data: /var/kof/data/pserver1
+      data: /var/tmp/kof/data/pserver1
       kof.broker.properties: examples/03-single-node-oauth/output/kof.broker.1.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
 services:
   persistence:
-    data: /var/kof/data
+    data: /var/tmp/kof/data
   realm:
     user: primary
     password: primary-pw
-    data: /var/kof/data
+    data: /var/tmp/kof/data
     initial.realm.config: examples/03-single-node-oauth/output/realm.json

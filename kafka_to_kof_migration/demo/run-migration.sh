@@ -32,7 +32,7 @@ if [[ ! -f "$CONFIG" ]]; then
   exit 1
 fi
 
-if grep -q '<KOF-HOST-' "$CONFIG"; then
+if grep -v '^\s*#' "$CONFIG" | grep -q '<KOF-HOST-'; then
   echo "ERROR: $CONFIG still contains <KOF-HOST-N> placeholders in target.bootstrap.servers."
   echo "Replace them with the actual KOF pserver hostnames (or 'localhost' for the demo):"
   echo "  sed -i '' 's/<KOF-HOST-[0-9]*>/localhost/g' \"$CONFIG\""

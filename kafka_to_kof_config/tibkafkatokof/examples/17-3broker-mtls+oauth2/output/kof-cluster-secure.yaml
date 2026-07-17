@@ -41,7 +41,7 @@ servers:
       auth.rolemap: /etc/ftl/rolemap.txt
   - persistence:
       name: pserver1
-      data: /var/kof/data/pserver1
+      data: /var/tmp/kof/data/pserver1
       kof.broker.properties: examples/17-3broker-mtls+oauth2/output/kof.broker.1.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
@@ -63,7 +63,7 @@ servers:
       auth.rolemap: /etc/ftl/rolemap.txt
   - persistence:
       name: pserver2
-      data: /var/kof/data/pserver2
+      data: /var/tmp/kof/data/pserver2
       kof.broker.properties: examples/17-3broker-mtls+oauth2/output/kof.broker.2.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
@@ -85,15 +85,15 @@ servers:
       auth.rolemap: /etc/ftl/rolemap.txt
   - persistence:
       name: pserver3
-      data: /var/kof/data/pserver3
+      data: /var/tmp/kof/data/pserver3
       kof.broker.properties: examples/17-3broker-mtls+oauth2/output/kof.broker.3.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
 services:
   persistence:
-    data: /var/kof/data
+    data: /var/tmp/kof/data
   realm:
     user: primary
     password: primary-pw
-    data: /var/kof/data
+    data: /var/tmp/kof/data
     initial.realm.config: examples/17-3broker-mtls+oauth2/output/realm.json

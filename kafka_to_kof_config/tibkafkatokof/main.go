@@ -29,7 +29,7 @@ func main() {
 	// Core flags
 	outputDir := flag.String("output-dir", "./kof-output", "output directory for generated files")
 	realmName := flag.String("realm-name", "_default_realm", "realm name written into realm.json")
-	dataDir := flag.String("data-dir", "/var/kof/data", "KOF data directory path on pserver hosts")
+	dataDir := flag.String("data-dir", "/var/tmp/kof/data", "KOF data directory path on pserver hosts")
 	ftlLogLevel := flag.String("ftl-loglevel", translator.DefaultFTLLogLevel,
 		"loglevel for the generated FTL servers, written into each pserver in the "+
 			"cluster YAML (the output servers' logging, NOT this tool's own logging; "+

@@ -42,7 +42,7 @@ tibkafkatokof [flags] <server.properties>
 |---|---|---|
 | `-output-dir` | `./kof-output` | Directory where output files are written |
 | `-realm-name` | `_default_realm` | Realm name in `realm.json` |
-| `-data-dir` | `/var/kof/data` | KOF data directory path on pserver hosts |
+| `-data-dir` | `/var/tmp/kof/data` | KOF data directory path on pserver hosts |
 | `-num-pservers` | `3` | Number of pservers to generate (must be a positive odd number) |
 | `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` lets the OS choose; `dtcp` is optimized for low latency |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are randomly generated in range 5600–5699 |

@@ -17,7 +17,7 @@ servers:
   - realm: {}
   - persistence:
       name: pserver1
-      data: /var/kof/data/pserver1
+      data: /var/tmp/kof/data/pserver1
       kof.broker.properties: examples/15-3broker-sasl+mtls/output/kof.broker.1.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
@@ -25,7 +25,7 @@ servers:
   - realm: {}
   - persistence:
       name: pserver2
-      data: /var/kof/data/pserver2
+      data: /var/tmp/kof/data/pserver2
       kof.broker.properties: examples/15-3broker-sasl+mtls/output/kof.broker.2.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
@@ -33,13 +33,13 @@ servers:
   - realm: {}
   - persistence:
       name: pserver3
-      data: /var/kof/data/pserver3
+      data: /var/tmp/kof/data/pserver3
       kof.broker.properties: examples/15-3broker-sasl+mtls/output/kof.broker.3.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
 services:
   persistence:
-    data: /var/kof/data
+    data: /var/tmp/kof/data
   realm:
-    data: /var/kof/data
+    data: /var/tmp/kof/data
     initial.realm.config: examples/15-3broker-sasl+mtls/output/realm.json
