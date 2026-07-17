@@ -13,8 +13,9 @@ BOOTSTRAP="localhost:9092"
 PARTITIONS=3
 REPLICATION=1
 
-# kafka-topics.sh uses kafka-run-class.sh which appends $KAFKA_CLASSPATH to
-# its own classpath, causing conflicts. Unset it here.
+# kafka-run-class.sh builds CLASSPATH starting from whatever $CLASSPATH is in
+# the environment. Clear both to avoid snakeyaml/jackson version conflicts.
+unset CLASSPATH
 unset KAFKA_CLASSPATH
 
 while [[ $# -gt 0 ]]; do

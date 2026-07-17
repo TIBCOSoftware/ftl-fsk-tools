@@ -16,10 +16,12 @@ KRAFT_DIR="$SCRIPT_DIR/kraft"
 LOG_DIR="/tmp/kafka-kraft"
 CLEAN=false
 
-# Kafka CLI tools (kafka-storage.sh, kafka-server-start.sh) build their own
-# classpath from $KAFKA_HOME/libs/ via kafka-run-class.sh. If KAFKA_CLASSPATH
-# is set (for the migration tool), kafka-run-class.sh appends it and causes
-# snakeyaml version conflicts. Unset it for this script.
+# kafka-run-class.sh (used by all Kafka CLI tools) starts building CLASSPATH
+# from whatever $CLASSPATH is already set to in the environment. If an older
+# snakeyaml is reachable via $CLASSPATH or $KAFKA_CLASSPATH it gets loaded
+# before Kafka's own snakeyaml-2.4.jar and causes NoSuchMethodError.
+# Unset both so Kafka builds its classpath cleanly from $KAFKA_HOME/libs/.
+unset CLASSPATH
 unset KAFKA_CLASSPATH
 
 for arg in "$@"; do
