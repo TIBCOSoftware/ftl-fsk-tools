@@ -26,7 +26,7 @@ The `demo/` directory contains a ready-to-run insurance provider scenario with 1
 
 ```bash
 export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
-export KAFKA_CLASSPATH="/path/kafka-clients.jar:/path/slf4j-api.jar:/path/slf4j-simple.jar"
+export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
 
 bash demo/setup-kafka-kraft.sh          # start 3-broker KRaft Kafka
 bash demo/create-topics.sh              # create 10 insurance topics
@@ -40,16 +40,21 @@ bash demo/run-migration.sh              # dry-run then live migration
 ## Prerequisites
 
 - JDK 11+
-- Kafka client JARs: `kafka-clients.jar`, `slf4j-api.jar`, `slf4j-simple.jar`
-  - Download from [Maven Central](https://central.sonatype.com/) or copy from your Kafka installation.
+- A Kafka installation (for its client JARs). All required JARs ship with Kafka 4.x under `$KAFKA_HOME/libs/`:
+  - `kafka-clients-4.2.0.jar`
+  - `slf4j-api-1.7.36.jar`
+  - `log4j-slf4j-impl-2.25.3.jar`, `log4j-api-2.25.3.jar`, `log4j-core-2.25.3.jar`
 - A running source Kafka cluster (the one you are migrating from).
 - A running target KOF cluster (the one you are migrating to) — see Step 2.
 
 Set the classpath in your shell before running any commands:
 
 ```bash
-export KAFKA_CLASSPATH="/path/to/kafka-clients.jar:/path/to/slf4j-api.jar:/path/to/slf4j-simple.jar"
+export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
+export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
 ```
+
+The wildcard picks up all JARs in `libs/` — no need to list them individually.
 
 ---
 
