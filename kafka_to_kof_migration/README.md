@@ -27,12 +27,26 @@ The `demo/` directory contains a ready-to-run insurance provider scenario with 1
 ```bash
 export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
 export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
+export TIBFTLSERVER=/opt/tibco/ftl/bin/tibftlserver   # path to your tibftlserver binary
 
-bash demo/setup-kafka-kraft.sh          # start 3-broker KRaft Kafka
-bash demo/create-topics.sh              # create 10 insurance topics
-bash demo/populate-kafka.sh             # send 10 000 sample messages
-# ... then follow Steps 1–7 below to generate KOF config, start KOF, and migrate
-bash demo/run-migration.sh              # dry-run then live migration
+# 1. Start source Kafka (3-broker KRaft cluster)
+bash demo/setup-kafka-kraft.sh
+bash demo/create-topics.sh
+bash demo/populate-kafka.sh             # sends 10 000 sample JSON messages
+
+# 2. Generate KOF config from the demo broker properties
+tibkafkatokof \
+  --output-dir ./kof-output \
+  --realm-name insurance-demo \
+  demo/kraft/server-1.properties \
+  demo/kraft/server-2.properties \
+  demo/kraft/server-3.properties
+
+# 3. Start KOF brokers
+bash demo/start-kof-brokers.sh --output-dir ./kof-output
+
+# 4. Run the migration (dry-run then live)
+bash demo/run-migration.sh --output-dir ./kof-output
 ```
 
 ---
