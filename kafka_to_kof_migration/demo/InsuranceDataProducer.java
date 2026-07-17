@@ -73,9 +73,14 @@ public class InsuranceDataProducer {
         return "POL-" + (100000 + rng.nextInt(900000));
     }
 
-    String date(int maxDaysAgo) {
+    // Positive = random past date within N days; negative = random future date within abs(N) days.
+    String date(int daysRange) {
         Calendar c = Calendar.getInstance();
-        c.add(Calendar.DAY_OF_YEAR, -rng.nextInt(maxDaysAgo));
+        if (daysRange > 0) {
+            c.add(Calendar.DAY_OF_YEAR, -rng.nextInt(daysRange));
+        } else if (daysRange < 0) {
+            c.add(Calendar.DAY_OF_YEAR, rng.nextInt(-daysRange));
+        }
         return dateFmt.format(c.getTime());
     }
 

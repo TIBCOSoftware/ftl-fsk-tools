@@ -119,6 +119,7 @@ $KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-3/server.properties
 Verify the cluster is healthy before migrating:
 
 ```bash
+unset CLASSPATH   # required — older JARs in $CLASSPATH cause NoSuchMethodError
 $KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server <broker-host>:9092 --list
 ```
 
