@@ -13,6 +13,10 @@ BOOTSTRAP="localhost:9092"
 PARTITIONS=3
 REPLICATION=1
 
+# kafka-topics.sh uses kafka-run-class.sh which appends $KAFKA_CLASSPATH to
+# its own classpath, causing conflicts. Unset it here.
+unset KAFKA_CLASSPATH
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bootstrap-server) BOOTSTRAP="$2"; shift 2 ;;

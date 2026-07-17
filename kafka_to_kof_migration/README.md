@@ -47,7 +47,7 @@ bash demo/run-migration.sh              # dry-run then live migration
 - A running source Kafka cluster (the one you are migrating from).
 - A running target KOF cluster (the one you are migrating to) — see Step 2.
 
-Set the classpath in your shell before running any commands:
+Set these in your shell before running any commands:
 
 ```bash
 export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
@@ -55,6 +55,11 @@ export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
 ```
 
 The wildcard picks up all JARs in `libs/` — no need to list them individually.
+
+> **Note:** `KAFKA_CLASSPATH` is only read by the migration tool (`run-kafka-to-kof.sh`,
+> `populate-kafka.sh`) and is not needed by the Kafka CLI scripts (`kafka-server-start.sh`,
+> `kafka-topics.sh`, etc.). The demo scripts that call Kafka CLI tools unset it automatically
+> to avoid classpath conflicts.
 
 ---
 

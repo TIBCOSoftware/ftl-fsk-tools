@@ -16,6 +16,12 @@ KRAFT_DIR="$SCRIPT_DIR/kraft"
 LOG_DIR="/tmp/kafka-kraft"
 CLEAN=false
 
+# Kafka CLI tools (kafka-storage.sh, kafka-server-start.sh) build their own
+# classpath from $KAFKA_HOME/libs/ via kafka-run-class.sh. If KAFKA_CLASSPATH
+# is set (for the migration tool), kafka-run-class.sh appends it and causes
+# snakeyaml version conflicts. Unset it for this script.
+unset KAFKA_CLASSPATH
+
 for arg in "$@"; do
   case "$arg" in
     --clean) CLEAN=true ;;
