@@ -138,7 +138,7 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 	fmt.Fprintln(f, "#")
 	fmt.Fprintln(f, "# Start the cluster (one tibftlserver per SRV entry):")
 	for i := 0; i < primaryCount; i++ {
-		fmt.Fprintf(f, "#   tibftlserver --yaml kof-cluster-secure.yaml --server SRV%d\n", i+1)
+		fmt.Fprintf(f, "#   tibftlserver -c kof-cluster-secure.yaml -n SRV%d\n", i+1)
 	}
 	fmt.Fprintln(f)
 

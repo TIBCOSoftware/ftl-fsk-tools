@@ -4,7 +4,7 @@
 # Auth mode: oauth2
 #
 # Start the cluster (one tibftlserver per SRV entry):
-#   tibftlserver --yaml kof-cluster-secure.yaml --server SRV1
+#   tibftlserver -c kof-cluster-secure.yaml -n SRV1
 
 globals:
   core.servers:

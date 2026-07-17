@@ -175,9 +175,9 @@ Start one `tibftlserver` process per server entry:
 
 ```bash
 # On each KOF host — replace SRV1/SRV2/SRV3 with the server name for that host
-tibftlserver --yaml kof-cluster.yaml --server SRV1
-tibftlserver --yaml kof-cluster.yaml --server SRV2
-tibftlserver --yaml kof-cluster.yaml --server SRV3
+tibftlserver -c kof-cluster.yaml -n SRV1
+tibftlserver -c kof-cluster.yaml -n SRV2
+tibftlserver -c kof-cluster.yaml -n SRV3
 ```
 
 Wait until all pservers report quorum before proceeding.

@@ -374,7 +374,7 @@ tibkafkatokof \
 
 **Output:**
 
-`kof-cluster.yaml` — primary cluster (start with `tibftlserver --yaml kof-cluster.yaml --server SRV1`):
+`kof-cluster.yaml` — primary cluster (start with `tibftlserver -c kof-cluster.yaml -n SRV1`):
 ```yaml
 globals:
   core.servers:
@@ -391,7 +391,7 @@ servers:
       name: pserver1  ...
 ```
 
-`kof-cluster-dr.yaml` — DR replica cluster (start with `tibftlserver --yaml kof-cluster-dr.yaml --server drserver1`):
+`kof-cluster-dr.yaml` — DR replica cluster (start with `tibftlserver -c kof-cluster-dr.yaml -n drserver1`):
 ```yaml
 globals:
   core.servers:
@@ -449,9 +449,9 @@ Combine the example 10 flags above with `-dr-servers` to generate DR-enabled out
 Primary cluster with realm servers (SRV1–SRV3) and first 3 pservers. Realm server ports are either from `-core-servers` or randomly chosen in 5600–5699.
 
 ```sh
-tibftlserver --yaml kof-cluster.yaml --server SRV1
-tibftlserver --yaml kof-cluster.yaml --server SRV2
-tibftlserver --yaml kof-cluster.yaml --server SRV3
+tibftlserver -c kof-cluster.yaml -n SRV1
+tibftlserver -c kof-cluster.yaml -n SRV2
+tibftlserver -c kof-cluster.yaml -n SRV3
 ```
 
 ### `kof-cluster-auxN.yaml`
@@ -459,7 +459,7 @@ tibftlserver --yaml kof-cluster.yaml --server SRV3
 Auxiliary pserver groups. Each file references the same `globals.core.servers` as the primary. No realm service block.
 
 ```sh
-tibftlserver --yaml kof-cluster-aux1.yaml --server PSRV4
+tibftlserver -c kof-cluster-aux1.yaml -n PSRV4
 ```
 
 ### `kof-cluster-dr.yaml`
@@ -467,9 +467,9 @@ tibftlserver --yaml kof-cluster-aux1.yaml --server PSRV4
 DR replica cluster. Start on the DR hosts using the DR server names from `-dr-servers`:
 
 ```sh
-tibftlserver --yaml kof-cluster-dr.yaml --server DRSRV1
-tibftlserver --yaml kof-cluster-dr.yaml --server DRSRV2
-tibftlserver --yaml kof-cluster-dr.yaml --server DRSRV3
+tibftlserver -c kof-cluster-dr.yaml -n DRSRV1
+tibftlserver -c kof-cluster-dr.yaml -n DRSRV2
+tibftlserver -c kof-cluster-dr.yaml -n DRSRV3
 ```
 
 ### `kof-cluster-secure.yaml`

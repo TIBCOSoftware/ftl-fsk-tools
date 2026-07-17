@@ -59,7 +59,7 @@ echo "==> Starting KOF pservers from $CLUSTER_YAML"
 for srv in SRV1 SRV2 SRV3; do
   log="$LOG_DIR/$srv.log"
   echo "  Starting $srv  (log: $log)"
-  "$SERVER_BIN" --yaml "$CLUSTER_YAML" --server "$srv" > "$log" 2>&1 &
+  "$SERVER_BIN" -c "$CLUSTER_YAML" -n "$srv" > "$log" 2>&1 &
   echo "$!" >> "$PID_FILE"
 done
 
