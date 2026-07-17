@@ -26,13 +26,22 @@ CONFIG="$KOF_OUTPUT_DIR/kafka-to-kof.properties"
 
 if [[ ! -f "$CONFIG" ]]; then
   echo "ERROR: $CONFIG not found."
-  echo "Run tibkafkatokof against demo/kraft/server-*.properties to generate kof-output/."
+  echo "Run tibkafkatokof against demo/kraft/server-*.properties to generate kof-output/:"
+  echo "  tibkafkatokof --output-dir ./kof-output --realm-name insurance-demo \\"
+  echo "    demo/kraft/server-1.properties demo/kraft/server-2.properties demo/kraft/server-3.properties"
+  exit 1
+fi
+
+if grep -q '<KOF-HOST-' "$CONFIG"; then
+  echo "ERROR: $CONFIG still contains <KOF-HOST-N> placeholders in target.bootstrap.servers."
+  echo "Replace them with the actual KOF pserver hostnames (or 'localhost' for the demo):"
+  echo "  sed -i '' 's/<KOF-HOST-[0-9]*>/localhost/g' \"$CONFIG\""
   exit 1
 fi
 
 if [[ -z "${KAFKA_CLASSPATH:-}" ]]; then
   echo "ERROR: KAFKA_CLASSPATH is not set."
-  echo "  export KAFKA_CLASSPATH=\"/path/kafka-clients.jar:/path/slf4j-api.jar:/path/slf4j-simple.jar\""
+  echo "  export KAFKA_CLASSPATH=\"\$KAFKA_HOME/libs/*\""
   exit 1
 fi
 

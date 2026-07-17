@@ -45,7 +45,10 @@ tibkafkatokof \
 # 3. Start KOF brokers
 bash demo/start-kof-brokers.sh --output-dir ./kof-output
 
-# 4. Run the migration (dry-run then live)
+# 4. Replace <KOF-HOST-N> placeholders with localhost (demo runs everything locally)
+sed -i '' 's/<KOF-HOST-[0-9]*>/localhost/g' kof-output/kafka-to-kof.properties
+
+# 5. Run the migration (dry-run then live)
 bash demo/run-migration.sh --output-dir ./kof-output
 ```
 
