@@ -6,14 +6,14 @@
 
 globals:
   core.servers:
-    SRV1: kafka-broker-1:5619
-    SRV2: kafka-broker-1:5698
-    SRV3: kafka-broker-1:5635
+    SRV1: localhost:5619
+    SRV2: localhost:5698
+    SRV3: localhost:5635
 
 servers:
   PSRV4:
   - ftl:
-      server: kafka-broker-1:5703
+      server: localhost:5703
   - persistence:
       name: pserver4
       data: /var/tmp/kof/data/pserver4
@@ -22,7 +22,7 @@ servers:
 
   PSRV5:
   - ftl:
-      server: kafka-broker-1:5710
+      server: localhost:5710
   - persistence:
       name: pserver5
       data: /var/tmp/kof/data/pserver5
@@ -31,7 +31,7 @@ servers:
 
   PSRV6:
   - ftl:
-      server: kafka-broker-1:5754
+      server: localhost:5754
   - persistence:
       name: pserver6
       data: /var/tmp/kof/data/pserver6

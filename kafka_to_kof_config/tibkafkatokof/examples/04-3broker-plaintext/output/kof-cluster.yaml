@@ -8,9 +8,9 @@
 
 globals:
   core.servers:
-    SRV1: realm-server-1:5600
-    SRV2: realm-server-2:5601
-    SRV3: realm-server-3:5602
+    SRV1: localhost:5600
+    SRV2: localhost:5601
+    SRV3: localhost:5602
 
 servers:
   SRV1:

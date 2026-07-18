@@ -11,7 +11,7 @@ globals:
     primary1: primary-host-1:8585
     primary2: primary-host-2:8686
     primary3: primary-host-3:8787
-  dr: drserver1@dr-host-1:9585|drserver2@dr-host-2:9686|drserver3@dr-host-3:9787
+  dr: drserver1@localhost:9585|drserver2@localhost:9686|drserver3@localhost:9787
   auto.init.primary.on.first.startup: true
 
 servers:

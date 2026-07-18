@@ -6,7 +6,7 @@
 
 globals:
   core.servers:
-    SRV1: kafka-single-1:5663
+    SRV1: localhost:5663
   auth.providers: file:output/ftl-users.txt
 
 servers:

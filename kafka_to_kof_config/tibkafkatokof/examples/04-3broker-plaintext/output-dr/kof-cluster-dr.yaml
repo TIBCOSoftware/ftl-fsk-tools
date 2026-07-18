@@ -3,10 +3,10 @@
 
 globals:
   core.servers:
-    DRSRV1: dr-host-1:5800
-    DRSRV2: dr-host-2:5801
-    DRSRV3: dr-host-3:5802
-  dr: SRV1@kafka-broker-1:5661
+    DRSRV1: localhost:5800
+    DRSRV2: localhost:5801
+    DRSRV3: localhost:5802
+  dr: SRV1@localhost:5661
 
 servers:
   DRSRV1:

@@ -10,9 +10,9 @@
 
 globals:
   core.servers:
-    SRV1: kafka-broker-1:5619
-    SRV2: kafka-broker-1:5647
-    SRV3: kafka-broker-1:5663
+    SRV1: localhost:5619
+    SRV2: localhost:5647
+    SRV3: localhost:5663
 
 servers:
   SRV1:

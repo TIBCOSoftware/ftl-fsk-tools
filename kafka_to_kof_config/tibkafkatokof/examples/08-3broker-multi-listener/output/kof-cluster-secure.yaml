@@ -10,9 +10,9 @@
 
 globals:
   core.servers:
-    SRV1: kafka-broker-1:5611
-    SRV2: kafka-broker-1:5656
-    SRV3: kafka-broker-1:5676
+    SRV1: localhost:5611
+    SRV2: localhost:5656
+    SRV3: localhost:5676
   auth.providers: oauth2
   oauth2.claim.roles: group
   oauth2.claim.username: preferred_username

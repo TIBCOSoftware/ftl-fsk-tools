@@ -8,9 +8,9 @@
 
 globals:
   core.servers:
-    SRV1: kafka-broker-1:5619
-    SRV2: kafka-broker-1:5698
-    SRV3: kafka-broker-1:5635
+    SRV1: localhost:5619
+    SRV2: localhost:5698
+    SRV3: localhost:5635
   auth.providers: file:examples/09-10broker-scale/output/ftl-users.txt
 
 servers:
