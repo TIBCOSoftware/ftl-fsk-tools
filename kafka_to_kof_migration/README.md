@@ -359,15 +359,17 @@ To stop: `bash demo/stop-kof-brokers.sh`
 
 ## Migration UI
 
-A web dashboard is available in the `ui/` directory. It shows live topic message counts
-for both the source Kafka cluster and target KOF cluster, and lets you trigger a dry run
-or full migration from the browser.
+A web dashboard is available in the `ui/` directory. It provides:
+- **SVG mesh topology** — 3-node Kafka cluster (left) and 3-node KOF cluster (right); nodes turn green as soon as each process starts.
+- **Animated data conduit** — canvas particle stream showing topic data flowing from Kafka to KOF in real time.
+- **Real-time shell output** — WebSocket-streamed stdout/stderr from `run-kafka-to-kof.sh`.
+- **Config form** — pre-populated from `kof-output/kafka-to-kof.properties`; runs Dry Run or Live Migration directly.
 
 **Start the UI:**
 
 ```bash
 cd ui
-npm install          # first time only — installs Express
+npm install          # first time only — installs Express, kafkajs, ws
 node server.js
 ```
 
@@ -377,11 +379,11 @@ Open **http://localhost:3000** in your browser.
 
 | Variable | Default | Description |
 |---|---|---|
-| `SOURCE_BOOTSTRAP` | `localhost:9092` | Source Kafka bootstrap address |
-| `TARGET_BOOTSTRAP` | `localhost:9092` | Target KOF bootstrap address |
-| `KAFKA_HOME` | `/usr/local/Cellar/kafka/4.2.0/libexec` | Path to Kafka installation |
+| `SOURCE_BOOTSTRAP` | read from `kof-output/kafka-to-kof.properties` | Source Kafka bootstrap addresses |
+| `TARGET_BOOTSTRAP` | read from `kof-output/kafka-to-kof.properties` | Target KOF bootstrap addresses |
+| `KAFKA_CLASSPATH` | _(none — enter in the UI)_ | Kafka client JARs for the migration tool |
 | `PORT` | `3000` | HTTP port for the dashboard |
 
-The dashboard polls `/api/status` every 5 seconds, colour-codes each topic
-(grey = pending, green = counts match, yellow = partial), and streams the migration log
-in real time when a migration is running.
+The KOF cluster health check uses TCP probes on the FTL `core.servers` ports (`5635`, `5620`, `5623`),
+so KOF nodes turn green as soon as `tibftlserver` starts — before the Kafka protocol layer is ready.
+Kafka metadata (topic counts) uses the `kafkajs` Admin API and updates every 10 seconds.
