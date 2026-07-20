@@ -100,11 +100,20 @@ func main() {
 	writeMigrationConfig := flag.Bool("migration-config", false,
 		"write kafka-to-kof.properties to the output directory (migration tool configuration)")
 
+	fromBrokers := flag.String("from-brokers", "",
+		"comma-separated host:port list of live Kafka brokers to fetch config from via Admin API\n"+
+			"    e.g. localhost:9092,localhost:9093,localhost:9094\n"+
+			"    mutually exclusive with positional server.properties arguments")
+	fromBrokersTimeout := flag.Int("from-brokers-timeout-ms", 10000,
+		"Admin API connection/request timeout in milliseconds for --from-brokers mode")
+
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: tibkafkatokof [flags] <server.properties...>")
+		fmt.Fprintln(os.Stderr, "       tibkafkatokof [flags] --from-brokers host:port[,host:port,...]")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Translates one or more Kafka broker server.properties into FTL KOF artifacts.")
-		fmt.Fprintln(os.Stderr, "Pass one file per broker (1-9 files); pserver count is derived from the file count.")
+		fmt.Fprintln(os.Stderr, "Pass one file per broker (1-9 files), or use --from-brokers to fetch config")
+		fmt.Fprintln(os.Stderr, "directly from live brokers via the Kafka Admin API.")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Output files:")
 		fmt.Fprintln(os.Stderr, "  kof-cluster.yaml          FTL pserver cluster configuration (primary, first 3 pservers)")
@@ -129,19 +138,44 @@ func main() {
 	}
 
 	args := flag.Args()
-	if len(args) < 1 || len(args) > 9 {
-		flag.Usage()
+	usingFromBrokers := *fromBrokers != ""
+
+	if usingFromBrokers && len(args) > 0 {
+		fmt.Fprintln(os.Stderr, "error: --from-brokers and positional server.properties arguments are mutually exclusive")
 		os.Exit(1)
 	}
 
-	cfgs := make([]*translator.BrokerConfig, 0, len(args))
-	for _, arg := range args {
-		cfg, err := translator.ParseBrokerConfig(arg)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
+	var cfgs []*translator.BrokerConfig
+	if usingFromBrokers {
+		addrs := splitCSVTrimmed(*fromBrokers)
+		if len(addrs) < 1 || len(addrs) > 9 {
+			fmt.Fprintf(os.Stderr, "error: --from-brokers requires 1-9 broker addresses (got %d)\n", len(addrs))
 			os.Exit(1)
 		}
-		cfgs = append(cfgs, cfg)
+		cfgs = make([]*translator.BrokerConfig, 0, len(addrs))
+		for _, addr := range addrs {
+			fmt.Fprintf(os.Stdout, "fetching config from broker %s ...\n", addr)
+			cfg, err := translator.FetchBrokerConfig(addr, *fromBrokersTimeout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			cfgs = append(cfgs, cfg)
+		}
+	} else {
+		if len(args) < 1 || len(args) > 9 {
+			flag.Usage()
+			os.Exit(1)
+		}
+		cfgs = make([]*translator.BrokerConfig, 0, len(args))
+		for _, arg := range args {
+			cfg, err := translator.ParseBrokerConfig(arg)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			cfgs = append(cfgs, cfg)
+		}
 	}
 	numPservers := len(cfgs)
 
@@ -421,6 +455,23 @@ func useColor(mode string) bool {
 		}
 		return fi.Mode()&os.ModeCharDevice != 0
 	}
+}
+
+// splitCSVTrimmed splits a comma-separated string and trims whitespace from each token.
+func splitCSVTrimmed(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // parseCoreServers parses "SRV1=host:5600,SRV2=host:5601" into a CoreServer slice.
