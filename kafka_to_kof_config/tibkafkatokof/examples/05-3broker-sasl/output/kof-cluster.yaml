@@ -11,14 +11,10 @@ globals:
     SRV1: localhost:5695
     SRV2: localhost:5641
     SRV3: localhost:5693
-  auth.providers: file:output/ftl-users.txt
 
 servers:
   SRV1:
   - realm: {}
-  - ftlserver.properties:
-      user: internal
-      password: internal-pw
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1
@@ -27,9 +23,6 @@ servers:
 
   SRV2:
   - realm: {}
-  - ftlserver.properties:
-      user: internal
-      password: internal-pw
   - persistence:
       name: pserver2
       data: /var/tmp/kof/data/pserver2
@@ -38,9 +31,6 @@ servers:
 
   SRV3:
   - realm: {}
-  - ftlserver.properties:
-      user: internal
-      password: internal-pw
   - persistence:
       name: pserver3
       data: /var/tmp/kof/data/pserver3
