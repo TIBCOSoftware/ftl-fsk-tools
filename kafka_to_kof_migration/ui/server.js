@@ -176,7 +176,8 @@ async function refreshKofCluster() {
 // ── Log parser ────────────────────────────────────────────────────────────────
 
 function parseLine(line) {
-  const topicMatch = line.match(/Topic:\s+(\S+)/i) || line.match(/topic[=\s]+['"]?([a-zA-Z0-9._-]+)/i);
+  // Topic discovery: "Topic insurance.auto.claims: 100000 message(s)"
+  const topicMatch = line.match(/^Topic ([a-zA-Z0-9._-]+):/);
   if (topicMatch) {
     const t = topicMatch[1];
     if (!replicationState.topics.includes(t)) {
@@ -184,19 +185,30 @@ function parseLine(line) {
       broadcast({ type: 'topic_discovered', topic: t });
     }
   }
-  const pubMatch = line.match(/Replicated\s+(\d+)/i) || line.match(/published[:\s]+(\d+)/i);
+  // Progress: "Replicated 5000 message(s) total so far"
+  const pubMatch = line.match(/Replicated\s+(\d+)\s+message.*total/i);
   if (pubMatch) {
     replicationState.stats.published = parseInt(pubMatch[1]);
     broadcast({ type: 'stats', stats: replicationState.stats });
   }
-  const planMatch = line.match(/planned.*?(\d+)/i);
-  if (planMatch) replicationState.stats.planned = parseInt(planMatch[1]);
+  // Final: "Replicated 1000000 message(s) to target KOF"
+  const finalMatch = line.match(/Replicated\s+(\d+)\s+message.*target/i);
+  if (finalMatch) {
+    replicationState.stats.published = parseInt(finalMatch[1]);
+    broadcast({ type: 'stats', stats: replicationState.stats });
+  }
+  // Planned: "Total messages to copy: 1000000"
+  const planMatch = line.match(/Total messages to copy:\s*(\d+)/i);
+  if (planMatch) {
+    replicationState.stats.planned = parseInt(planMatch[1]);
+    broadcast({ type: 'stats', stats: replicationState.stats });
+  }
 
-  if (/Starting Kafka.*KOF|KafkaToKof.*start/i.test(line)) {
+  if (/Starting Kafka.*KOF/i.test(line)) {
     replicationState.status = 'running';
     broadcast({ type: 'status', status: 'running' });
   }
-  if (/Replication complete|All done|successfully|Finished/i.test(line)) {
+  if (/Replication completed\./i.test(line)) {
     replicationState.status = 'done';
     broadcast({ type: 'status', status: 'done' });
   }
@@ -208,6 +220,33 @@ function parseLine(line) {
 
 // ── REST endpoints ────────────────────────────────────────────────────────────
 
+// Build a default KAFKA_CLASSPATH from KAFKA_HOME if KAFKA_CLASSPATH is not set explicitly.
+// Includes kafka-clients plus a slf4j binding (log4j-slf4j-impl or slf4j-simple) for logging.
+function defaultKafkaClasspath() {
+  if (process.env.KAFKA_CLASSPATH) return process.env.KAFKA_CLASSPATH;
+  const kafkaHome = process.env.KAFKA_HOME;
+  if (!kafkaHome) return '';
+  // Support both flat layout (4.2.0/libexec/libs) and nested layout (kafka_2.13-4.1.2/libs)
+  const libDirs = [
+    path.join(kafkaHome, 'libs'),
+    path.join(kafkaHome, 'libexec', 'libs'),
+  ];
+  let libDir = libDirs.find(d => { try { return fs.statSync(d).isDirectory(); } catch (_) { return false; } });
+  if (!libDir) return '';
+  const needed = [
+    /^kafka-clients-/,
+    /^slf4j-api-/,
+    /^log4j-slf4j.*impl.*\.jar$/,
+    /^slf4j-simple-/,
+    /^log4j-api-/,
+    /^log4j-core-/,
+  ];
+  const jars = fs.readdirSync(libDir)
+    .filter(f => f.endsWith('.jar') && needed.some(re => re.test(f)))
+    .map(f => path.join(libDir, f));
+  return jars.join(':');
+}
+
 // Demo defaults — read live from kafka-to-kof.properties so the config form pre-populates
 app.get('/api/demo/defaults', (req, res) => {
   const cfg = path.resolve(__dirname, '../kof-output/kafka-to-kof.properties');
@@ -216,8 +255,8 @@ app.get('/api/demo/defaults', (req, res) => {
   res.json({
     sourceBootstrap: src,
     targetBootstrap: tgt,
-    configFile:      '../kof-output/kafka-to-kof.properties',
-    kafkaClasspath:  process.env.KAFKA_CLASSPATH || ''
+    configFile:      path.resolve(__dirname, '../kof-output/kafka-to-kof.properties'),
+    kafkaClasspath:  defaultKafkaClasspath()
   });
 });
 

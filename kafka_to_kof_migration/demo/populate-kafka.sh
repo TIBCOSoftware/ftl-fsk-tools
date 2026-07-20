@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Compile InsuranceDataProducer.java and populate Kafka with insurance demo data.
-# Sends 1 000 JSON messages to each of the 10 insurance topics (10 000 total).
+# Sends N messages to each of the 10 insurance topics (default: 100 000 per topic = 1 000 000 total).
 #
 # Prerequisites:
 #   - Kafka running (demo/setup-kafka-kraft.sh)
@@ -16,7 +16,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
 BOOTSTRAP="localhost:9092"
-MESSAGES=1000
+MESSAGES=100000
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

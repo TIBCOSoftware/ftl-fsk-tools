@@ -57,10 +57,11 @@ if [[ -f "$PID_FILE" ]]; then
   sleep 2
 fi
 
-# ── Generate cluster ID ────────────────────────────────────────────────────────
-echo "==> Generating KRaft cluster ID"
-KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
-echo "  Cluster ID: $KAFKA_CLUSTER_ID"
+# ── Cluster ID ────────────────────────────────────────────────────────────────
+# Fixed ID so brokers can restart without wiping data dirs.
+# Use --clean to fully reset the cluster.
+KAFKA_CLUSTER_ID="insurance-demo-cluster-00001"
+echo "==> Using fixed KRaft cluster ID: $KAFKA_CLUSTER_ID"
 
 # ── Format storage for each broker ────────────────────────────────────────────
 for n in 1 2 3; do

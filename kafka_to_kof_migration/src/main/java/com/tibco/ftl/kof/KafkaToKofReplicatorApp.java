@@ -74,13 +74,20 @@ public class KafkaToKofReplicatorApp {
         }
     }
 
+    private static void out(String fmt, Object... args) {
+        String msg = fmt;
+        for (Object a : args) msg = msg.replaceFirst("\\{\\}", a == null ? "null" : a.toString());
+        System.out.println(msg);
+        System.out.flush();
+    }
+
     private void run() throws Exception {
-        logger.info("Starting Kafka -> KOF replication");
-        logger.info("Source bootstrap servers: {}", config.sourceBootstrapServers);
-        logger.info("Target bootstrap servers: {}", config.targetBootstrapServers);
-        logger.info("Topic pattern: {}", config.topicPattern.pattern());
-        logger.info("Include internal topics: {}", config.includeInternalTopics);
-        logger.info("Dry run: {}", config.dryRun);
+        out("Starting Kafka -> KOF replication");
+        out("Source bootstrap servers: {}", config.sourceBootstrapServers);
+        out("Target bootstrap servers: {}", config.targetBootstrapServers);
+        out("Topic pattern: {}", config.topicPattern.pattern());
+        out("Include internal topics: {}", config.includeInternalTopics);
+        out("Dry run: {}", config.dryRun);
 
         try (AdminClient sourceAdmin = AdminClient.create(config.buildSourceAdminProperties());
              KafkaConsumer<byte[], byte[]> sourceConsumer = new KafkaConsumer<>(config.buildSourceConsumerProperties());
@@ -89,13 +96,13 @@ public class KafkaToKofReplicatorApp {
 
             Map<String, TopicDescription> sourceTopics = discoverSourceTopics(sourceAdmin);
             if (sourceTopics.isEmpty()) {
-                logger.warn("No topics matched on source brokers. Nothing to replicate.");
+                out("WARN: No topics matched on source brokers. Nothing to replicate.");
                 return;
             }
 
             List<TopicPartition> partitions = toTopicPartitions(sourceTopics);
             if (partitions.isEmpty()) {
-                logger.warn("No partitions found in matched topics. Nothing to replicate.");
+                out("WARN: No partitions found in matched topics. Nothing to replicate.");
                 return;
             }
 
@@ -109,7 +116,7 @@ public class KafkaToKofReplicatorApp {
             printPreCopyStats(plannedCounts);
 
             if (config.dryRun) {
-                logger.info("Dry run requested. Skipping topic creation and record replication.");
+                out("Dry run requested. Skipping topic creation and record replication.");
                 return;
             }
 
@@ -125,7 +132,7 @@ public class KafkaToKofReplicatorApp {
             printFinalStats(plannedCounts, actualReadCounts);
         }
 
-        logger.info("Replication completed.");
+        out("Replication completed.");
     }
 
     private Map<String, TopicDescription> discoverSourceTopics(AdminClient sourceAdmin) throws Exception {
@@ -142,7 +149,7 @@ public class KafkaToKofReplicatorApp {
         }
 
         Map<String, TopicDescription> described = sourceAdmin.describeTopics(filtered).allTopicNames().get();
-        logger.info("Discovered {} topic(s) on source", described.size());
+        out("Discovered {} topic(s) on source", described.size());
 
         return described.entrySet()
             .stream()
@@ -193,22 +200,22 @@ public class KafkaToKofReplicatorApp {
     }
 
     private void printPreCopyStats(Map<TopicPartition, Long> partitionCounts) {
-        logger.info("====================================================");
-        logger.info("PRE-COPY STATS (from source Kafka offset snapshot)");
-        logger.info("====================================================");
+        out("====================================================");
+        out("PRE-COPY STATS (from source Kafka offset snapshot)");
+        out("====================================================");
 
         Map<String, Long> topicTotals = sumByTopic(partitionCounts);
 
         for (Map.Entry<String, Long> topicEntry : topicTotals.entrySet()) {
-            logger.info("Topic {}: {} message(s)", topicEntry.getKey(), topicEntry.getValue());
+            out("Topic {}: {} message(s)", topicEntry.getKey(), topicEntry.getValue());
 
             partitionCounts.entrySet().stream()
                 .filter(e -> e.getKey().topic().equals(topicEntry.getKey()))
-                .forEach(e -> logger.info("  Partition {}: {} message(s)", e.getKey().partition(), e.getValue()));
+                .forEach(e -> out("  Partition {}: {} message(s)", e.getKey().partition(), e.getValue()));
         }
 
         long grandTotal = topicTotals.values().stream().mapToLong(Long::longValue).sum();
-        logger.info("Total messages to copy: {}", grandTotal);
+        out("Total messages to copy: {}", grandTotal);
     }
 
     private void createTopicsOnTarget(AdminClient targetAdmin, Map<String, TopicDescription> sourceTopics) throws Exception {
@@ -227,16 +234,16 @@ public class KafkaToKofReplicatorApp {
         }
 
         if (toCreate.isEmpty()) {
-            logger.info("All topics already exist on target. No topic creation needed.");
+            out("All topics already exist on target. No topic creation needed.");
             return;
         }
 
-        logger.info("Creating {} topic(s) on target KOF", toCreate.size());
+        out("Creating {} topic(s) on target KOF", toCreate.size());
 
         try {
             CreateTopicsResult result = targetAdmin.createTopics(toCreate);
             result.all().get();
-            logger.info("Topic creation completed on target.");
+            out("Topic creation completed on target.");
         } catch (Exception e) {
             Throwable cause = e.getCause();
             if (cause instanceof TopicExistsException) {
@@ -347,7 +354,8 @@ public class KafkaToKofReplicatorApp {
 
                     targetProducer.send(out, (metadata, ex) -> {
                         if (ex != null) {
-                            logger.error("Send failed for {}-{}: {}", record.topic(), record.partition(), ex.getMessage());
+                            System.out.println("ERROR: Send failed for " + record.topic() + "-" + record.partition() + ": " + ex.getMessage());
+                            System.out.flush();
                         }
                     });
                     publishedTotal++;
@@ -373,8 +381,8 @@ public class KafkaToKofReplicatorApp {
                 long total = endOffsets.getOrDefault(tp, 0L) - beginOffsets.getOrDefault(tp, 0L);
                 batchSummary.append(String.format("  %s-%d: %d/%d%n", tp.topic(), tp.partition(), sent, total));
             }
-            logger.info("Batch flushed to KOF: {} message(s) total so far\n{}",
-                publishedTotal, batchSummary.toString().trim());
+            out("Replicated {} message(s) total so far", publishedTotal);
+            out(batchSummary.toString().trim());
 
             // Advance batch windows
             for (TopicPartition tp : activeBatch) {
@@ -387,7 +395,7 @@ public class KafkaToKofReplicatorApp {
             }
         }
 
-        logger.info("Replicated {} message(s) to target KOF", publishedTotal);
+        out("Replicated {} message(s) to target KOF", publishedTotal);
 
         return actualReadCounts;
     }
@@ -396,9 +404,9 @@ public class KafkaToKofReplicatorApp {
         Map<TopicPartition, Long> plannedCounts,
         Map<TopicPartition, Long> actualReadCounts
     ) {
-        logger.info("====================================================");
-        logger.info("POST-COPY STATS");
-        logger.info("====================================================");
+        out("====================================================");
+        out("POST-COPY STATS");
+        out("====================================================");
 
         Map<String, Long> topicPlanned = sumByTopic(plannedCounts);
         Map<String, Long> topicActual = sumByTopic(actualReadCounts);
@@ -410,7 +418,7 @@ public class KafkaToKofReplicatorApp {
         for (String topic : orderedTopics) {
             long planned = topicPlanned.getOrDefault(topic, 0L);
             long actual = topicActual.getOrDefault(topic, 0L);
-            logger.info("Topic {}: planned={} published={}", topic, planned, actual);
+            out("Topic {}: planned={} published={}", topic, planned, actual);
 
             List<TopicPartition> partitions = plannedCounts.keySet().stream()
                 .filter(tp -> tp.topic().equals(topic))
@@ -420,14 +428,14 @@ public class KafkaToKofReplicatorApp {
             for (TopicPartition tp : partitions) {
                 long partitionPlanned = plannedCounts.getOrDefault(tp, 0L);
                 long partitionActual = actualReadCounts.getOrDefault(tp, 0L);
-                logger.info("  Partition {}: planned={} published={}", tp.partition(), partitionPlanned, partitionActual);
+                out("  Partition {}: planned={} published={}", tp.partition(), partitionPlanned, partitionActual);
             }
         }
 
         long plannedTotal = plannedCounts.values().stream().mapToLong(Long::longValue).sum();
         long actualTotal = actualReadCounts.values().stream().mapToLong(Long::longValue).sum();
 
-        logger.info("TOTAL planned={} published={}", plannedTotal, actualTotal);
+        out("TOTAL planned={} published={}", plannedTotal, actualTotal);
     }
 
     private Map<String, Long> sumByTopic(Map<TopicPartition, Long> partitionCounts) {

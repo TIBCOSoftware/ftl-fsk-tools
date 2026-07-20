@@ -90,8 +90,8 @@ input:focus{border-color:#3b82f6;}
   </div>
   <div class="hstats">
     <div class="hstat"><span class="hstat-v" id="h-topics">0</span><span class="hstat-l">Topics</span></div>
-    <div class="hstat"><span class="hstat-v" id="h-planned">0</span><span class="hstat-l">Planned</span></div>
-    <div class="hstat"><span class="hstat-v" id="h-pub">0</span><span class="hstat-l">Published</span></div>
+    <div class="hstat"><span class="hstat-v" id="h-planned">0</span><span class="hstat-l" id="h-planned-lbl">Kafka Msgs</span></div>
+    <div class="hstat"><span class="hstat-v" id="h-pub">0</span><span class="hstat-l" id="h-pub-lbl">Migrated</span></div>
     <div class="hstat"><span class="hstat-v" id="h-el">--</span><span class="hstat-l">Elapsed</span></div>
   </div>
   <button id="theme-btn">&#9728;</button>
@@ -104,6 +104,7 @@ input:focus{border-color:#3b82f6;}
   <div id="kafka-col">
     <div class="col-hdr" style="color:#f97316;">
       Apache Kafka &nbsp;<span class="bdg kb">3-Broker</span>
+      <span id="kafka-msg-total" style="margin-left:8px;font-size:9px;color:#f97316;opacity:.7;"></span>
       <button class="btn bstat" style="margin-left:auto;font-size:9px;padding:3px 9px;" onclick="getKafkaStats()">&#8635; Stats</button>
     </div>
     <svg id="ksvg" style="display:block;background:#161b22;"></svg>
@@ -262,7 +263,7 @@ function handle(m){
   }
   else if(m.type==='log'){ log(m.stream==='stdout'?'o':m.stream==='stderr'?'e':'s',m.line); }
   else if(m.type==='topic_discovered'){ if(!appSt.topics.includes(m.topic)) appSt.topics.push(m.topic); renderChips(); upHdr(); }
-  else if(m.type==='stats'){ appSt.stats=m.stats; upHdr(); dbTarget=Math.min(appSt.stats.published/50000,1); }
+  else if(m.type==='stats'){ appSt.stats=m.stats; upHdr(); var denom=appSt.stats.planned||1000000; dbTarget=Math.min(appSt.stats.published/denom,1); }
   else if(m.type==='flow'){ flowAnim(m.topic); }
   else if(m.type==='kafka_cluster'){ kafkaCl=m.cluster; drawKafka(); }
   else if(m.type==='kof_cluster'){ kofCl=m.cluster; drawKof(); }
@@ -277,9 +278,14 @@ function sync(){
   upHdr(); renderChips();
 }
 function upHdr(){
-  document.getElementById('h-topics').textContent =appSt.topics.length;
-  document.getElementById('h-planned').textContent=appSt.stats.planned;
-  document.getElementById('h-pub').textContent    =appSt.stats.published;
+  var running=appSt.status==='running'||appSt.status==='done';
+  document.getElementById('h-topics').textContent=appSt.topics.length;
+  if(running){
+    document.getElementById('h-planned-lbl').textContent='Planned';
+    document.getElementById('h-pub-lbl').textContent='Published';
+    document.getElementById('h-planned').textContent=appSt.stats.planned.toLocaleString();
+    document.getElementById('h-pub').textContent=appSt.stats.published.toLocaleString();
+  }
 }
 function startTmr(){ stopTmr(); elTmr=setInterval(function(){ var s=Math.floor((Date.now()-startTs)/1000); document.getElementById('h-el').textContent=Math.floor(s/60)+'m '+s%60+'s'; },1000); }
 function stopTmr(){ if(elTmr){ clearInterval(elTmr); elTmr=null; } }
@@ -393,15 +399,28 @@ function drawSvgCluster(svgEl, color, nodes, label){
     svgEl.appendChild(tx(p.x,p.y+nr+fs*2+4, ':'+nd.port,         {'font-size':fs*0.82, 'font-weight':'500',fill:color,'fill-opacity':'.6'}));
     if(nd.status!=='unknown')
       svgEl.appendChild(tx(p.x,p.y+nr+fs*3+2,nd.status.toUpperCase(),{'font-size':fs*0.72,'font-weight':'700',fill:sc}));
+    if(nd.messages!=null)
+      svgEl.appendChild(tx(p.x,p.y+nr+fs*4+2,nd.messages.toLocaleString()+' msgs',{'font-size':fs*0.68,'font-weight':'600',fill:color,'fill-opacity':'.55'}));
   });
   svgEl.appendChild(tx(cx,H-8,label,{'font-size':'11','font-weight':'700',fill:color,'fill-opacity':'.4'}));
 }
 
 function drawKafka(){
-  // Default ports: 9092, 9093, 9094 (demo KRaft cluster)
-  var nodes=kafkaCl
-    ?kafkaCl.brokers.map(function(b,i){ return {name:'Broker-'+(b.id||i+1),port:b.port||[9092,9093,9094][i],status:b.status||'unknown'}; })
-    :[{name:'Broker-1',port:9092,status:'unknown'},{name:'Broker-2',port:9093,status:'unknown'},{name:'Broker-3',port:9094,status:'unknown'}];
+  var nodes, totalMsgs=0;
+  if(kafkaCl){
+    // Distribute total messages across brokers evenly (offsets are cluster-wide, not per-broker)
+    var clusterMsgs=(kafkaCl.topics||[]).reduce(function(s,t){ return s+(t.messages||0); },0);
+    totalMsgs=clusterMsgs;
+    var perBroker=kafkaCl.brokers.length?Math.round(clusterMsgs/kafkaCl.brokers.length):0;
+    nodes=kafkaCl.brokers.map(function(b,i){
+      return {name:'Broker-'+(b.id||i+1),port:b.port||[9092,9093,9094][i],status:b.status||'unknown',messages:perBroker};
+    });
+  } else {
+    nodes=[{name:'Broker-1',port:9092,status:'unknown'},{name:'Broker-2',port:9093,status:'unknown'},{name:'Broker-3',port:9094,status:'unknown'}];
+  }
+  // Update header total
+  var hdr=document.getElementById('kafka-msg-total');
+  if(hdr) hdr.textContent=totalMsgs?totalMsgs.toLocaleString()+' msgs':'';
   drawSvgCluster(document.getElementById('ksvg'),'#f97316',nodes,'Source Kafka Cluster');
 }
 function drawKof(){
@@ -531,6 +550,27 @@ drawKafka();
 drawKof();
 frame();
 window.addEventListener('resize', function(){ applyLayout(); drawKafka(); drawKof(); });
+// Auto-fetch Kafka stats on load so message counts and topics show immediately
+function refreshKafkaStats(){
+  var src=document.getElementById('f-src').value.trim();
+  fetch('/api/kafka-stats'+(src?'?bootstrap='+encodeURIComponent(src):'')).then(function(r){ return r.json(); }).then(function(data){
+    kafkaCl=data;
+    drawKafka();
+    // Populate topics and message count in header if no migration is running
+    if(appSt.status==='idle'){
+      var topics=(data.topics||[]).map(function(t){ return t.name; });
+      var totalMsgs=(data.topics||[]).reduce(function(s,t){ return s+(t.messages||0); },0);
+      document.getElementById('h-topics').textContent=topics.length;
+      document.getElementById('h-planned').textContent=totalMsgs.toLocaleString();
+      // Populate topic chips in the config panel
+      if(topics.length){
+        appSt.topics=topics;
+        renderChips();
+      }
+    }
+  }).catch(function(){});
+}
+setTimeout(refreshKafkaStats, 2500);
 
 /* demo streams — insurance topics for idle conduit animation */
 ['insurance.auto.claims','insurance.home.claims','insurance.health.claims',
