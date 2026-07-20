@@ -381,7 +381,8 @@ Open **http://localhost:3000** in your browser.
 |---|---|---|
 | `SOURCE_BOOTSTRAP` | read from `kof-output/kafka-to-kof.properties` | Source Kafka bootstrap addresses |
 | `TARGET_BOOTSTRAP` | read from `kof-output/kafka-to-kof.properties` | Target KOF bootstrap addresses |
-| `KAFKA_CLASSPATH` | _(none — enter in the UI)_ | Kafka client JARs for the migration tool |
+| `KAFKA_HOME` | _(none)_ | Path to your Kafka installation (e.g. `/usr/local/Cellar/kafka/4.2.0/libexec`). Used to auto-build `KAFKA_CLASSPATH` from `$KAFKA_HOME/libs/*` if `KAFKA_CLASSPATH` is not set. |
+| `KAFKA_CLASSPATH` | auto-built from `KAFKA_HOME/libs/*` | Kafka client JARs for the migration tool. Explicit value takes precedence over auto-detection from `KAFKA_HOME`. |
 | `PORT` | `3000` | HTTP port for the dashboard |
 
 The KOF cluster health check uses TCP probes on the FTL `core.servers` ports (`5635`, `5620`, `5623`),

@@ -15,6 +15,8 @@ Translates a Kafka KRaft broker `server.properties` file into the FTL KOF artifa
 
 ## Build
 
+Requires Go 1.25+ (`toolchain go1.25.6` is pinned in `go.mod`).
+
 From the workspace root (`hydra/`):
 
 ```sh
@@ -33,8 +35,17 @@ go build .
 ## Usage
 
 ```
-tibkafkatokof [flags] <server.properties>
+tibkafkatokof [flags] <server.properties> [<server.properties> ...]
+tibkafkatokof [flags] --from-brokers host:port[,host:port,...]
 ```
+
+### Input flags
+
+| Flag | Default | Description |
+|---|---|---|
+| _(positional)_ | — | One or more `server.properties` files (1–9). Each file represents one broker/pserver. Mutually exclusive with `--from-brokers`. |
+| `--from-brokers` | _(none)_ | Comma-separated `host:port` list of live Kafka brokers to fetch config from via the Admin API.<br>e.g. `localhost:9092,localhost:9093,localhost:9094`<br>Mutually exclusive with positional `server.properties` arguments. |
+| `--from-brokers-timeout-ms` | `10000` | Admin API connection/request timeout in milliseconds for `--from-brokers` mode. |
 
 ### Core flags
 
@@ -520,3 +531,12 @@ Written when any input properties are not in the KoF whitelist. Contains KRaft c
 | `examples/09-10broker-scale/` | 10 (nodes 1–3 controller) | SASL_SSL PLAIN + OAuth2 + mTLS | 9 (3 shards) |
 | `examples/10-10broker-secure/` | 10 (nodes 1–3 controller) | PLAIN + OAuth2 + mTLS (full stack) | 9 (3 shards) |
 | `examples/11-3broker-dr/` | 3 (broker+controller) | PLAINTEXT + DR | 3 |
+| `examples/12-3broker-sasl-basic/` | 3 (broker+controller) | SASL_SSL PLAIN (single listener) | 3 |
+| `examples/13-3broker-mtls/` | 3 (broker+controller) | SSL mTLS only (`ssl.client.auth=required`) | 3 |
+| `examples/14-3broker-oauth2/` | 3 (broker+controller) | SASL_SSL OAUTHBEARER (single listener) | 3 |
+| `examples/15-3broker-sasl+mtls/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS | 3 |
+| `examples/16-3broker-sasl+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SASL_SSL OAUTHBEARER | 3 |
+| `examples/17-3broker-mtls+oauth2/` | 3 (broker+controller) | SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
+| `examples/18-3broker-sasl+mtls+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
+| `examples/19-from-brokers-plaintext/` | N/A (live brokers) | PLAINTEXT — fetched via `--from-brokers` Admin API | 3 |
+| `examples/20-from-brokers-sasl/` | N/A (live brokers) | SASL — fetched via `--from-brokers` Admin API | 3 |

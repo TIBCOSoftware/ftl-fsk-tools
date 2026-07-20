@@ -16,7 +16,7 @@ Tools for configuring and migrating to KOF (Kafka-on-FTL) persistence clusters.
 | Requirement | Minimum | Notes |
 |-------------|---------|-------|
 | CMake | 3.15 | |
-| Go | 1.24 | For `tibkafkatokof`. Set `GO_EXECUTABLE` if the right version is not first on `PATH`. |
+| Go | 1.25 | For `tibkafkatokof`. Set `GO_EXECUTABLE` if the right version is not first on `PATH`. |
 | Java (JDK) | 11 | For `kafka_to_kof_migration`. |
 | Kafka client jars | — | `kafka-clients.jar` + `slf4j-api.jar`; see below. |
 
@@ -48,7 +48,7 @@ cmake --build . --target tibkafkatokof_build
 
 ### Selecting the Go toolchain
 
-If Go 1.24+ is not on your `PATH` but is installed elsewhere:
+If Go 1.25+ is not on your `PATH` but is installed elsewhere:
 
 ```sh
 cmake .. -DGO_EXECUTABLE=/usr/local/go/bin/go
