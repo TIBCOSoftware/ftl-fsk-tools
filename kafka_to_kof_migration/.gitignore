@@ -1,0 +1,4 @@
+demo/build/
+demo/*.pid
+demo/*.log
+kof-output/
