@@ -62,14 +62,14 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPath
 	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPaths, realmPath, primaryCount, ports, cores, authUsersFile, kafkaUsersFile, drOpts, logLevel); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "wrote %s\n", primaryPath)
+	fmt.Fprintf(os.Stdout, "Writing file: %s\n", primaryPath)
 
 	if drOpts.Enabled() {
 		drPath := filepath.Join(outputDir, "kof-cluster-dr.yaml")
 		if err := writeDRYAML(drPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, 0, primaryCount, drOpts.DRServers, cores, logLevel); err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stdout, "wrote %s\n", drPath)
+		fmt.Fprintf(os.Stdout, "Writing file: %s\n", drPath)
 	}
 
 	// Auxiliary clusters: groups of up to 3 pservers, no realm sections.
@@ -83,14 +83,14 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPath
 		if err := writeAuxYAML(auxPath, cfg, dataDir, propsPaths, start, end, ports, cores, drOpts, logLevel); err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stdout, "wrote %s\n", auxPath)
+		fmt.Fprintf(os.Stdout, "Writing file: %s\n", auxPath)
 
 		if drOpts.Enabled() {
 			drAuxPath := filepath.Join(outputDir, fmt.Sprintf("kof-cluster-dr-aux%d.yaml", auxIdx))
 			if err := writeDRYAML(drAuxPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, start, end, drOpts.DRServers, cores, logLevel); err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stdout, "wrote %s\n", drAuxPath)
+			fmt.Fprintf(os.Stdout, "Writing file: %s\n", drAuxPath)
 		}
 		auxIdx++
 	}

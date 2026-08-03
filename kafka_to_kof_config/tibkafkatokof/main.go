@@ -100,20 +100,11 @@ func main() {
 	writeMigrationConfig := flag.Bool("migration-config", false,
 		"write kafka-to-kof.properties to the output directory (migration tool configuration)")
 
-	fromBrokers := flag.String("from-brokers", "",
-		"comma-separated host:port list of live Kafka brokers to fetch config from via Admin API\n"+
-			"    e.g. localhost:9092,localhost:9093,localhost:9094\n"+
-			"    mutually exclusive with positional server.properties arguments")
-	fromBrokersTimeout := flag.Int("from-brokers-timeout-ms", 10000,
-		"Admin API connection/request timeout in milliseconds for --from-brokers mode")
-
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: tibkafkatokof [flags] <server.properties...>")
-		fmt.Fprintln(os.Stderr, "       tibkafkatokof [flags] --from-brokers host:port[,host:port,...]")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Translates one or more Kafka broker server.properties into FTL KOF artifacts.")
-		fmt.Fprintln(os.Stderr, "Pass one file per broker (1-9 files), or use --from-brokers to fetch config")
-		fmt.Fprintln(os.Stderr, "directly from live brokers via the Kafka Admin API.")
+		fmt.Fprintln(os.Stderr, "Pass one file per broker (1-9 files); pserver count is derived from the file count.")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Output files:")
 		fmt.Fprintln(os.Stderr, "  kof-cluster.yaml          FTL pserver cluster configuration (primary, first 3 pservers)")
@@ -138,44 +129,19 @@ func main() {
 	}
 
 	args := flag.Args()
-	usingFromBrokers := *fromBrokers != ""
-
-	if usingFromBrokers && len(args) > 0 {
-		fmt.Fprintln(os.Stderr, "error: --from-brokers and positional server.properties arguments are mutually exclusive")
+	if len(args) < 1 || len(args) > 9 {
+		flag.Usage()
 		os.Exit(1)
 	}
 
-	var cfgs []*translator.BrokerConfig
-	if usingFromBrokers {
-		addrs := splitCSVTrimmed(*fromBrokers)
-		if len(addrs) < 1 || len(addrs) > 9 {
-			fmt.Fprintf(os.Stderr, "error: --from-brokers requires 1-9 broker addresses (got %d)\n", len(addrs))
+	cfgs := make([]*translator.BrokerConfig, 0, len(args))
+	for _, arg := range args {
+		cfg, err := translator.ParseBrokerConfig(arg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
-		cfgs = make([]*translator.BrokerConfig, 0, len(addrs))
-		for _, addr := range addrs {
-			fmt.Fprintf(os.Stdout, "fetching config from broker %s ...\n", addr)
-			cfg, err := translator.FetchBrokerConfig(addr, *fromBrokersTimeout)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "error:", err)
-				os.Exit(1)
-			}
-			cfgs = append(cfgs, cfg)
-		}
-	} else {
-		if len(args) < 1 || len(args) > 9 {
-			flag.Usage()
-			os.Exit(1)
-		}
-		cfgs = make([]*translator.BrokerConfig, 0, len(args))
-		for _, arg := range args {
-			cfg, err := translator.ParseBrokerConfig(arg)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "error:", err)
-				os.Exit(1)
-			}
-			cfgs = append(cfgs, cfg)
-		}
+		cfgs = append(cfgs, cfg)
 	}
 	numPservers := len(cfgs)
 
@@ -294,7 +260,7 @@ func main() {
 			os.Exit(1)
 		}
 		ftlUsersFile = uf
-		fmt.Fprintf(os.Stdout, "wrote %s (FTL server basic auth; a Kafka listener is secured)\n", uf)
+		fmt.Fprintf(os.Stdout, "Writing file: %s (FTL server basic auth; a Kafka listener is secured)\n", uf)
 	}
 	// Kafka client users: the inline JAAS user_X entries of the SASL/PLAIN listeners,
 	// materialized as a second file: provider. Only relevant when the FTL servers
@@ -308,7 +274,7 @@ func main() {
 		}
 		if kuf != "" {
 			kafkaUsersFile = kuf
-			fmt.Fprintf(os.Stdout, "wrote %s (Kafka client users from the inline jaas entries)\n", kuf)
+			fmt.Fprintf(os.Stdout, "Writing file: %s (Kafka client users from the inline jaas entries)\n", kuf)
 		}
 	}
 	if err := translator.WriteKOFClusterYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, ftlUsersFile, kafkaUsersFile, drOpts, *ftlLogLevel); err != nil {
@@ -332,13 +298,6 @@ func main() {
 		}
 	}
 
-	// Heads-up about keys/values KoF does not honor (informational; does not block).
-	for _, cfg := range cfgs {
-		if items := translator.UnsupportedScan(cfg); len(items) > 0 {
-			printUnsupported(os.Stderr, items)
-		}
-	}
-
 	anyInvalid := false
 	for i, status := range statuses {
 		if status == translator.StatusInvalid {
@@ -349,17 +308,7 @@ func main() {
 	if anyInvalid {
 		os.Exit(2)
 	}
-	fmt.Fprintln(os.Stderr, "\nAll kof.broker.N.properties files are ACCEPTED.")
-}
-
-// printUnsupported prints the keys/values KoF does not honor, so the operator
-// learns it here instead of from the FTL docs. They do not block ACCEPTED -- they
-// are kept in the file but will not take effect.
-func printUnsupported(w io.Writer, items []translator.UnsupportedItem) {
-	fmt.Fprintf(w, "\nNot supported in KoF -- kept for reference, but they will NOT take effect:\n")
-	for _, it := range items {
-		fmt.Fprintf(w, "  - %s\n      %s\n", it.What, it.Reason)
-	}
+	fmt.Fprintln(os.Stdout, "\nAll kof.broker.*.properties files are processed successfully.")
 }
 
 // printResolveSummary prints, after an INVALID run, a numbered list of the
@@ -455,23 +404,6 @@ func useColor(mode string) bool {
 		}
 		return fi.Mode()&os.ModeCharDevice != 0
 	}
-}
-
-// splitCSVTrimmed splits a comma-separated string and trims whitespace from each token.
-func splitCSVTrimmed(s string) []string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 // parseCoreServers parses "SRV1=host:5600,SRV2=host:5601" into a CoreServer slice.

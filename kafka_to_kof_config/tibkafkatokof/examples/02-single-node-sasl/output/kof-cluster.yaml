@@ -6,8 +6,8 @@
 
 globals:
   core.servers:
-    SRV1: localhost:5689
-  auth.providers: file:/etc/ftl/users.txt
+    SRV1: localhost:5663
+  auth.providers: file:output/ftl-users.txt
 
 servers:
   SRV1:

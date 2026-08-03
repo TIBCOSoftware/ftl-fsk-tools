@@ -218,7 +218,7 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 	fmt.Fprintf(f, "    data: %s\n", dataDir)
 	fmt.Fprintf(f, "    initial.realm.config: %s\n", realmPath)
 
-	fmt.Fprintf(os.Stdout, "wrote %s\n", path)
+	fmt.Fprintf(os.Stdout, "Writing file: %s\n", path)
 	return nil
 }
 

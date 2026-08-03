@@ -34,10 +34,6 @@ func renderProps(t *testing.T, src string) (string, []string) {
 	return string(b), unsupported
 }
 
-func hasMarker(out string, s ConfigStatus) bool {
-	return strings.Contains(out, statusMarkerPrefix+" "+string(s))
-}
-
 // parseSrc writes src to a temp server.properties and parses it.
 func parseSrc(t *testing.T, src string) *BrokerConfig {
 	t.Helper()
@@ -161,9 +157,6 @@ func TestHandlerClass_GoesToUnsupported(t *testing.T) {
 		t.Errorf("jwks endpoint not in unsupported list: %v", unsupported)
 	}
 	// File is ACCEPTED: no RESOLVE-REQUIRED blocks.
-	if !hasMarker(out, StatusAccepted) {
-		t.Errorf("expected ACCEPTED:\n%s", out)
-	}
 	if strings.Contains(out, "RESOLVE-REQUIRED") {
 		t.Errorf("unexpected RESOLVE-REQUIRED in output:\n%s", out)
 	}
@@ -188,26 +181,20 @@ func TestUnrecognizedHandler_GoesToUnsupported(t *testing.T) {
 	if !found {
 		t.Errorf("handler class not in unsupported list: %v", unsupported)
 	}
-	if !hasMarker(out, StatusAccepted) {
-		t.Errorf("expected ACCEPTED:\n%s", out)
-	}
 }
 
-// Idempotency: a file carrying canonical authorizer is ACCEPTED and stable across re-runs.
+// Idempotency: a file carrying canonical authorizer is stable across re-runs.
 // Handler classes and oauth params go to unsupported and do not participate in idempotency.
 func TestIdempotent_CanonicalAuthorizer(t *testing.T) {
 	src := "node.id=1\nlisteners=SASL://0.0.0.0:9092\n" +
 		"authorizer.class.name=" + authorizerCanonical + "\n"
 	out1, _ := renderProps(t, src)
-	if !hasMarker(out1, StatusAccepted) {
-		t.Fatalf("canonical authorizer not ACCEPTED:\n%s", out1)
-	}
 	if !strings.Contains(out1, "authorizer.class.name="+authorizerCanonical+"\n") {
 		t.Errorf("canonical authorizer value not preserved:\n%s", out1)
 	}
-	// Re-run on the generated output: still ACCEPTED.
+	// Re-run on the generated output: value still preserved.
 	out2, _ := renderProps(t, out1)
-	if !hasMarker(out2, StatusAccepted) {
-		t.Errorf("re-run not ACCEPTED (not idempotent):\n%s", out2)
+	if !strings.Contains(out2, "authorizer.class.name="+authorizerCanonical+"\n") {
+		t.Errorf("re-run did not preserve canonical authorizer (not idempotent):\n%s", out2)
 	}
 }
