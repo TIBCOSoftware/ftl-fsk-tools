@@ -12,15 +12,11 @@ servers:
   DRSRV1:
   - realm:
       label: DR_SERVER
+      data: /var/kof/dr
+      initial.realm.config: output-dr/realm.json
   - persistence:
       name: drpserver1
       data: /var/kof/dr/drpserver1
       kof.broker.properties: output-dr/kof.broker.1.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
-services:
-  persistence:
-    data: /var/kof/dr
-  realm:
-    data: /var/kof/dr
-    initial.realm.config: output-dr/realm.json

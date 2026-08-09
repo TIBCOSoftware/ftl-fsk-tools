@@ -77,8 +77,8 @@ func main() {
 
 	// Shared auth flags
 	authRolemap := flag.String("auth-rolemap", "", "path to FTL role map file (auth.rolemap in ftlserver.properties for oauth2)")
-	realmServiceUser := flag.String("realm-service-user", "primary", "services.realm.user credential for oauth2 mode")
-	realmServicePassword := flag.String("realm-service-password", "primary-pw", "services.realm.password credential for oauth2 mode")
+	realmServiceUser := flag.String("realm-service-user", "primary", "realm user credential for oauth2 mode (written into each realm block)")
+	realmServicePassword := flag.String("realm-service-password", "primary-pw", "realm password credential for oauth2 mode (written into each realm block)")
 	serverUser := flag.String("server-user", "internal", "user in ftlserver.properties for server-to-server connections (non-oauth2 modes)")
 	serverPassword := flag.String("server-password", "internal-pw", "password in ftlserver.properties for server-to-server connections (non-oauth2 modes)")
 
@@ -100,21 +100,27 @@ func main() {
 	writeMigrationConfig := flag.Bool("migration-config", false,
 		"write kafka-to-kof.properties to the output directory (migration tool configuration)")
 
-	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: tibkafkatokof [flags] <server.properties...>")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Translates one or more Kafka broker server.properties into FTL KOF artifacts.")
-		fmt.Fprintln(os.Stderr, "Pass one file per broker (1-9 files); pserver count is derived from the file count.")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Output files:")
-		fmt.Fprintln(os.Stderr, "  kof-cluster.yaml          FTL pserver cluster configuration (primary, first 3 pservers)")
-		fmt.Fprintln(os.Stderr, "  kof-cluster-auxN.yaml     Additional pserver groups (one per group of 3 pservers beyond the first)")
-		fmt.Fprintln(os.Stderr, "  kof-cluster-secure.yaml   Secure variant with TLS/auth settings for FTL server")
-		fmt.Fprintln(os.Stderr, "  realm.json                FTL realm configuration with kof.cluster")
-		fmt.Fprintln(os.Stderr, "  kof.broker.N.properties   Per-pserver broker properties (N is 1-based)")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Flags:")
-		flag.PrintDefaults()
+	fromBrokers := flag.String("from-brokers", "",
+		"comma-separated host:port list of live Kafka brokers to fetch config from via Admin API\n"+
+			"    e.g. localhost:9092,localhost:9093,localhost:9094\n"+
+			"    mutually exclusive with positional server.properties arguments")
+	fromBrokersTimeout := flag.Int("from-brokers-timeout-ms", 10000,
+		"Admin API connection/request timeout in milliseconds for -from-brokers mode")
+
+	// Undocumented. Turns off the default cluster's disk index: writes
+	// "default.cluster.disk.index: 'false'" into every realm block of the generated
+	// cluster YAMLs and sets cluster_disk_index_default_value to false in realm.json.
+	// tibftlserver enables the index by default whenever disk persistence is sync or
+	// async, so both places have to say no. Deliberately absent from every help topic.
+	disableDiskIndex := flag.Bool("disable-disk-index", false, "")
+
+	flag.Usage = func() { writeHelp(os.Stderr, "") }
+	if topic, ok := helpRequested(os.Args[1:]); ok {
+		if !writeHelp(os.Stdout, topic) {
+			fmt.Fprintf(os.Stderr, "error: unknown help topic %q; try one of: %s\n", topic, topicList())
+			os.Exit(1)
+		}
+		return
 	}
 	flag.Parse()
 
@@ -129,19 +135,44 @@ func main() {
 	}
 
 	args := flag.Args()
-	if len(args) < 1 || len(args) > 9 {
-		flag.Usage()
+	usingFromBrokers := *fromBrokers != ""
+
+	if usingFromBrokers && len(args) > 0 {
+		fmt.Fprintln(os.Stderr, "error: -from-brokers and positional server.properties arguments are mutually exclusive")
 		os.Exit(1)
 	}
 
-	cfgs := make([]*translator.BrokerConfig, 0, len(args))
-	for _, arg := range args {
-		cfg, err := translator.ParseBrokerConfig(arg)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
+	var cfgs []*translator.BrokerConfig
+	if usingFromBrokers {
+		addrs := splitCSVTrimmed(*fromBrokers)
+		if len(addrs) < 1 || len(addrs) > 9 {
+			fmt.Fprintf(os.Stderr, "error: -from-brokers requires 1-9 broker addresses (got %d)\n", len(addrs))
 			os.Exit(1)
 		}
-		cfgs = append(cfgs, cfg)
+		cfgs = make([]*translator.BrokerConfig, 0, len(addrs))
+		for _, addr := range addrs {
+			fmt.Fprintf(os.Stdout, "fetching config from broker %s ...\n", addr)
+			cfg, err := translator.FetchBrokerConfig(addr, *fromBrokersTimeout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			cfgs = append(cfgs, cfg)
+		}
+	} else {
+		if len(args) < 1 || len(args) > 9 {
+			flag.Usage()
+			os.Exit(1)
+		}
+		cfgs = make([]*translator.BrokerConfig, 0, len(args))
+		for _, arg := range args {
+			cfg, err := translator.ParseBrokerConfig(arg)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			cfgs = append(cfgs, cfg)
+		}
 	}
 	numPservers := len(cfgs)
 
@@ -170,6 +201,12 @@ func main() {
 	drOpts := translator.DROpts{
 		DRServers: parseCoreServers(*drServersFlag),
 		DRDataDir: drDataDirResolved,
+	}
+
+	// Settings shared by every generated cluster YAML and by realm.json.
+	clusterOpts := translator.ClusterOpts{
+		LogLevel:         *ftlLogLevel,
+		DisableDiskIndex: *disableDiskIndex,
 	}
 
 	// Build SecureOpts from flags.
@@ -277,17 +314,17 @@ func main() {
 			fmt.Fprintf(os.Stdout, "Writing file: %s (Kafka client users from the inline jaas entries)\n", kuf)
 		}
 	}
-	if err := translator.WriteKOFClusterYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, ftlUsersFile, kafkaUsersFile, drOpts, *ftlLogLevel); err != nil {
+	if err := translator.WriteKOFClusterYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, ftlUsersFile, kafkaUsersFile, drOpts, clusterOpts); err != nil {
 		fmt.Fprintln(os.Stderr, "error writing kof-cluster.yaml:", err)
 		os.Exit(1)
 	}
 	if translator.ShouldWriteSecure(cfgs[0], secureOpts) {
-		if err := translator.WriteKOFSecureYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, secureOpts, drOpts, *ftlLogLevel); err != nil {
+		if err := translator.WriteKOFSecureYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, secureOpts, drOpts, clusterOpts); err != nil {
 			fmt.Fprintln(os.Stderr, "error writing kof-cluster-secure.yaml:", err)
 			os.Exit(1)
 		}
 	}
-	if err := translator.WriteRealmJSON(cfgs[0], *outputDir, *realmName, numPservers, drOpts, *transportType); err != nil {
+	if err := translator.WriteRealmJSON(cfgs[0], *outputDir, *realmName, numPservers, drOpts, *transportType, clusterOpts); err != nil {
 		fmt.Fprintln(os.Stderr, "error writing realm.json:", err)
 		os.Exit(1)
 	}
@@ -404,6 +441,23 @@ func useColor(mode string) bool {
 		}
 		return fi.Mode()&os.ModeCharDevice != 0
 	}
+}
+
+// splitCSVTrimmed splits a comma-separated string and trims whitespace from each token.
+func splitCSVTrimmed(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // parseCoreServers parses "SRV1=host:5600,SRV2=host:5601" into a CoreServer slice.

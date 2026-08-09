@@ -18,6 +18,14 @@ tool generates:
 | `unsupported.properties` | Settings with no KOF equivalent (reference only) |
 | `kof-cluster-secure.yaml` | TLS/auth overlay (when security flags are provided) |
 
+:::tip No properties file handy?
+If the Kafka cluster is already running, `--from-brokers host:port,...` reads each broker's
+effective configuration over the Kafka Admin API instead of from a file, then follows exactly the
+same translation path. It is mutually exclusive with the positional arguments, and the Admin
+connection itself is plaintext and unauthenticated — see
+[Fetching from live brokers](./README.md#fetching-from-live-brokers).
+:::
+
 Each scenario below builds on the previous one. Start with the simplest setup and
 advance as your environment requires.
 
@@ -513,12 +521,36 @@ tibkafkatokof \
 | `--realm-name` | `_default_realm` | Realm name in `realm.json` |
 | `--data-dir` | `/var/tmp/kof/data` | KOF data directory on pserver hosts |
 | `--core-servers` | _(auto)_ | Pin pserver names and ports: `SRV1=host:5600,...` |
+| `--from-brokers` | _(none)_ | Fetch the config from running brokers instead of files: `host:port,...` |
 | `--transport-type` | `auto` | FTL transport: `auto` or `dtcp` (low-latency) |
 | `--auto` | off | Convert JKS/PKCS12 keystores to PEM automatically |
 | `--migration-config` | off | Also write `kafka-to-kof.properties` for the migration tool |
 | `--list-properties` | off | Print how each Kafka property is handled, then exit |
 
-For the full flag list run `tibkafkatokof --help`.
+### Finding the rest
+
+`tibkafkatokof -h` prints a short overview — the flags above plus an index of groups. The remaining
+flags are organized into groups you can ask for one at a time, so you never have to read the whole
+list:
+
+```sh
+tibkafkatokof -h            # overview and group index
+tibkafkatokof -h oauth      # just the OAuth2 flags
+tibkafkatokof -h all        # every flag, grouped
+```
+
+| Group | Covers |
+|---|---|
+| `core` | output location, realm name, data dir, server addresses, transport |
+| `brokers` | read the config from running Kafka brokers instead of properties files |
+| `tls` | server and client certificates, private keys, trust files |
+| `oauth` | token/JWKS endpoints, claims, audience, server and UI client credentials |
+| `auth` | users file, role map, and the FTL service credentials |
+| `dr` | DR server list and DR data directory |
+| `info` | property listing, colorization, automatic keystore conversion |
+
+So the OAuth2 flags used in steps 3, 7, 9 and 10 are all under `tibkafkatokof -h oauth`, and the
+TLS/mTLS flags from steps 2, 6, 8, 9 and 10 are under `tibkafkatokof -h tls`.
 
 ---
 

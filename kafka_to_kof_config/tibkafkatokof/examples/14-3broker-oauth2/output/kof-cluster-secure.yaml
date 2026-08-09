@@ -24,7 +24,11 @@ globals:
 
 servers:
   SRV1:
-  - realm: {}
+  - realm:
+      user: primary
+      password: primary-pw
+      data: /var/tmp/kof/data
+      initial.realm.config: examples/14-3broker-oauth2/output/realm.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
       tls.server.private.key: /etc/ftl/certs/server.key
@@ -43,7 +47,11 @@ servers:
       loglevel: connections:info;kof:info;durables:info;store:info
 
   SRV2:
-  - realm: {}
+  - realm:
+      user: primary
+      password: primary-pw
+      data: /var/tmp/kof/data
+      initial.realm.config: examples/14-3broker-oauth2/output/realm.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
       tls.server.private.key: /etc/ftl/certs/server.key
@@ -62,7 +70,11 @@ servers:
       loglevel: connections:info;kof:info;durables:info;store:info
 
   SRV3:
-  - realm: {}
+  - realm:
+      user: primary
+      password: primary-pw
+      data: /var/tmp/kof/data
+      initial.realm.config: examples/14-3broker-oauth2/output/realm.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
       tls.server.private.key: /etc/ftl/certs/server.key
@@ -80,11 +92,3 @@ servers:
       kof.broker.properties: examples/14-3broker-oauth2/output/kof.broker.3.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
-services:
-  persistence:
-    data: /var/tmp/kof/data
-  realm:
-    user: primary
-    password: primary-pw
-    data: /var/tmp/kof/data
-    initial.realm.config: examples/14-3broker-oauth2/output/realm.json

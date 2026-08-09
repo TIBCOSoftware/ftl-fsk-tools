@@ -11,14 +11,12 @@ globals:
     SRV1: localhost:5695
     SRV2: localhost:5641
     SRV3: localhost:5693
-  auth.providers: file:output/ftl-users.txt
 
 servers:
   SRV1:
-  - realm: {}
-  - ftlserver.properties:
-      user: internal
-      password: internal-pw
+  - realm:
+      data: /var/tmp/kof/data
+      initial.realm.config: output/realm.json
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1
@@ -26,10 +24,9 @@ servers:
       loglevel: connections:info;kof:info;durables:info;store:info
 
   SRV2:
-  - realm: {}
-  - ftlserver.properties:
-      user: internal
-      password: internal-pw
+  - realm:
+      data: /var/tmp/kof/data
+      initial.realm.config: output/realm.json
   - persistence:
       name: pserver2
       data: /var/tmp/kof/data/pserver2
@@ -37,19 +34,12 @@ servers:
       loglevel: connections:info;kof:info;durables:info;store:info
 
   SRV3:
-  - realm: {}
-  - ftlserver.properties:
-      user: internal
-      password: internal-pw
+  - realm:
+      data: /var/tmp/kof/data
+      initial.realm.config: output/realm.json
   - persistence:
       name: pserver3
       data: /var/tmp/kof/data/pserver3
       kof.broker.properties: output/kof.broker.3.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
-services:
-  persistence:
-    data: /var/tmp/kof/data
-  realm:
-    data: /var/tmp/kof/data
-    initial.realm.config: output/realm.json

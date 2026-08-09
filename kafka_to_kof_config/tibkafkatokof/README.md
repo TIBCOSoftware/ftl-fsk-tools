@@ -15,6 +15,8 @@ Translates a Kafka KRaft broker `server.properties` file into the FTL KOF artifa
 
 ## Build
 
+Requires Go 1.25+ (`toolchain go1.25.6` is pinned in `go.mod`).
+
 From the workspace root (`hydra/`):
 
 ```sh
@@ -33,24 +35,68 @@ go build .
 ## Usage
 
 ```
-tibkafkatokof [flags] <server.properties>
+tibkafkatokof [flags] <server.properties> [<server.properties> ...]
+tibkafkatokof [flags] -from-brokers <host:port>[,<host:port> ...]
 ```
 
-### Core flags
+There are two ways to give the tool a broker configuration, and they are mutually exclusive:
+
+- **From files.** Positional arguments are one or more `server.properties` files (1–9).
+- **From live brokers.** `-from-brokers` takes a comma-separated `host:port` list (1–9) and reads
+  each broker's configuration over the Kafka Admin API instead — see
+  [Fetching from live brokers](#fetching-from-live-brokers).
+
+Either way, each broker becomes one pserver — the pserver count is derived from the number of
+brokers, not from a flag.
+
+### Getting help
+
+Help is organized in two tiers, so a bare `-h` stays short:
+
+```sh
+tibkafkatokof -h            # synopsis, output files, the handful of common flags, group index
+tibkafkatokof -h oauth      # just the OAuth2 flags
+tibkafkatokof -h all        # every flag, grouped
+```
+
+| Group | `-h <group>` covers |
+|---|---|
+| `core` | output location, realm name, data dir, server addresses, transport |
+| `brokers` | read the config from running Kafka brokers instead of properties files |
+| `tls` | server and client certificates, private keys, trust files |
+| `oauth` | token/JWKS endpoints, claims, audience, server and UI client credentials |
+| `auth` | users file, role map, and the FTL service credentials |
+| `dr` | DR server list and DR data directory |
+| `info` | property listing, colorization, automatic keystore conversion |
+| `all` | every flag, grouped |
+
+The sections below list the same flags as the corresponding `-h <group>` topic.
+
+### Core flags (`-h core`)
 
 | Flag | Default | Description |
 |---|---|---|
 | `-output-dir` | `./kof-output` | Directory where output files are written |
 | `-realm-name` | `_default_realm` | Realm name in `realm.json` |
 | `-data-dir` | `/var/tmp/kof/data` | KOF data directory path on pserver hosts |
-| `-num-pservers` | `3` | Number of pservers to generate (must be a positive odd number) |
-| `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` lets the OS choose; `dtcp` is optimized for low latency |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are randomly generated in range 5600–5699 |
+| `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` lets the OS choose; `dtcp` is optimized for low latency |
+| `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated pserver. This is the *output* FTL servers' logging, not this tool's. |
 | `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `kafka_to_kof_migration` data migration tool) |
 
-### TLS flags
+### Live broker fetch flags (`-h brokers`)
 
-Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` listener and you want a `kof-cluster-secure.yaml` emitted.
+| Flag | Default | Description |
+|---|---|---|
+| `-from-brokers` | _(none)_ | Comma-separated `host:port` list of running Kafka brokers (1–9) to read the configuration from via the Admin API. Mutually exclusive with positional `server.properties` arguments. |
+| `-from-brokers-timeout-ms` | `10000` | Admin API connect/read/write timeout in milliseconds |
+
+See [Fetching from live brokers](#fetching-from-live-brokers) for what the tool asks each broker
+for and the current limitations.
+
+### TLS and mTLS flags (`-h tls`)
+
+Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` listener and you want a `kof-cluster-secure.yaml` emitted. The `-tls-server-trust` / `-tls-client-*` flags are the ones required when a Kafka mTLS listener (`ssl.client.auth=required`) is present and you want FTL server-to-server mutual TLS.
 
 | Flag | Description |
 |---|---|
@@ -58,42 +104,94 @@ Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` lis
 | `-tls-key` | Server TLS private key PEM file path |
 | `-tls-key-password` | TLS private key passphrase |
 | `-tls-ca` | CA/trust PEM file path (for connecting to other FTL servers) |
-
-### mTLS flags
-
-Required when a Kafka mTLS listener (`ssl.client.auth=required`) is present and you want FTL server-to-server mutual TLS.
-
-| Flag | Description |
-|---|---|
 | `-tls-server-trust` | CA PEM used to verify inbound client certificates (`tls.server.trust.file`) |
 | `-tls-client-cert` | Client cert PEM presented to other FTL servers (`tls.client.cert`) |
 | `-tls-client-key` | Client private key PEM for server-to-server connections (`tls.client.private.key`) |
 | `-tls-client-key-password` | Passphrase for `-tls-client-key` |
 
-### OAuth2 flags
+### OAuth2 flags (`-h oauth`)
 
-| Flag | Description |
-|---|---|
-| `-oauth-token-url` | OAuth2 token endpoint URL (server-to-server) |
-| `-oauth-jwks-url` | OAuth2 JWKS or validation key (`file:` path or URL) |
-| `-oauth-client-id` | OAuth2 client ID |
-| `-oauth-client-secret` | OAuth2 client secret |
-| `-oauth-provider-trust` | OAuth2 provider trust PEM file |
+| Flag | Default | Description |
+|---|---|---|
+| `-oauth-token-url` | _(none)_ | OAuth2 token endpoint URL, server-to-server (`oauth2.svr.endpoint.token`) |
+| `-oauth-jwks-url` | _(none)_ | OAuth2 JWKS or validation key, `file:` path or URL (`oauth2.validation.key`) |
+| `-oauth-client-id` | _(none)_ | OAuth2 client ID for server-to-server (`oauth2.svr.client.id`) |
+| `-oauth-client-secret` | _(none)_ | OAuth2 client secret for server-to-server (`oauth2.svr.client.secret`) |
+| `-oauth-provider-trust` | _(none)_ | OAuth2 provider trust PEM file (`oauth2.provider.trust.file`) |
+| `-oauth-audience` | `ftl` | OAuth2 audience value (`oauth2.audience`) |
+| `-oauth-claim-roles` | `group` | Token claim mapped to FTL roles (`oauth2.claim.roles`) |
+| `-oauth-claim-username` | `preferred_username` | Token claim mapped to the FTL user (`oauth2.claim.username`) |
+| `-oauth-ui-auth-url` | _(none)_ | Auth endpoint for the FTL UI (`oauth2.ui.endpoint.auth`) |
+| `-oauth-ui-token-url` | _(none)_ | Token endpoint for the FTL UI (`oauth2.ui.endpoint.token`) |
+| `-oauth-ui-logout-url` | _(none)_ | Logout endpoint for the FTL UI (`oauth2.ui.endpoint.logout`) |
+| `-oauth-ui-client-id` | _(none)_ | Client ID for the UI authorization code flow (`oauth2.ui.client.id`) |
+| `-oauth-ui-client-secret` | _(none)_ | Client secret for the UI (`oauth2.ui.client.secret`) |
 
-### Basic auth flag
+### Authentication flags (`-h auth`)
 
-| Flag | Description |
-|---|---|
-| `-auth-users-file` | Path to FTL `users.txt` for file-based authentication (PLAIN SASL → file auth) |
+| Flag | Default | Description |
+|---|---|---|
+| `-auth-users-file` | _(none)_ | Path to FTL `users.txt` for file-based authentication (PLAIN SASL → file auth) |
+| `-auth-rolemap` | _(none)_ | Path to an FTL role map file (`auth.rolemap` in `ftlserver.properties`, oauth2 mode) |
+| `-server-user` | `internal` | `user` in `ftlserver.properties` for server-to-server connections (non-oauth2 modes) |
+| `-server-password` | `internal-pw` | `password` in `ftlserver.properties` for server-to-server connections (non-oauth2 modes) |
+| `-realm-service-user` | `primary` | Realm `user` credential for oauth2 mode, written into each per-server realm block |
+| `-realm-service-password` | `primary-pw` | Realm `password` credential for oauth2 mode, written into each per-server realm block |
 
 `kof-cluster-secure.yaml` is only emitted when **security is detected** in the input props AND at least one of `-tls-cert`, `-oauth-token-url`, or `-auth-users-file` is provided.
 
-### DR (Disaster Recovery) flags
+### DR (Disaster Recovery) flags (`-h dr`)
 
 | Flag | Default | Description |
 |---|---|---|
 | `-dr-servers` | _(none)_ | Comma-separated `DRSRV1=host:port,DRSRV2=host:port,...` DR server list.<br>Providing this flag enables DR mode for all generated files. |
 | `-dr-data-dir` | `<data-dir>/dr` | Data directory for DR pservers on DR hosts |
+
+### Inspection and conversion flags (`-h info`)
+
+| Flag | Default | Description |
+|---|---|---|
+| `-list-properties` | `false` | Print how each Kafka listener/security property is treated, then exit |
+| `-color` | `auto` | Colorize `-list-properties` output: `auto`, `always`, or `never` |
+| `-auto` | `false` | Run the mechanical conversions automatically (JKS/PKCS12 keystores → PEM via `keytool`/`openssl`); items needing a human stay `RESOLVE-REQUIRED` |
+
+---
+
+## Fetching from live brokers
+
+Instead of collecting a `server.properties` from every broker host, point the tool at the running
+cluster:
+
+```sh
+tibkafkatokof -output-dir ./kof-output \
+  -from-brokers kafka-1:9092,kafka-2:9092,kafka-3:9092
+```
+
+For each address the tool connects with the Kafka Admin API, resolves that address to its broker
+node ID from cluster metadata, and issues `DescribeConfigs` for that node. The returned entries —
+the broker's *effective* configuration, including defaults the operator never wrote down — feed
+into exactly the same translation pipeline as a parsed file, so the generated artifacts, the
+`RESOLVE-REQUIRED` blocks and the exit codes are identical to the file-based path. Progress is
+printed per broker:
+
+```
+fetching config from broker kafka-1:9092 ...
+fetching config from broker kafka-2:9092 ...
+fetching config from broker kafka-3:9092 ...
+```
+
+Notes and limitations:
+
+- **Mutually exclusive with positional arguments.** Passing both is an error.
+- **1–9 addresses**, same range as the file-based input; each address becomes one pserver.
+- **The Admin connection is plaintext and unauthenticated.** The `-tls-*` and `-oauth-*` flags
+  configure the *generated* FTL servers, not this fetch. Against a cluster whose listeners all
+  require TLS or SASL, the connection will fail — use the file-based input there.
+- **Effective config is larger than a hand-written file.** Broker defaults that a
+  `server.properties` omits are returned by `DescribeConfigs`, so `unsupported.properties` is
+  typically much longer than for the equivalent file input. Those entries are reference-only and
+  do not affect the outcome.
+- The `SourceFile` recorded in the generated comments is the `host:port` address, not a path.
 
 ---
 
@@ -455,9 +553,28 @@ tibftlserver -c kof-cluster.yaml -n SRV2
 tibftlserver -c kof-cluster.yaml -n SRV3
 ```
 
+**No `services:` section.** Realm settings are written per server, on each `- realm:` entry, rather
+than once in a shared `services:` block. That includes `initial.realm.config`, so every server in
+the file names the generated `realm.json` itself:
+
+```yaml
+servers:
+  SRV1:
+  - realm:
+      data: /var/tmp/kof/data
+      initial.realm.config: realm.json
+  - persistence:
+      name: pserver1
+      data: /var/tmp/kof/data/pserver1
+      kof.broker.properties: kof.broker.1.properties
+      loglevel: connections:info;kof:info;durables:info;store:info
+```
+
+This applies to every cluster YAML the tool writes — primary, secure, and DR.
+
 ### `kof-cluster-auxN.yaml`
 
-Auxiliary pserver groups. Each file references the same `globals.core.servers` as the primary. No realm service block.
+Auxiliary pserver groups. Each file references the same `globals.core.servers` as the primary. No realm entries at all — these pservers join the primary realm cluster.
 
 ```sh
 tibftlserver -c kof-cluster-aux1.yaml -n PSRV4
@@ -484,6 +601,9 @@ Adds `ftlserver.properties` blocks (TLS, auth) to each realm server. Auth mode i
 | `tls` / `mtls` only | TLS fields only, no `auth.providers` |
 
 When mTLS flags are provided alongside OAuth, the secure YAML includes both sets of FTL properties.
+
+In oauth2 mode the realm credentials (`-realm-service-user` / `-realm-service-password`) are written
+onto each per-server `- realm:` entry, since there is no shared `services:` block to hold them.
 
 ### `realm.json`
 
@@ -520,3 +640,17 @@ Written when any input properties are not in the KoF whitelist. Contains KRaft c
 | `examples/09-10broker-scale/` | 10 (nodes 1–3 controller) | SASL_SSL PLAIN + OAuth2 + mTLS | 9 (3 shards) |
 | `examples/10-10broker-secure/` | 10 (nodes 1–3 controller) | PLAIN + OAuth2 + mTLS (full stack) | 9 (3 shards) |
 | `examples/11-3broker-dr/` | 3 (broker+controller) | PLAINTEXT + DR | 3 |
+| `examples/12-3broker-sasl-basic/` | 3 (broker+controller) | SASL_SSL PLAIN (single listener) | 3 |
+| `examples/13-3broker-mtls/` | 3 (broker+controller) | SSL mTLS only (`ssl.client.auth=required`) | 3 |
+| `examples/14-3broker-oauth2/` | 3 (broker+controller) | SASL_SSL OAUTHBEARER (single listener) | 3 |
+| `examples/15-3broker-sasl+mtls/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS | 3 |
+| `examples/16-3broker-sasl+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SASL_SSL OAUTHBEARER | 3 |
+| `examples/17-3broker-mtls+oauth2/` | 3 (broker+controller) | SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
+| `examples/18-3broker-sasl+mtls+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
+| `examples/19-from-brokers-plaintext/` | N/A (live brokers) | PLAINTEXT — fetch from live brokers | 3 |
+| `examples/20-from-brokers-sasl/` | N/A (live brokers) | SASL — fetch from live brokers | 3 |
+
+Examples 01–18 each ship a checked-in `output/` directory, regenerated by
+`examples/regen-examples.sh`. Examples 19 and 20 cover the `-from-brokers` mode and hold a
+`README.md` only: their input is a running Kafka cluster, so there is nothing reproducible to
+check in. Follow the commands in those READMEs against a live cluster of your own.

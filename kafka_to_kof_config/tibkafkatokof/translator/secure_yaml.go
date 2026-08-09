@@ -110,7 +110,7 @@ func ShouldWriteSecure(cfg *BrokerConfig, opts SecureOpts) bool {
 }
 
 // WriteKOFSecureYAML generates kof-cluster-secure.yaml for the primary cluster (first 3 pservers).
-func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, opts SecureOpts, drOpts DROpts, logLevel string) error {
+func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, opts SecureOpts, drOpts DROpts, copts ClusterOpts) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
@@ -160,15 +160,29 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 	}
 	fmt.Fprintln(f)
 
+	// In oauth2 mode the realm authenticates the services with a dedicated credential;
+	// it lives on every realm entry now that there is no shared services section.
+	var realmCreds []string
+	if ac.OAuth2 {
+		realmUser := opts.RealmServiceUser
+		if realmUser == "" {
+			realmUser = "primary"
+		}
+		realmPw := opts.RealmServicePassword
+		if realmPw == "" {
+			realmPw = "primary-pw"
+		}
+		realmCreds = []string{"user: " + realmUser, "password: " + realmPw}
+	}
+
 	fmt.Fprintln(f, "servers:")
 	for i := 0; i < primaryCount; i++ {
 		fmt.Fprintf(f, "  SRV%d:\n", i+1)
+		label := ""
 		if drOpts.Enabled() {
-			fmt.Fprintln(f, "  - realm:")
-			fmt.Fprintln(f, "      label: PRIMARY_SERVER")
-		} else {
-			fmt.Fprintln(f, "  - realm: {}")
+			label = "PRIMARY_SERVER"
 		}
+		writeRealmBlock(f, dataDir, realmPath, label, copts, realmCreds...)
 
 		needsServerBlock := hasTLSOpts(opts) || ac.OAuth2
 		if needsServerBlock {
@@ -195,28 +209,9 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 		fmt.Fprintf(f, "      name: pserver%d\n", i+1)
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
 		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
-		fmt.Fprintf(f, "      loglevel: %s\n", logLevel)
+		fmt.Fprintf(f, "      loglevel: %s\n", copts.LogLevel)
 		fmt.Fprintln(f)
 	}
-
-	fmt.Fprintln(f, "services:")
-	fmt.Fprintln(f, "  persistence:")
-	fmt.Fprintf(f, "    data: %s\n", dataDir)
-	fmt.Fprintln(f, "  realm:")
-	if ac.OAuth2 {
-		realmUser := opts.RealmServiceUser
-		if realmUser == "" {
-			realmUser = "primary"
-		}
-		realmPw := opts.RealmServicePassword
-		if realmPw == "" {
-			realmPw = "primary-pw"
-		}
-		fmt.Fprintf(f, "    user: %s\n", realmUser)
-		fmt.Fprintf(f, "    password: %s\n", realmPw)
-	}
-	fmt.Fprintf(f, "    data: %s\n", dataDir)
-	fmt.Fprintf(f, "    initial.realm.config: %s\n", realmPath)
 
 	fmt.Fprintf(os.Stdout, "Writing file: %s\n", path)
 	return nil

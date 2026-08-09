@@ -6,12 +6,14 @@
 
 globals:
   core.servers:
-    SRV1: localhost:5663
-  auth.providers: file:output/ftl-users.txt
+    SRV1: localhost:5689
+  auth.providers: file:/etc/ftl/users.txt
 
 servers:
   SRV1:
-  - realm: {}
+  - realm:
+      data: /var/tmp/kof/data
+      initial.realm.config: output/realm.json
   - ftlserver.properties:
       user: internal
       password: internal-pw
@@ -21,9 +23,3 @@ servers:
       kof.broker.properties: output/kof.broker.1.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
-services:
-  persistence:
-    data: /var/tmp/kof/data
-  realm:
-    data: /var/tmp/kof/data
-    initial.realm.config: output/realm.json

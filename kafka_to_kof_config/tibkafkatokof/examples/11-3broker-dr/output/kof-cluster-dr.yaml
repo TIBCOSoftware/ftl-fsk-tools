@@ -12,6 +12,8 @@ servers:
   drserver1:
   - realm:
       label: DR_SERVER
+      data: /var/tmp/kof/data/dr
+      initial.realm.config: output/realm.json
   - persistence:
       name: drpserver1
       data: /var/tmp/kof/data/dr/drpserver1
@@ -21,6 +23,8 @@ servers:
   drserver2:
   - realm:
       label: DR_SERVER
+      data: /var/tmp/kof/data/dr
+      initial.realm.config: output/realm.json
   - persistence:
       name: drpserver2
       data: /var/tmp/kof/data/dr/drpserver2
@@ -30,15 +34,11 @@ servers:
   drserver3:
   - realm:
       label: DR_SERVER
+      data: /var/tmp/kof/data/dr
+      initial.realm.config: output/realm.json
   - persistence:
       name: drpserver3
       data: /var/tmp/kof/data/dr/drpserver3
       kof.broker.properties: output/kof.broker.3.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
-services:
-  persistence:
-    data: /var/tmp/kof/data/dr
-  realm:
-    data: /var/tmp/kof/data/dr
-    initial.realm.config: output/realm.json

@@ -14,15 +14,11 @@ servers:
   SRV1:
   - realm:
       label: PRIMARY_SERVER
+      data: /var/tmp/kof/data
+      initial.realm.config: output-dr/realm.json
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1
       kof.broker.properties: output-dr/kof.broker.1.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
-services:
-  persistence:
-    data: /var/tmp/kof/data
-  realm:
-    data: /var/tmp/kof/data
-    initial.realm.config: output-dr/realm.json

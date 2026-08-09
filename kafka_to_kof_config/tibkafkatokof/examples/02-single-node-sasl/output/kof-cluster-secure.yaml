@@ -13,7 +13,9 @@ globals:
 
 servers:
   SRV1:
-  - realm: {}
+  - realm:
+      data: /var/tmp/kof/data
+      initial.realm.config: examples/02-single-node-sasl/output/realm.json
   - ftlserver.properties:
       user: internal
       password: internal-pw
@@ -25,9 +27,3 @@ servers:
       kof.broker.properties: examples/02-single-node-sasl/output/kof.broker.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
-services:
-  persistence:
-    data: /var/tmp/kof/data
-  realm:
-    data: /var/tmp/kof/data
-    initial.realm.config: examples/02-single-node-sasl/output/realm.json

@@ -38,6 +38,3 @@ servers:
       kof.broker.properties: output/kof.broker.9.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
-services:
-  persistence:
-    data: /var/tmp/kof/data

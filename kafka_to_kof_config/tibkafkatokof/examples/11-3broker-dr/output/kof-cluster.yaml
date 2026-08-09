@@ -18,6 +18,8 @@ servers:
   SRV1:
   - realm:
       label: PRIMARY_SERVER
+      data: /var/tmp/kof/data
+      initial.realm.config: output/realm.json
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1
@@ -27,6 +29,8 @@ servers:
   SRV2:
   - realm:
       label: PRIMARY_SERVER
+      data: /var/tmp/kof/data
+      initial.realm.config: output/realm.json
   - persistence:
       name: pserver2
       data: /var/tmp/kof/data/pserver2
@@ -36,15 +40,11 @@ servers:
   SRV3:
   - realm:
       label: PRIMARY_SERVER
+      data: /var/tmp/kof/data
+      initial.realm.config: output/realm.json
   - persistence:
       name: pserver3
       data: /var/tmp/kof/data/pserver3
       kof.broker.properties: output/kof.broker.3.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
-services:
-  persistence:
-    data: /var/tmp/kof/data
-  realm:
-    data: /var/tmp/kof/data
-    initial.realm.config: output/realm.json

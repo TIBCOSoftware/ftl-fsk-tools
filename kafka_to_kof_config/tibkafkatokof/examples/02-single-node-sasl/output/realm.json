@@ -44,7 +44,6 @@
            "backlog_full_wait": "0",
            "backlog_size": "256mb",
            "recv_spin_limit": "0",
-           "secure": true,
            "transport_type": "auto"
           },
           "description": "client primary transport for kof.cluster.0",
@@ -62,7 +61,6 @@
           "backlog_full_wait": "0",
           "backlog_size": "256mb",
           "recv_spin_limit": "0",
-          "secure": true,
           "transport_type": "auto"
          },
          "description": "cluster transport for kof.cluster.0",
@@ -81,7 +79,6 @@
           "backlog_full_wait": "0",
           "backlog_size": "256mb",
           "recv_spin_limit": "0",
-          "secure": true,
           "transport_type": "auto"
          },
          "description": "inter cluster transport for kof.cluster.0",
@@ -269,14 +266,14 @@
   "openssl_context_options": "0x17134000",
   "openssl_context_options_custom": "",
   "openssl_context_options_selection": "defaults",
-  "realm_is_secure": true,
+  "realm_is_secure": false,
   "routable_default_cluster": true,
   "server_client_heartbeat": 60,
   "server_timeout_client": 3600,
   "service_connection_policy": "default",
   "use_endpoint_store_for_inbox": true,
   "user_friendly_name": "",
-  "warn_about_insecure_transports": false
+  "warn_about_insecure_transports": true
  },
  "realm_server_version": "7.3.0",
  "server_time": "",

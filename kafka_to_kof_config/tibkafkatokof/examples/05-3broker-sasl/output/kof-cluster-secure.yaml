@@ -17,7 +17,9 @@ globals:
 
 servers:
   SRV1:
-  - realm: {}
+  - realm:
+      data: /data/kof
+      initial.realm.config: examples/05-3broker-sasl/output/realm.json
   - ftlserver.properties:
       user: internal
       password: internal-pw
@@ -32,7 +34,9 @@ servers:
       loglevel: connections:info;kof:info;durables:info;store:info
 
   SRV2:
-  - realm: {}
+  - realm:
+      data: /data/kof
+      initial.realm.config: examples/05-3broker-sasl/output/realm.json
   - ftlserver.properties:
       user: internal
       password: internal-pw
@@ -47,7 +51,9 @@ servers:
       loglevel: connections:info;kof:info;durables:info;store:info
 
   SRV3:
-  - realm: {}
+  - realm:
+      data: /data/kof
+      initial.realm.config: examples/05-3broker-sasl/output/realm.json
   - ftlserver.properties:
       user: internal
       password: internal-pw
@@ -61,9 +67,3 @@ servers:
       kof.broker.properties: examples/05-3broker-sasl/output/kof.broker.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 
-services:
-  persistence:
-    data: /data/kof
-  realm:
-    data: /data/kof
-    initial.realm.config: examples/05-3broker-sasl/output/realm.json
