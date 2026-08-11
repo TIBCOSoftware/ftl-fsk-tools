@@ -2,8 +2,20 @@
 # Regenerate all 18 tibkafkatokof example outputs using relative paths.
 set -euo pipefail
 
-TOOL=${TOOL:-/tmp/tibkafkatokof}
-EXAMPLES=examples
+# Resolve everything relative to this script so this copy regenerates its own
+# examples, not another checkout's.
+EXAMPLES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOOL_DIR="$(dirname "$EXAMPLES")"
+
+# Build the tool by default; set TOOL=/path/to/tibkafkatokof to use an existing binary.
+if [[ -z "${TOOL:-}" ]]; then
+  TOOL="$(mktemp -d)/tibkafkatokof"
+  (cd "$TOOL_DIR" && "${GO:-go}" build -o "$TOOL" .)
+fi
+if [[ ! -x "$TOOL" ]]; then
+  echo "error: TOOL=$TOOL is not an executable binary" >&2
+  exit 1
+fi
 
 run() {
   local ex="$1"; shift
