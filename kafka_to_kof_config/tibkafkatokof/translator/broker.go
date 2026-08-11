@@ -108,8 +108,13 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 	for n := range controllerSet {
 		internalListeners[n] = true
 	}
+	// Unlike a controller listener, the inter-broker listener is a normal entry in
+	// listeners that Kafka clients may also connect to, and pointing
+	// inter.broker.listener.name at the only client listener is a common setup.
+	// Treat it as internal only when another client listener remains; otherwise
+	// stripping it would leave cfg.Listeners empty and silently clear IsSecure.
 	ib := strings.ToUpper(strings.TrimSpace(raw["inter.broker.listener.name"]))
-	if ib != "" {
+	if ib != "" && hasOtherClientListener(raw["listeners"], controllerSet, ib) {
 		internalListeners[ib] = true
 	}
 	if len(internalListeners) > 0 {
@@ -382,6 +387,24 @@ func parsePerListenerClientAuth(raw map[string]string) map[string]bool {
 }
 
 // deriveAuthMethod maps Kafka protocol + SASL mechanism + client-auth flag to an AuthMethod string.
+// hasOtherClientListener reports whether listeners declares a non-controller
+// listener other than exclude.
+func hasOtherClientListener(listeners string, controllerSet map[string]bool, exclude string) bool {
+	for _, part := range splitCSV(listeners) {
+		p := strings.TrimSpace(part)
+		idx := strings.Index(p, "://")
+		if idx < 0 {
+			continue
+		}
+		n := strings.ToUpper(strings.TrimSpace(p[:idx]))
+		if n == exclude || controllerSet[n] {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func deriveAuthMethod(protocol, saslMech string, clientAuth bool) string {
 	switch strings.ToUpper(protocol) {
 	case "PLAINTEXT":

@@ -7,7 +7,7 @@
 globals:
   core.servers:
     SRV1: localhost:5689
-  auth.providers: file:/etc/ftl/users.txt
+  auth.providers: file:/etc/ftl/users.txt,file:output/kafka-users.txt
 
 servers:
   SRV1:

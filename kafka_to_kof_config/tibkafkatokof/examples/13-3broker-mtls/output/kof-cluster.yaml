@@ -11,12 +11,16 @@ globals:
     SRV1: kafka-mtls-1:5683
     SRV2: kafka-mtls-2:5684
     SRV3: kafka-mtls-3:5685
+  auth.providers: file:output/ftl-users.txt
 
 servers:
   SRV1:
   - realm:
       data: /var/tmp/kof/data
       initial.realm.config: output/realm.json
+  - ftlserver.properties:
+      user: internal
+      password: internal-pw
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1
@@ -27,6 +31,9 @@ servers:
   - realm:
       data: /var/tmp/kof/data
       initial.realm.config: output/realm.json
+  - ftlserver.properties:
+      user: internal
+      password: internal-pw
   - persistence:
       name: pserver2
       data: /var/tmp/kof/data/pserver2
@@ -37,6 +44,9 @@ servers:
   - realm:
       data: /var/tmp/kof/data
       initial.realm.config: output/realm.json
+  - ftlserver.properties:
+      user: internal
+      password: internal-pw
   - persistence:
       name: pserver3
       data: /var/tmp/kof/data/pserver3

@@ -140,8 +140,10 @@ func brokerConfigFromRaw(raw map[string]string, orderedKeys []string, sourceLabe
 	for n := range controllerSet {
 		internalListeners[n] = true
 	}
+	// Same rule as ParseBrokerConfig: the inter-broker listener is only internal
+	// when another client listener remains to serve Kafka clients.
 	ib := strings.ToUpper(strings.TrimSpace(raw["inter.broker.listener.name"]))
-	if ib != "" {
+	if ib != "" && hasOtherClientListener(raw["listeners"], controllerSet, ib) {
 		internalListeners[ib] = true
 	}
 	if len(internalListeners) > 0 {

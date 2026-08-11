@@ -7,12 +7,16 @@
 globals:
   core.servers:
     SRV1: localhost:5663
+  auth.providers: file:output/ftl-users.txt
 
 servers:
   SRV1:
   - realm:
       data: /var/tmp/kof/data
       initial.realm.config: output/realm.json
+  - ftlserver.properties:
+      user: internal
+      password: internal-pw
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1

@@ -60,7 +60,7 @@ var propSections = []struct {
 			{"listener.name.<listener>.<property>", DispAccept,
 				"Per-listener override of any property below. Honored for the listener it names."},
 			{"inter.broker.listener.name", DispNotApplicable,
-				"Inter-broker traffic uses the FTL servers' own connections, not a Kafka listener. Filtered out, not bound."},
+				"Inter-broker traffic uses the FTL servers' own connections, not a Kafka listener. Filtered out, not bound -- unless it is the only client-facing listener, in which case it is kept and bound for Kafka clients."},
 			{"controller.listener.names", DispNotApplicable,
 				"The controller quorum is FTL-native (not KRaft over a Kafka listener). Filtered out."},
 			{"control.plane.listener.name", DispNotApplicable,
