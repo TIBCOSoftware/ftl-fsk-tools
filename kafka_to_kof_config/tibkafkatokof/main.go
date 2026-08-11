@@ -319,6 +319,15 @@ func main() {
 		os.Exit(1)
 	}
 	if translator.ShouldWriteSecure(cfgs[0], secureOpts) {
+		// Wire the auto-generated FTL + Kafka users into the secure YAML's
+		// auth.providers, same as the base kof-cluster.yaml. Without this the secure
+		// YAML would be TLS-without-auth, which the FTL server rejects at startup.
+		if secureOpts.AuthUsersFile == "" {
+			secureOpts.AuthUsersFile = ftlUsersFile
+		}
+		if secureOpts.KafkaUsersFile == "" {
+			secureOpts.KafkaUsersFile = kafkaUsersFile
+		}
 		if err := translator.WriteKOFSecureYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, secureOpts, drOpts, clusterOpts); err != nil {
 			fmt.Fprintln(os.Stderr, "error writing kof-cluster-secure.yaml:", err)
 			os.Exit(1)

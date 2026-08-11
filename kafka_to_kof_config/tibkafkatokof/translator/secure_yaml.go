@@ -47,6 +47,10 @@ type SecureOpts struct {
 
 	// Basic (file-based) auth
 	AuthUsersFile string
+	// KafkaUsersFile is the tool's OWN auto-generated kafka-users.txt (inline JAAS
+	// PLAIN users), wired as a second file: provider -- same as the base
+	// kof-cluster.yaml. Not an operator input; populated from the generated file.
+	KafkaUsersFile string
 
 	// mTLS — needed when a Kafka mTLS listener is present
 	TLSServerTrust       string // tls.server.trust.file — CA used to verify inbound client certs
@@ -81,6 +85,12 @@ func detectAuth(cfg *BrokerConfig, opts SecureOpts) authFlags {
 	if opts.TLSServerTrust != "" {
 		ac.MTLS = true
 	}
+	// A secured cluster's FTL servers need auth (TLS requires auth). The base
+	// kof-cluster.yaml wires file:ftl-users whenever a users file exists; mirror that
+	// here so a non-SASL (pure SSL/mTLS) listener's secure YAML isn't TLS-without-auth.
+	if opts.AuthUsersFile != "" {
+		ac.FileAuth = true
+	}
 	return ac
 }
 
@@ -90,6 +100,9 @@ func buildAuthProviders(ac authFlags, opts SecureOpts) string {
 	var parts []string
 	if ac.FileAuth {
 		parts = append(parts, "file:"+opts.AuthUsersFile)
+		if opts.KafkaUsersFile != "" {
+			parts = append(parts, "file:"+opts.KafkaUsersFile)
+		}
 	}
 	if ac.MTLS {
 		parts = append(parts, "mtls")
