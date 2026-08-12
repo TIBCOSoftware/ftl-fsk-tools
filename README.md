@@ -37,6 +37,11 @@ cmake .. \
 cmake --build .
 ```
 
+> List the jars explicitly, colon-separated. A `libs/*` wildcard does **not** work here — the shell
+> expands it inside the `javac` rule and every jar after the first is passed as a flag
+> (`error: invalid flag: .../activation-1.1.1.jar`). The wildcard form is only valid for the
+> *runtime* `KAFKA_CLASSPATH` read by `run-kafka-to-kof.sh`.
+
 Outputs:
 - `build/tibkafkatokof` — ready-to-run binary
 - `build/kafka_to_kof_migration/classes/` — compiled Java class files (run via `run-kafka-to-kof.sh`)
