@@ -21,7 +21,8 @@ listener.name.<listener>.<property>  [accept]
     names.
 inter.broker.listener.name  [not-applicable]
     Inter-broker traffic uses the FTL servers' own connections, not a Kafka
-    listener. Filtered out, not bound.
+    listener. Filtered out, not bound -- unless it is the only client-facing
+    listener, in which case it is kept and bound for Kafka clients.
 controller.listener.names  [not-applicable]
     The controller quorum is FTL-native (not KRaft over a Kafka listener).
     Filtered out.

@@ -13,7 +13,7 @@ globals:
 servers:
   PSRV7:
   - ftl:
-      server: localhost:5794
+      server: localhost:5720
   - persistence:
       name: pserver7
       data: /var/tmp/kof/data/pserver7
@@ -22,7 +22,7 @@ servers:
 
   PSRV8:
   - ftl:
-      server: localhost:5725
+      server: localhost:5730
   - persistence:
       name: pserver8
       data: /var/tmp/kof/data/pserver8
@@ -31,7 +31,7 @@ servers:
 
   PSRV9:
   - ftl:
-      server: localhost:5799
+      server: localhost:5745
   - persistence:
       name: pserver9
       data: /var/tmp/kof/data/pserver9
