@@ -51,20 +51,50 @@ export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
 
 ### Option A — KRaft mode (Kafka 4.x, no ZooKeeper)
 
-Format storage on each broker (first time only):
+The `kafka-examples/` directory here holds ready-to-run KRaft configurations, so you do not have to
+supply your own to get started:
+
+| Layout | Config files | Bootstrap servers |
+|---|---|---|
+| `single-node` | `kafka-examples/single-node/server.properties` | `localhost:9092` |
+| `three-node` | `kafka-examples/three-node/server-1.properties` … `server-3.properties` | `localhost:9092,localhost:9093,localhost:9094` |
+
+Start either one with:
+
+```bash
+bash kafka-examples/start-kafka.sh single-node    # or: three-node
+```
+
+The script formats the KRaft storage directories, starts one broker per config file, waits until
+the cluster answers, and records the PIDs in `kafka-examples/kafka-examples.pid`. Pass `--clean` to
+wipe the data directories and start from empty. Stop with:
+
+```bash
+bash kafka-examples/stop-kafka.sh
+```
+
+Both layouts bind the same ports, so only one can run at a time. Broker data lives under
+`/tmp/kafka-examples/` and broker logs under `/tmp/kafka-examples/logs/`.
+
+Use `single-node` for the quickest path through this runbook; use `three-node` to exercise a
+multi-broker source that maps onto a 3-pserver KOF cluster.
+
+**To bring up your own brokers instead**, format each one and start it — all brokers in a KRaft
+cluster must be formatted with the *same* cluster ID:
 
 ```bash
 KAFKA_CLUSTER_ID="$($KAFKA_HOME/bin/kafka-storage.sh random-uuid)"
-$KAFKA_HOME/bin/kafka-storage.sh format -t "$KAFKA_CLUSTER_ID" -c /path/to/server.properties
-```
+for n in 1 2 3; do
+  $KAFKA_HOME/bin/kafka-storage.sh format -t "$KAFKA_CLUSTER_ID" -c /path/to/broker-$n/server.properties
+done
 
-Start each broker:
-
-```bash
 $KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-1/server.properties
 $KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-2/server.properties
 $KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-3/server.properties
 ```
+
+Formatting is a first-time-only step; restarting a formatted broker just needs
+`kafka-server-start.sh`.
 
 ### Option B — ZooKeeper mode (Kafka 2.x – 3.x)
 
@@ -106,6 +136,20 @@ tibkafkatokof \
   /path/to/broker-1/server.properties \
   /path/to/broker-2/server.properties \
   /path/to/broker-3/server.properties
+```
+
+If you started one of the example clusters in Step 1, point the tool at those config files:
+
+```bash
+# single-node
+tibkafkatokof --output-dir ./kof-output --realm-name my-realm --migration-config \
+  kafka-examples/single-node/server.properties
+
+# three-node
+tibkafkatokof --output-dir ./kof-output --realm-name my-realm --migration-config \
+  kafka-examples/three-node/server-1.properties \
+  kafka-examples/three-node/server-2.properties \
+  kafka-examples/three-node/server-3.properties
 ```
 
 This generates in `./kof-output/`:
