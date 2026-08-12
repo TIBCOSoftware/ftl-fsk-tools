@@ -173,8 +173,61 @@ separate upload step. See Step 3.
 
 ## Step 3 — Start the KOF servers
 
-Deploy `kof-cluster.yaml` (and `kof-cluster-auxN.yaml` if present) to your KOF hosts.
-Start one `tibftlserver` process per server entry:
+Deploy `kof-cluster.yaml` (and `kof-cluster-auxN.yaml` if present) to your KOF hosts, then start one
+`tibftlserver` process per `SRV` entry in that file. Step 2 decides how many there are:
+`tibkafkatokof` emits one server per source broker `server.properties` you passed it. The generated
+YAML also lists the exact commands in its header comment.
+
+### Single server
+
+One source broker produces a one-server cluster:
+
+```yaml
+# kof-cluster.yaml
+globals:
+  core.servers:
+    SRV1: localhost:5606
+
+servers:
+  SRV1:
+  - realm:
+      data: /var/tmp/kof/data
+      initial.realm.config: realm.json
+  - persistence:
+      name: pserver1
+      data: /var/tmp/kof/data/pserver1
+      kof.broker.properties: kof.broker.1.properties
+```
+
+Start it with a single command:
+
+```bash
+tibftlserver -c kof-cluster.yaml -n SRV1
+```
+
+That one process hosts both the realm and `pserver1`. There is no quorum to wait for — the cluster
+is ready once the pserver reports started. This pairs with the `single-node` Kafka example from
+Step 1 and is the quickest way through the rest of this runbook.
+
+> **Running KOF on the same host as the source Kafka?** Change the KOF broker port first.
+> `tibkafkatokof` copies each source broker's `listeners` verbatim into
+> `kof.broker.N.properties`, so a source broker on `localhost:9092` produces a KOF broker on
+> `localhost:9092` too — they fight over the port, and the migration would read from and write to
+> the same endpoint. There is no flag for this; edit the generated file before starting the server:
+>
+> ```bash
+> # in kof-output/kof.broker.1.properties
+> listeners=PLAINTEXT://localhost:19092
+> advertised.listeners=PLAINTEXT://localhost:19092
+> ```
+>
+> Then use the new port in `target.bootstrap.servers` in Step 4. This applies to the three-server
+> layout as well (`9092/9093/9094` on both sides). It is not an issue when KOF runs on its own
+> hosts, which is the normal production case.
+
+### Three servers
+
+Three source brokers produce `SRV1`, `SRV2`, and `SRV3`, each hosting one pserver:
 
 ```bash
 # On each KOF host — replace SRV1/SRV2/SRV3 with the server name for that host
@@ -204,7 +257,15 @@ servers:
 tibrealmadmin --server <KOF-HOST-1>:<realm-port> --realm my-realm upload-realm ./kof-output/realm.json
 ```
 
-The realm port is the first `core.servers` port in `kof-cluster.yaml` (e.g. `5600`).
+The realm port is that server's `core.servers` port in `kof-cluster.yaml` — `5606` in the
+single-server example above. `tibkafkatokof` picks these randomly from the range 5600–5699, so read
+them out of the generated file rather than assuming a value. Pass `--core-servers` in Step 2 to pin
+them instead:
+
+```bash
+--core-servers "SRV1=localhost:5600"                                        # single server
+--core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602"  # three servers
+```
 
 ---
 
@@ -224,6 +285,15 @@ Replace each `<KOF-HOST-N>` with the actual hostname of the corresponding KOF ps
 ```properties
 source.bootstrap.servers=kafka-broker-1:9092,kafka-broker-2:9092,kafka-broker-3:9092
 target.bootstrap.servers=kof-host-1:9092,kof-host-2:9092,kof-host-3:9092
+```
+
+For a one-server KOF cluster this is a single entry. If you moved the KOF broker off 9092 to avoid
+the same-host collision described in Step 3, use the port you chose — the ports here must match
+`advertised.listeners` in `kof.broker.N.properties`:
+
+```properties
+source.bootstrap.servers=localhost:9092
+target.bootstrap.servers=localhost:19092
 ```
 
 Every tunable key is listed in the [Config reference](#config-reference). If your source Kafka
