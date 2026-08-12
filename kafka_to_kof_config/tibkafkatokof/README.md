@@ -607,7 +607,12 @@ onto each per-server `- realm:` entry, since there is no shared `services:` bloc
 
 ### `realm.json`
 
-Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores per cluster (`kof.data.store.N`, `kof.sync.store.N`, `kof.meta.store.N`), and pservers distributed across clusters. Upload after the realm server starts:
+Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores per cluster (`kof.data.store.N`, `kof.sync.store.N`, `kof.meta.store.N`), and pservers distributed across clusters.
+
+No upload step is needed: every generated cluster YAML names this file through
+`initial.realm.config` on each per-server `- realm:` entry (see above), so `tibftlserver` seeds the
+realm from it at startup. Upload manually only to push a *hand-edited* `realm.json` to a realm that
+is already running:
 
 ```sh
 tibrealmadmin --server localhost:5600 --realm _default_realm upload-realm realm.json
