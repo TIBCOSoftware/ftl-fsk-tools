@@ -31,7 +31,7 @@ elif [[ -n "${TIBFTLSERVER_HOME:-}" && -x "$TIBFTLSERVER_HOME/tibftlserver" ]]; 
 else
   echo "ERROR: tibftlserver not found."
   echo "Set TIBFTLSERVER to the path of the tibftlserver binary, e.g.:"
-  echo "  export TIBFTLSERVER=/path/to/ftl/bin/tibftlserver"
+  echo "  export TIBFTLSERVER=/path/to/ftl/install/bin/tibftlserver"
   exit 1
 fi
 

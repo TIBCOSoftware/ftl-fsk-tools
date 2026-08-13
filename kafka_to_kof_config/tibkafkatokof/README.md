@@ -17,17 +17,17 @@ Translates a Kafka KRaft broker `server.properties` file into the FTL KOF artifa
 
 Requires Go 1.25+ (`toolchain go1.25.6` is pinned in `go.mod`).
 
-From the workspace root (`hydra/`):
+From this directory — the one holding `go.mod`:
+
+```sh
+go build .
+```
+
+Inside a Go workspace that lists this module, it can also be built by module path from the
+workspace root:
 
 ```sh
 go build tibco.com/ftl-support/tibkafkatokof
-```
-
-Or from the module directory:
-
-```sh
-cd hydra/golang/src/tibco.com/ftl/tibkafkatokof
-go build .
 ```
 
 ---
@@ -458,7 +458,7 @@ tibkafkatokof \
 
 ### 11 — 3-broker, PLAINTEXT + DR
 
-**Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT. Primary servers named `primary1/2/3`; DR servers named `drserver1/2/3`. Mirrors the layout of `hydra/samples/yaml/dr-simple/`.
+**Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT. Primary servers named `primary1/2/3`; DR servers named `drserver1/2/3`. Mirrors the layout of the FTL `dr-simple` sample cluster configuration.
 
 Generated reference output: [`examples/11-3broker-dr/output/`](examples/11-3broker-dr/output/)
 

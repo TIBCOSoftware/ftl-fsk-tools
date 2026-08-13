@@ -6,8 +6,8 @@ directly from the live brokers via the Kafka Admin API.
 
 ## Prerequisites
 
-- A running Kafka cluster (e.g. started with
-  `../../../tibkafkatokof_migration/demo/setup-kafka-kraft.sh`, or your own).
+- A running Kafka cluster — your own, or one started with the `demo/setup-kafka-kraft.sh` script
+  that ships with the Kafka-to-KOF migration tool.
 - `tibkafkatokof` built: `go build -o tibkafkatokof .`
 
 ## Command

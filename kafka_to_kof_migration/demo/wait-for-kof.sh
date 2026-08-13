@@ -7,9 +7,9 @@
 #
 #   GET /api/v1/persistence/clusters/<cluster>/quorum   -> QuorumStatus
 #
-# (tibrealmserver/realm/api/controller.go, handler monQuorum; the response is
-# realmmodel.QuorumStatus in realm/realmmodel/monitoring.go). The fields used
-# here are have_quorum, current_member_count and max_member_count.
+# served by the realm server's monQuorum handler. The response is a QuorumStatus
+# object; the fields used here are have_quorum, current_member_count and
+# max_member_count.
 #
 # Usage:
 #   bash demo/wait-for-kof.sh [--server localhost:5600]
