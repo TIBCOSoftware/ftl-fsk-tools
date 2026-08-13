@@ -56,7 +56,7 @@ The `demo/` directory contains a ready-to-run insurance provider scenario with 1
 ```bash
 export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
 export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
-export TIBFTLSERVER=/opt/tibco/ftl/bin/tibftlserver   # path to your tibftlserver binary
+export TIBFTLSERVER=/opt/tibco/ftl/current-version/bin/tibftlserver   # path to your tibftlserver binary
 
 # 1. Start source Kafka (3-broker KRaft cluster)
 bash demo/setup-kafka-kraft.sh
@@ -154,7 +154,7 @@ green as soon as `tibftlserver` starts — before the Kafka protocol layer is re
 ## Starting KOF brokers (demo helper)
 
 ```bash
-export TIBFTLSERVER=/opt/tibco/ftl/bin/tibftlserver   # or put tibftlserver on PATH
+export TIBFTLSERVER=/opt/tibco/ftl/current-version/bin/tibftlserver   # or put tibftlserver on PATH
 bash demo/start-kof-brokers.sh --output-dir ./kof-output
 ```
 

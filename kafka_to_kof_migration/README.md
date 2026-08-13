@@ -36,7 +36,7 @@ here first, then set:
 ```bash
 export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec   # your Kafka installation
 export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
-export FTL_HOME=/path/to/ftl/install                      # directory holding bin/ and lib/
+export FTL_HOME=/opt/tibco/ftl/current-version            # directory holding bin/ and lib/
 export DYLD_LIBRARY_PATH=$FTL_HOME/lib                    # Linux: LD_LIBRARY_PATH
 export PATH=$FTL_HOME/bin:$PATH
 ```
