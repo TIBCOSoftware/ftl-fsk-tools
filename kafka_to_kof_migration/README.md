@@ -27,7 +27,7 @@ Already have a Kafka cluster you want to migrate? Skip to
 
 - JDK 11+
 - A Kafka installation, for its client JARs and CLI scripts
-- `tibkafkatokof` and `tibftlserver` on your `PATH`
+- `tibkafkatokof`, `tibftlserver`, and `tibftladmin` on your `PATH`
 
 Every command below is run **from this directory** — the one holding `run-kafka-to-kof.sh`. `cd`
 here first, then set:
@@ -68,6 +68,24 @@ Three things that will bite you if you skip them:
    clearing it, so a 1-broker run into a directory left over from a 3-broker run leaves stale
    `kof.broker.2.properties` and `kof.broker.3.properties` sitting next to a correct 1-pserver
    `realm.json`. Every path below runs `rm -rf ./kof-output` first.
+
+4. **Stop KOF with `tibftladmin`, never `kill`.** `tibftlserver` runs its work in child processes —
+   `tibmux`, `tibpserver`, `tibrserver`. Killing the parent orphans them, and they keep holding the
+   FTL server port, so the *next* server you start fails its mux with
+   `exit status 99`/`fatal startup error` and every `tibftladmin` command against it dies with
+   `EOF`. The symptom looks like a broken admin tool; the cause is a leftover from the previous
+   run. Use `-x` (one server) or `-xc` (whole cluster), as each path below does. If you already
+   killed one, clean up with:
+
+   ```bash
+   pkill -f tibmux; pkill -f tibpserver; pkill -f tibrserver
+   ```
+
+   To check a server is up before migrating, ask it:
+
+   ```bash
+   tibftladmin -ftls http://localhost:5600 --status
+   ```
 
 ---
 
@@ -117,7 +135,6 @@ rm -f kof-output/*.bak
 ```bash
 rm -rf /var/tmp/kof/data
 tibftlserver -c kof-output/kof-cluster.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
-echo $! > /tmp/kof-SRV1.pid
 sleep 15
 grep -c "elected quorum leader" /tmp/kof-SRV1.log
 ```
@@ -156,9 +173,14 @@ Check that `planned` equals `published` in the summary.
 ### 9. Shut down
 
 ```bash
-kill "$(cat /tmp/kof-SRV1.pid)"
+tibftladmin -ftls http://localhost:5600 -x
 bash kafka-examples/stop-kafka.sh
 ```
+
+`-x` asks the FTL server to shut itself down, and it takes the **FTL server port** — `5600`, the
+`core.servers` port pinned in step 3 — not the KOF listener port `19092`. Do not `kill` the
+`tibftlserver` process instead: it leaves `tibmux`, `tibpserver`, and `tibrserver` orphaned and
+still holding 5600, and the next run's mux then dies with `exit status 99`.
 
 ---
 
@@ -215,10 +237,8 @@ rm -f kof-output/*.bak
 
 ```bash
 rm -rf /var/tmp/kof/data
-rm -f /tmp/kof.pid
 for n in 1 2 3; do
   tibftlserver -c kof-output/kof-cluster.yaml -n SRV$n > /tmp/kof-SRV$n.log 2>&1 &
-  echo $! >> /tmp/kof.pid
 done
 sleep 40
 grep -h "Full quorum" /tmp/kof-SRV*.log
@@ -255,9 +275,15 @@ empty — kill the servers, `rm -rf /var/tmp/kof/data`, and repeat this step.
 ### 9. Shut down
 
 ```bash
-while read -r p; do kill "$p"; done < /tmp/kof.pid
+tibftladmin -ftls http://localhost:5600 -xc
 bash kafka-examples/stop-kafka.sh
 ```
+
+`-xc` stops the whole cluster, so one command against any one server brings down all three —
+`5600` here is the **FTL server port** for `SRV1` from step 3, not the KOF listener port `19092`.
+Do not `kill` the `tibftlserver` processes instead: that leaves `tibmux`, `tibpserver`, and
+`tibrserver` orphaned and still holding 5600–5602, and the next run's mux then dies with
+`exit status 99`.
 
 ---
 
@@ -325,7 +351,6 @@ rm -f kof-output/*.bak
 ```bash
 rm -rf /var/tmp/kof/data
 tibftlserver -c kof-output/kof-cluster.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
-echo $! > /tmp/kof-SRV1.pid
 sleep 15
 grep -c "elected quorum leader" /tmp/kof-SRV1.log
 ```
@@ -354,11 +379,14 @@ grep -c "elected quorum leader" /tmp/kof-SRV1.log
 ### 9. Shut down
 
 ```bash
-kill "$(cat /tmp/kof-SRV1.pid)"
+tibftladmin -ftls http://localhost:5600 -x
 bash kafka-examples/stop-kafka-zk.sh
 ```
 
-`stop-kafka-zk.sh` stops the brokers before ZooKeeper.
+`-x` takes the **FTL server port** — `5600`, the `core.servers` port pinned in step 3 — not the KOF
+listener port `19092`. Do not `kill` the `tibftlserver` process instead: it leaves `tibmux`,
+`tibpserver`, and `tibrserver` orphaned and still holding 5600. `stop-kafka-zk.sh` stops the
+brokers before ZooKeeper.
 
 ---
 
@@ -415,10 +443,8 @@ rm -f kof-output/*.bak
 
 ```bash
 rm -rf /var/tmp/kof/data
-rm -f /tmp/kof.pid
 for n in 1 2 3; do
   tibftlserver -c kof-output/kof-cluster.yaml -n SRV$n > /tmp/kof-SRV$n.log 2>&1 &
-  echo $! >> /tmp/kof.pid
 done
 sleep 40
 grep -h "Full quorum" /tmp/kof-SRV*.log
@@ -448,9 +474,15 @@ grep -h "Full quorum" /tmp/kof-SRV*.log
 ### 9. Shut down
 
 ```bash
-while read -r p; do kill "$p"; done < /tmp/kof.pid
+tibftladmin -ftls http://localhost:5600 -xc
 bash kafka-examples/stop-kafka-zk.sh
 ```
+
+`-xc` stops the whole cluster, so one command against any one server brings down all three —
+`5600` here is the **FTL server port** for `SRV1` from step 3, not the KOF listener port `19092`.
+Do not `kill` the `tibftlserver` processes instead: that leaves `tibmux`, `tibpserver`, and
+`tibrserver` orphaned and still holding 5600–5602. `stop-kafka-zk.sh` stops the brokers before
+ZooKeeper.
 
 ---
 
