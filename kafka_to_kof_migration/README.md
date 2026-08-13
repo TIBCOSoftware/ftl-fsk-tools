@@ -28,6 +28,7 @@ Already have a Kafka cluster you want to migrate? Skip to
 - JDK 11+
 - A Kafka installation, for its client JARs and CLI scripts
 - `tibkafkatokof`, `tibftlserver`, and `tibftladmin` on your `PATH`
+- `curl`, used by `demo/wait-for-kof.sh` to poll the realm server
 
 Every command below is run **from this directory** — the one holding `run-kafka-to-kof.sh`. `cd`
 here first, then set:
@@ -51,7 +52,7 @@ variables itself, so you do not have to — only a Kafka CLI command you type by
 
 ## Before you start
 
-Three things that will bite you if you skip them:
+Four things that will bite you if you skip them:
 
 1. **KOF cannot share a port with the source Kafka.** `tibkafkatokof` copies each source broker's
    `listeners` verbatim, so a source broker on `localhost:9092` produces a KOF broker on
@@ -83,7 +84,9 @@ Three things that will bite you if you skip them:
    pkill -f tibmux; pkill -f tibpserver; pkill -f tibrserver
    ```
 
-   To check a server is up before migrating, ask it:
+   To check a single server is up, ask it — `--status` answers only for the server you point at,
+   which is why step 5 of each path uses `demo/wait-for-kof.sh` instead to wait on the whole
+   persistence cluster:
 
    ```bash
    tibftladmin -ftls http://localhost:5600 --status
@@ -137,12 +140,17 @@ rm -f kof-output/*.bak
 ```bash
 rm -rf /var/tmp/kof/data
 tibftlserver -c kof-output/kof-cluster.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
-sleep 15
-grep -c "elected quorum leader" /tmp/kof-SRV1.log
+bash demo/wait-for-kof.sh --server localhost:5600
 ```
 
-That one process hosts the realm and `pserver1`. The `grep` should print `3` — one election each
-for the config cluster, the default cluster, and `kof.cluster.0`.
+That one process hosts the realm and `pserver1`. `wait-for-kof.sh` polls the realm server's
+monitoring REST API — `GET /api/v1/persistence/clusters/kof.cluster.0/quorum` — and returns as
+soon as the cluster has quorum with every pserver joined, so there is nothing to guess at. It
+prints `✓ kof.cluster.0 has quorum: 1/1 members` and exits 0; on failure it exits 1, and the
+migration in step 6 never runs against a half-started cluster.
+
+`--server` is the **FTL server** port from `core.servers` in `kof-cluster.yaml`, not the KOF
+Kafka listener port.
 
 No realm upload is needed. Every `- realm:` entry in the generated YAML carries
 `initial.realm.config: realm.json`, so `tibftlserver` seeds the realm at startup.
@@ -247,16 +255,25 @@ rm -rf /var/tmp/kof/data
 for n in 1 2 3; do
   tibftlserver -c kof-output/kof-cluster.yaml -n SRV$n > /tmp/kof-SRV$n.log 2>&1 &
 done
-sleep 40
-grep -h "Full quorum" /tmp/kof-SRV*.log
+bash demo/wait-for-kof.sh --server localhost:5600
 ```
 
-You should see three `Full quorum` lines — one for `_config_cluster`, one for
-`ftl.default.cluster`, one for `kof.cluster.0`. Do not migrate until they appear. In production
-each `tibftlserver` runs on its own host, with the same `kof-cluster.yaml` deployed to all three.
+`wait-for-kof.sh` polls the realm server's monitoring REST API —
+`GET /api/v1/persistence/clusters/kof.cluster.0/quorum` — and returns as soon as the cluster has
+quorum with all three pservers joined. It prints `✓ kof.cluster.0 has quorum: 3/3 members` and
+exits 0. Note `3/3`: quorum alone is reached with two of three members, and migrating then leaves
+the third to catch up, so the script waits for the full set.
 
-If you instead see `Quorum contains an inadequate number of members`, the data directory was not
-empty — kill the servers, `rm -rf /var/tmp/kof/data`, and repeat this step.
+`--server` is the **FTL server** port from `core.servers` in `kof-cluster.yaml`, not the KOF
+Kafka listener port. Any of the three works; SRV1 is just the first.
+
+On failure the script exits 1 rather than letting step 6 migrate into a half-started cluster. The
+usual cause is a `/var/tmp/kof/data` left over from a run with a different number of servers,
+which shows up in the logs as `Quorum contains an inadequate number of members` — stop the servers
+(step 9), `rm -rf /var/tmp/kof/data`, and repeat this step.
+
+In production each `tibftlserver` runs on its own host, with the same `kof-cluster.yaml` deployed
+to all three.
 
 ### 6. Dry run
 
@@ -363,9 +380,11 @@ rm -f kof-output/*.bak
 ```bash
 rm -rf /var/tmp/kof/data
 tibftlserver -c kof-output/kof-cluster.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
-sleep 15
-grep -c "elected quorum leader" /tmp/kof-SRV1.log
+bash demo/wait-for-kof.sh --server localhost:5600
 ```
+
+Waits for `✓ kof.cluster.0 has quorum: 1/1 members`, then exits 0. See
+[Path 1 step 5](#path-1--single-node-kafka-kraft) for what it is polling.
 
 ### 6. Dry run
 
@@ -463,9 +482,11 @@ rm -rf /var/tmp/kof/data
 for n in 1 2 3; do
   tibftlserver -c kof-output/kof-cluster.yaml -n SRV$n > /tmp/kof-SRV$n.log 2>&1 &
 done
-sleep 40
-grep -h "Full quorum" /tmp/kof-SRV*.log
+bash demo/wait-for-kof.sh --server localhost:5600
 ```
+
+Waits for `✓ kof.cluster.0 has quorum: 3/3 members`, then exits 0. See
+[Path 2 step 5](#path-2--three-node-kafka-kraft) for what it is polling.
 
 ### 6. Dry run
 
@@ -545,7 +566,9 @@ Then:
 2. Deploy `kof-cluster.yaml` (plus any `kof-cluster-auxN.yaml`), `realm.json`, and the
    `kof.broker.N.properties` files to your KOF hosts, and start one `tibftlserver -c
    kof-cluster.yaml -n SRVn` per server entry. On separate hosts there is no port collision, so no
-   `sed` step. Wait for `Full quorum`.
+   `sed` step. Wait for the cluster to form with
+   `bash demo/wait-for-kof.sh --server <kof-host-1>:5600`, pointing at the `core.servers` port of
+   any one of them.
 
 3. Edit `kof-output/kafka-to-kof.properties` and replace each `<KOF-HOST-N>` placeholder in
    `target.bootstrap.servers` with the real hostname. The ports there must match
