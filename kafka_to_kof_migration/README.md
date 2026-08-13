@@ -1,11 +1,22 @@
 # Kafka to KOF Migration
 
-This tool copies all records from a source Apache Kafka cluster to a target KOF (Kafka-on-FTL) cluster. It discovers all topics and partitions, creates them on the target, and replicates every record from the beginning offset.
+This tool copies all records from a source Apache Kafka cluster to a target KOF (Kafka-on-FTL)
+cluster. It discovers every topic and partition, creates them on the target, and replicates every
+record from the beginning offset.
 
-Steps 1 through 7 below are a complete migration runbook. Nothing here needs Node.js, a browser, or
-the `ui/` directory — only a shell, a JDK, and the Kafka client JARs. For every flag and for
-running the replicator without the wrapper script, see the
-[Command line reference](#command-line-reference).
+Pick one of the four paths below and paste the commands in order. Each path is self-contained —
+start a Kafka cluster, load it with demo data, generate the KOF configuration, start KOF, migrate,
+verify, shut down. Nothing here needs Node.js or a browser.
+
+| Path | Source cluster | Kafka version | Verified |
+|---|---|---|---|
+| **Path 1** | Single-node, KRaft | 4.x | Yes, end to end |
+| **Path 2** | Three-node, KRaft | 4.x | Yes, end to end |
+| **Path 3** | Single-node, ZooKeeper | 3.9 or earlier | **No — written from Kafka docs, not executed** |
+| **Path 4** | Three-node, ZooKeeper | 3.9 or earlier | **No — written from Kafka docs, not executed** |
+
+Already have a Kafka cluster you want to migrate? Skip to
+[Migrating from an existing cluster](#migrating-from-an-existing-cluster).
 
 > There is also an optional web dashboard that runs the same migration and streams its output to a
 > browser. See [README-UI.md](README-UI.md).
@@ -15,120 +26,443 @@ running the replicator without the wrapper script, see the
 ## Prerequisites
 
 - JDK 11+
-- A Kafka installation (for its client JARs). All required JARs ship with Kafka 4.x under `$KAFKA_HOME/libs/`:
-  - `kafka-clients-4.2.0.jar`
-  - `slf4j-api-1.7.36.jar`
-  - `log4j-slf4j-impl-2.25.3.jar`, `log4j-api-2.25.3.jar`, `log4j-core-2.25.3.jar`
-- A running source Kafka cluster (the one you are migrating from).
-- A running target KOF cluster (the one you are migrating to) — see Step 3.
+- A Kafka installation, for its client JARs and CLI scripts
+- `tibkafkatokof` and `tibftlserver` on your `PATH`
 
-Set these in your shell before running any commands:
+Every command below is run **from this directory** — the one holding `run-kafka-to-kof.sh`. `cd`
+here first, then set:
 
 ```bash
-export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
+export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec   # your Kafka installation
 export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
+export FTL_HOME=/path/to/ftl/install                      # directory holding bin/ and lib/
+export DYLD_LIBRARY_PATH=$FTL_HOME/lib                    # Linux: LD_LIBRARY_PATH
+export PATH=$FTL_HOME/bin:$PATH
 ```
 
-The wildcard picks up all JARs in `libs/` — no need to list them individually.
-
-> **Note:** `KAFKA_CLASSPATH` is only read by the migration tool (`run-kafka-to-kof.sh`) and is not
-> needed by the Kafka CLI scripts (`kafka-server-start.sh`, `kafka-topics.sh`, etc.). Keeping it out
-> of `CLASSPATH` avoids classpath conflicts when running those CLI tools.
+`KAFKA_CLASSPATH` is read by `run-kafka-to-kof.sh` and by `demo/populate-kafka.sh`; both exit 1
+without it. It is deliberately kept out of `CLASSPATH`, because the Kafka CLI scripts build their
+own classpath and an older `snakeyaml` reachable through `CLASSPATH` makes them fail with
+`NoSuchMethodError`.
 
 ---
 
-## Step 1 — Ensure your source Kafka cluster is running
+## Before you start
 
-The migration tool reads from a live Kafka cluster, so the brokers must be accessible before you
-start. **If your Kafka cluster is already running and reachable, skip to Step 2** — you do not need
-to restart or reconfigure anything to migrate from it.
+Three things that will bite you if you skip them:
 
-To bring up a cluster yourself, set `KAFKA_HOME` first:
+1. **KOF cannot share a port with the source Kafka.** `tibkafkatokof` copies each source broker's
+   `listeners` verbatim, so a source broker on `localhost:9092` produces a KOF broker on
+   `localhost:9092` too. Both must run at the same time during a migration, so every path below
+   moves KOF to `19092`/`19093`/`19094` with a `sed` command. This is only an issue when both run
+   on one host; in production KOF has its own hosts and no edit is needed.
+
+2. **Clear the KOF data directory when the cluster shape changes.** `initial.realm.config` seeds
+   the realm only on a *first* start with an empty data directory. If `/var/tmp/kof/data` still
+   holds state from an earlier run — especially one with a different number of servers — the new
+   `realm.json` is ignored, and you get a realm with the old pserver count or a
+   `Quorum contains an inadequate number of members` failure. Every path below runs
+   `rm -rf /var/tmp/kof/data` before starting KOF.
+
+3. **Use a fresh output directory per run.** `tibkafkatokof` writes into `--output-dir` without
+   clearing it, so a 1-broker run into a directory left over from a 3-broker run leaves stale
+   `kof.broker.2.properties` and `kof.broker.3.properties` sitting next to a correct 1-pserver
+   `realm.json`. Every path below runs `rm -rf ./kof-output` first.
+
+---
+
+## Path 1 — Single-node Kafka (KRaft)
+
+One Kafka broker on `localhost:9092`, one KOF server on `localhost:19092`. This is the quickest
+path and the one to use if you are trying the tool for the first time.
+
+### 1. Start the Kafka broker
 
 ```bash
-export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
+bash kafka-examples/start-kafka.sh single-node --clean
 ```
 
-### Option A — KRaft mode (Kafka 4.x, no ZooKeeper)
-
-The `kafka-examples/` directory here holds ready-to-run KRaft configurations, so you do not have to
-supply your own to get started:
-
-| Layout | Config files | Bootstrap servers |
-|---|---|---|
-| `single-node` | `kafka-examples/single-node/server.properties` | `localhost:9092` |
-| `three-node` | `kafka-examples/three-node/server-1.properties` … `server-3.properties` | `localhost:9092,localhost:9093,localhost:9094` |
-
-Start either one with:
+### 2. Create topics and load demo data
 
 ```bash
-bash kafka-examples/start-kafka.sh single-node    # or: three-node
+bash demo/create-topics.sh --bootstrap-server localhost:9092
+bash demo/populate-kafka.sh --bootstrap-server localhost:9092 --messages 1000
 ```
 
-The script formats the KRaft storage directories, starts one broker per config file, waits until
-the cluster answers, and records the PIDs in `kafka-examples/kafka-examples.pid`. Pass `--clean` to
-wipe the data directories and start from empty. Stop with:
+Ten `insurance.*` topics with 3 partitions each, 1000 messages per topic.
+
+### 3. Generate the KOF configuration
 
 ```bash
+rm -rf ./kof-output
+tibkafkatokof \
+  --output-dir ./kof-output \
+  --realm-name my-realm \
+  --migration-config \
+  --core-servers "SRV1=localhost:5600" \
+  kafka-examples/single-node/server.properties
+```
+
+### 4. Move the KOF broker off port 9092
+
+```bash
+sed -E -i.bak 's/:909([0-9])/:1909\1/' kof-output/kof.broker.*.properties
+sed -E -i.bak 's|^target\.bootstrap\.servers=.*|target.bootstrap.servers=localhost:19092|' \
+  kof-output/kafka-to-kof.properties
+rm -f kof-output/*.bak
+```
+
+### 5. Start the KOF server
+
+```bash
+rm -rf /var/tmp/kof/data
+tibftlserver -c kof-output/kof-cluster.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
+echo $! > /tmp/kof-SRV1.pid
+sleep 15
+grep -c "elected quorum leader" /tmp/kof-SRV1.log
+```
+
+That one process hosts the realm and `pserver1`. The `grep` should print `3` — one election each
+for the config cluster, the default cluster, and `kof.cluster.0`.
+
+No realm upload is needed. Every `- realm:` entry in the generated YAML carries
+`initial.realm.config: realm.json`, so `tibftlserver` seeds the realm at startup.
+
+### 6. Dry run
+
+```bash
+./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties --dry-run
+```
+
+Reads the source and writes nothing. Confirm the topic list and the per-topic counts.
+
+### 7. Migrate
+
+```bash
+./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties
+```
+
+Check that `planned` equals `published` in the summary.
+
+### 8. Verify against KOF directly
+
+```bash
+( unset CLASSPATH KAFKA_CLASSPATH
+  $KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list
+  $KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 \
+    --topic insurance.fraud.alerts --from-beginning --max-messages 3 --timeout-ms 30000 )
+```
+
+### 9. Shut down
+
+```bash
+kill "$(cat /tmp/kof-SRV1.pid)"
 bash kafka-examples/stop-kafka.sh
 ```
 
-Both layouts bind the same ports, so only one can run at a time. Broker data lives under
-`/tmp/kafka-examples/` and broker logs under `/tmp/kafka-examples/logs/`.
+---
 
-Use `single-node` for the quickest path through this runbook; use `three-node` to exercise a
-multi-broker source that maps onto a 3-pserver KOF cluster.
+## Path 2 — Three-node Kafka (KRaft)
 
-**To bring up your own brokers instead**, format each one and start it — all brokers in a KRaft
-cluster must be formatted with the *same* cluster ID:
+Three Kafka brokers on `localhost:9092`, `:9093`, `:9094`, and three KOF servers on `:19092`,
+`:19093`, `:19094`. Same steps as Path 1, three of everything. Running all six processes on one
+host is fine for a trial.
+
+### 1. Start the three Kafka brokers
 
 ```bash
-KAFKA_CLUSTER_ID="$($KAFKA_HOME/bin/kafka-storage.sh random-uuid)"
+bash kafka-examples/start-kafka.sh three-node --clean
+```
+
+Both layouts bind the same ports, so stop a `single-node` cluster before starting this one.
+
+### 2. Create topics and load demo data
+
+```bash
+bash demo/create-topics.sh --bootstrap-server localhost:9092
+bash demo/populate-kafka.sh --bootstrap-server localhost:9092 --messages 1000
+```
+
+`create-topics.sh` creates the topics with replication factor 1. That is intentional — it keeps the
+script identical across layouts. Partitions still spread across all three brokers.
+
+### 3. Generate the KOF configuration
+
+```bash
+rm -rf ./kof-output
+tibkafkatokof \
+  --output-dir ./kof-output \
+  --realm-name my-realm \
+  --migration-config \
+  --core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602" \
+  kafka-examples/three-node/server-1.properties \
+  kafka-examples/three-node/server-2.properties \
+  kafka-examples/three-node/server-3.properties
+```
+
+One source broker file in, one KOF server (`SRV1`, `SRV2`, `SRV3`) and one pserver out.
+
+### 4. Move the KOF brokers off 9092–9094
+
+```bash
+sed -E -i.bak 's/:909([0-9])/:1909\1/' kof-output/kof.broker.*.properties
+sed -E -i.bak 's|^target\.bootstrap\.servers=.*|target.bootstrap.servers=localhost:19092,localhost:19093,localhost:19094|' \
+  kof-output/kafka-to-kof.properties
+rm -f kof-output/*.bak
+```
+
+### 5. Start the three KOF servers
+
+```bash
+rm -rf /var/tmp/kof/data
+rm -f /tmp/kof.pid
 for n in 1 2 3; do
-  $KAFKA_HOME/bin/kafka-storage.sh format -t "$KAFKA_CLUSTER_ID" -c /path/to/broker-$n/server.properties
+  tibftlserver -c kof-output/kof-cluster.yaml -n SRV$n > /tmp/kof-SRV$n.log 2>&1 &
+  echo $! >> /tmp/kof.pid
 done
-
-$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-1/server.properties
-$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-2/server.properties
-$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-3/server.properties
+sleep 40
+grep -h "Full quorum" /tmp/kof-SRV*.log
 ```
 
-Formatting is a first-time-only step; restarting a formatted broker just needs
-`kafka-server-start.sh`.
+You should see three `Full quorum` lines — one for `_config_cluster`, one for
+`ftl.default.cluster`, one for `kof.cluster.0`. Do not migrate until they appear. In production
+each `tibftlserver` runs on its own host, with the same `kof-cluster.yaml` deployed to all three.
 
-### Option B — ZooKeeper mode (Kafka 2.x – 3.x)
+If you instead see `Quorum contains an inadequate number of members`, the data directory was not
+empty — kill the servers, `rm -rf /var/tmp/kof/data`, and repeat this step.
 
-Start ZooKeeper first:
+### 6. Dry run
 
 ```bash
-$KAFKA_HOME/bin/zookeeper-server-start.sh $KAFKA_HOME/config/zookeeper.properties
+./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties --dry-run
 ```
 
-Then start each broker:
+### 7. Migrate
 
 ```bash
-$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-1/server.properties
-$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-2/server.properties
-$KAFKA_HOME/bin/kafka-server-start.sh /path/to/broker-3/server.properties
+./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties
 ```
 
-### Verify the cluster
-
-Whichever mode you use, confirm the cluster is healthy before migrating:
+### 8. Verify against KOF directly
 
 ```bash
-unset CLASSPATH   # required — older JARs in $CLASSPATH cause NoSuchMethodError
-$KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server <broker-host>:9092 --list
+( unset CLASSPATH KAFKA_CLASSPATH
+  $KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list
+  $KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 \
+    --topic insurance.fraud.alerts --from-beginning --max-messages 3 --timeout-ms 30000 )
+```
+
+### 9. Shut down
+
+```bash
+while read -r p; do kill "$p"; done < /tmp/kof.pid
+bash kafka-examples/stop-kafka.sh
 ```
 
 ---
 
-## Step 2 — Generate KOF configuration from your Kafka server.properties
+## Path 3 — Single-node Kafka (ZooKeeper)
 
-Run `tibkafkatokof` (from the `kafka_to_kof_config/` directory of this repo) against your Kafka
-broker `server.properties` files — one file per broker:
+> **Not executed.** The configuration files and the start/stop scripts for Paths 3 and 4 were
+> written from the standard Kafka 3.x configuration and have not been run against a live
+> ZooKeeper — no Kafka 3.x installation was available. **Kafka 4.x removed ZooKeeper entirely**, so
+> these paths need Kafka 3.9 or earlier; `start-kafka-zk.sh` detects a 4.x installation and exits
+> with an explanation rather than failing obscurely. What *was* verified is the part that matters
+> most here: `tibkafkatokof` translates both ZooKeeper example layouts correctly, emitting the
+> right pserver count and routing `zookeeper.connect` and `zookeeper.connection.timeout.ms` to
+> `unsupported.properties`. Steps 3 onward are therefore the same commands verified in Path 1.
+
+Point `KAFKA_HOME` at a Kafka 3.9-or-earlier installation for this path:
 
 ```bash
+export KAFKA_HOME=/path/to/kafka_2.13-3.9.1
+export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
+```
+
+### 1. Start ZooKeeper and the broker
+
+```bash
+bash kafka-examples/start-kafka-zk.sh single-node --clean
+```
+
+ZooKeeper on `localhost:2181`, one broker on `localhost:9092`. The script starts ZooKeeper first,
+waits for it to accept connections, then starts the broker.
+
+### 2. Create topics and load demo data
+
+```bash
+bash demo/create-topics.sh --bootstrap-server localhost:9092
+bash demo/populate-kafka.sh --bootstrap-server localhost:9092 --messages 1000
+```
+
+### 3. Generate the KOF configuration
+
+```bash
+rm -rf ./kof-output
+tibkafkatokof \
+  --output-dir ./kof-output \
+  --realm-name my-realm \
+  --migration-config \
+  --core-servers "SRV1=localhost:5600" \
+  kafka-examples/zk-single-node/server.properties
+```
+
+The `zookeeper.*` keys have no KOF equivalent — KOF has no ZooKeeper. They are written to
+`kof-output/unsupported.properties` and dropped from the generated broker config. That is expected
+and does not affect the migration: the replicator talks to the source brokers, not to ZooKeeper.
+
+### 4. Move the KOF broker off port 9092
+
+```bash
+sed -E -i.bak 's/:909([0-9])/:1909\1/' kof-output/kof.broker.*.properties
+sed -E -i.bak 's|^target\.bootstrap\.servers=.*|target.bootstrap.servers=localhost:19092|' \
+  kof-output/kafka-to-kof.properties
+rm -f kof-output/*.bak
+```
+
+### 5. Start the KOF server
+
+```bash
+rm -rf /var/tmp/kof/data
+tibftlserver -c kof-output/kof-cluster.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
+echo $! > /tmp/kof-SRV1.pid
+sleep 15
+grep -c "elected quorum leader" /tmp/kof-SRV1.log
+```
+
+### 6. Dry run
+
+```bash
+./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties --dry-run
+```
+
+### 7. Migrate
+
+```bash
+./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties
+```
+
+### 8. Verify against KOF directly
+
+```bash
+( unset CLASSPATH KAFKA_CLASSPATH
+  $KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list
+  $KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 \
+    --topic insurance.fraud.alerts --from-beginning --max-messages 3 --timeout-ms 30000 )
+```
+
+### 9. Shut down
+
+```bash
+kill "$(cat /tmp/kof-SRV1.pid)"
+bash kafka-examples/stop-kafka-zk.sh
+```
+
+`stop-kafka-zk.sh` stops the brokers before ZooKeeper.
+
+---
+
+## Path 4 — Three-node Kafka (ZooKeeper)
+
+> **Not executed** — same caveat as Path 3. Requires Kafka 3.9 or earlier.
+
+```bash
+export KAFKA_HOME=/path/to/kafka_2.13-3.9.1
+export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
+```
+
+### 1. Start ZooKeeper and the three brokers
+
+```bash
+bash kafka-examples/start-kafka-zk.sh three-node --clean
+```
+
+One ZooKeeper on `localhost:2181` serving all three brokers (`:9092`, `:9093`, `:9094`). A single
+ZooKeeper is a deliberate simplification for a local example — production uses an ensemble of
+three or five.
+
+### 2. Create topics and load demo data
+
+```bash
+bash demo/create-topics.sh --bootstrap-server localhost:9092
+bash demo/populate-kafka.sh --bootstrap-server localhost:9092 --messages 1000
+```
+
+### 3. Generate the KOF configuration
+
+```bash
+rm -rf ./kof-output
+tibkafkatokof \
+  --output-dir ./kof-output \
+  --realm-name my-realm \
+  --migration-config \
+  --core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602" \
+  kafka-examples/zk-three-node/server-1.properties \
+  kafka-examples/zk-three-node/server-2.properties \
+  kafka-examples/zk-three-node/server-3.properties
+```
+
+### 4. Move the KOF brokers off 9092–9094
+
+```bash
+sed -E -i.bak 's/:909([0-9])/:1909\1/' kof-output/kof.broker.*.properties
+sed -E -i.bak 's|^target\.bootstrap\.servers=.*|target.bootstrap.servers=localhost:19092,localhost:19093,localhost:19094|' \
+  kof-output/kafka-to-kof.properties
+rm -f kof-output/*.bak
+```
+
+### 5. Start the three KOF servers
+
+```bash
+rm -rf /var/tmp/kof/data
+rm -f /tmp/kof.pid
+for n in 1 2 3; do
+  tibftlserver -c kof-output/kof-cluster.yaml -n SRV$n > /tmp/kof-SRV$n.log 2>&1 &
+  echo $! >> /tmp/kof.pid
+done
+sleep 40
+grep -h "Full quorum" /tmp/kof-SRV*.log
+```
+
+### 6. Dry run
+
+```bash
+./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties --dry-run
+```
+
+### 7. Migrate
+
+```bash
+./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties
+```
+
+### 8. Verify against KOF directly
+
+```bash
+( unset CLASSPATH KAFKA_CLASSPATH
+  $KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list
+  $KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 \
+    --topic insurance.fraud.alerts --from-beginning --max-messages 3 --timeout-ms 30000 )
+```
+
+### 9. Shut down
+
+```bash
+while read -r p; do kill "$p"; done < /tmp/kof.pid
+bash kafka-examples/stop-kafka-zk.sh
+```
+
+---
+
+## Migrating from an existing cluster
+
+The paths above start a Kafka cluster only so there is something to migrate. Against a cluster you
+already run, the procedure is Path 1 or Path 2 with steps 1, 2 and 9 removed — nothing about the
+source cluster needs to change, and it keeps serving traffic throughout.
+
+```bash
+# 1. Generate, from the real server.properties — one file per broker
+rm -rf ./kof-output
 tibkafkatokof \
   --output-dir ./kof-output \
   --realm-name my-realm \
@@ -138,207 +472,75 @@ tibkafkatokof \
   /path/to/broker-3/server.properties
 ```
 
-If you started one of the example clusters in Step 1, point the tool at those config files:
+`tibkafkatokof` emits one KOF server and one pserver per file you pass. Three files in, `SRV1`
+through `SRV3` out; one file in, `SRV1` alone.
 
-```bash
-# single-node
-tibkafkatokof --output-dir ./kof-output --realm-name my-realm --migration-config \
-  kafka-examples/single-node/server.properties
-
-# three-node
-tibkafkatokof --output-dir ./kof-output --realm-name my-realm --migration-config \
-  kafka-examples/three-node/server-1.properties \
-  kafka-examples/three-node/server-2.properties \
-  kafka-examples/three-node/server-3.properties
-```
-
-This generates in `./kof-output/`:
+This writes into `./kof-output/`:
 
 | File | Purpose |
 |---|---|
-| `kof-cluster.yaml` | FTL pserver cluster config (primary 3 pservers); also seeds the realm |
-| `kof-cluster-aux1.yaml` | Additional pserver groups (one per extra 3 pservers) |
-| `realm.json` | FTL realm with `kof.cluster` definitions |
+| `kof-cluster.yaml` | FTL server cluster config; also seeds the realm via `initial.realm.config` |
+| `kof-cluster-aux1.yaml` | Additional pserver groups, one file per extra three pservers |
+| `realm.json` | FTL realm with the `kof.cluster` definitions |
 | `kof.broker.N.properties` | Per-pserver Kafka broker properties |
-| **`kafka-to-kof.properties`** | **Migration config pre-filled with source broker addresses** |
+| `unsupported.properties` | Source keys with no KOF equivalent, for review |
+| **`kafka-to-kof.properties`** | **Migration config, pre-filled with the source broker addresses** |
 
-`kafka-to-kof.properties` has `source.bootstrap.servers` pre-filled from your input files
-and `target.bootstrap.servers` with `<KOF-HOST-N>` placeholders for each pserver.
+Then:
 
-Every server entry in `kof-cluster.yaml` names `realm.json` through the `initial.realm.config`
-parameter, so the realm configuration is loaded for you when the servers start — there is no
-separate upload step. See Step 3.
+2. Deploy `kof-cluster.yaml` (plus any `kof-cluster-auxN.yaml`), `realm.json`, and the
+   `kof.broker.N.properties` files to your KOF hosts, and start one `tibftlserver -c
+   kof-cluster.yaml -n SRVn` per server entry. On separate hosts there is no port collision, so no
+   `sed` step. Wait for `Full quorum`.
 
----
+3. Edit `kof-output/kafka-to-kof.properties` and replace each `<KOF-HOST-N>` placeholder in
+   `target.bootstrap.servers` with the real hostname. The ports there must match
+   `advertised.listeners` in the corresponding `kof.broker.N.properties`.
 
-## Step 3 — Start the KOF servers
+   ```properties
+   source.bootstrap.servers=kafka-broker-1:9092,kafka-broker-2:9092,kafka-broker-3:9092
+   target.bootstrap.servers=kof-host-1:9092,kof-host-2:9092,kof-host-3:9092
+   ```
 
-Deploy `kof-cluster.yaml` (and `kof-cluster-auxN.yaml` if present) to your KOF hosts, then start one
-`tibftlserver` process per `SRV` entry in that file. Step 2 decides how many there are:
-`tibkafkatokof` emits one server per source broker `server.properties` you passed it. The generated
-YAML also lists the exact commands in its header comment.
+   If the source cluster uses SASL or TLS, add the pass-through keys — see
+   [Security](#security-sasltls). Everything else tunable is in the
+   [Config reference](#config-reference).
 
-### Single server
+4. Dry run, then migrate:
 
-One source broker produces a one-server cluster:
+   ```bash
+   ./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties --dry-run
+   ./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties
+   ```
 
-```yaml
-# kof-cluster.yaml
-globals:
-  core.servers:
-    SRV1: localhost:5606
-
-servers:
-  SRV1:
-  - realm:
-      data: /var/tmp/kof/data
-      initial.realm.config: realm.json
-  - persistence:
-      name: pserver1
-      data: /var/tmp/kof/data/pserver1
-      kof.broker.properties: kof.broker.1.properties
-```
-
-Start it with a single command:
+To narrow the scope, add `--topic-pattern` — useful for migrating one topic family at a time:
 
 ```bash
-tibftlserver -c kof-cluster.yaml -n SRV1
+./run-kafka-to-kof.sh --config ./kof-output/kafka-to-kof.properties \
+  --topic-pattern 'insurance\.auto\..*'
 ```
 
-That one process hosts both the realm and `pserver1`. There is no quorum to wait for — the cluster
-is ready once the pserver reports started. This pairs with the `single-node` Kafka example from
-Step 1 and is the quickest way through the rest of this runbook.
+The tool always reads from offset 0, so a re-run is safe in the sense that it never loses data, but
+it is **not** deduplicating — records already on KOF are published again. Use `--dry-run` to check
+before re-running a topic that partially completed.
 
-> **Running KOF on the same host as the source Kafka?** Change the KOF broker port first.
-> `tibkafkatokof` copies each source broker's `listeners` verbatim into
-> `kof.broker.N.properties`, so a source broker on `localhost:9092` produces a KOF broker on
-> `localhost:9092` too — they fight over the port, and the migration would read from and write to
-> the same endpoint. There is no flag for this; edit the generated file before starting the server:
->
-> ```bash
-> # in kof-output/kof.broker.1.properties
-> listeners=PLAINTEXT://localhost:19092
-> advertised.listeners=PLAINTEXT://localhost:19092
-> ```
->
-> Then use the new port in `target.bootstrap.servers` in Step 4. This applies to the three-server
-> layout as well (`9092/9093/9094` on both sides). It is not an issue when KOF runs on its own
-> hosts, which is the normal production case.
+### Realm ports and `--core-servers`
 
-### Three servers
-
-Three source brokers produce `SRV1`, `SRV2`, and `SRV3`, each hosting one pserver:
+Unless you pass `--core-servers`, `tibkafkatokof` picks each server's realm port randomly from
+5600–5699, and a regenerated configuration gets different ports. Pin them when the ports appear in
+firewall rules, scripts, or the UI dashboard:
 
 ```bash
-# On each KOF host — replace SRV1/SRV2/SRV3 with the server name for that host
-tibftlserver -c kof-cluster.yaml -n SRV1
-tibftlserver -c kof-cluster.yaml -n SRV2
-tibftlserver -c kof-cluster.yaml -n SRV3
-```
-
-Wait until all pservers report quorum before proceeding.
-
-**No realm upload is needed.** Each `- realm:` entry in the generated YAML carries
-`initial.realm.config`, pointing at the generated `realm.json`:
-
-```yaml
-servers:
-  SRV1:
-  - realm:
-      data: /var/tmp/kof/data
-      initial.realm.config: realm.json
-```
-
-`tibftlserver` reads that file at startup and seeds the realm itself, so running
-`tibrealmadmin upload-realm` is redundant here. You only need a manual upload to push a
-*hand-edited* `realm.json` to a realm that is already running:
-
-```bash
-tibrealmadmin --server <KOF-HOST-1>:<realm-port> --realm my-realm upload-realm ./kof-output/realm.json
-```
-
-The realm port is that server's `core.servers` port in `kof-cluster.yaml` — `5606` in the
-single-server example above. `tibkafkatokof` picks these randomly from the range 5600–5699, so read
-them out of the generated file rather than assuming a value. Pass `--core-servers` in Step 2 to pin
-them instead:
-
-```bash
---core-servers "SRV1=localhost:5600"                                        # single server
+--core-servers "SRV1=localhost:5600"                                          # one server
 --core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602"  # three servers
 ```
 
----
-
-## Step 4 — Configure the migration
-
-Edit `./kof-output/kafka-to-kof.properties` — it looks like:
-
-```properties
-# kafka-to-kof.properties — generated by tibkafkatokof
-source.bootstrap.servers=kafka-broker-1:9092,kafka-broker-2:9092,kafka-broker-3:9092
-target.bootstrap.servers=<KOF-HOST-1>:9092,<KOF-HOST-2>:9092,<KOF-HOST-3>:9092
-...
-```
-
-Replace each `<KOF-HOST-N>` with the actual hostname of the corresponding KOF pserver:
-
-```properties
-source.bootstrap.servers=kafka-broker-1:9092,kafka-broker-2:9092,kafka-broker-3:9092
-target.bootstrap.servers=kof-host-1:9092,kof-host-2:9092,kof-host-3:9092
-```
-
-For a one-server KOF cluster this is a single entry. If you moved the KOF broker off 9092 to avoid
-the same-host collision described in Step 3, use the port you chose — the ports here must match
-`advertised.listeners` in `kof.broker.N.properties`:
-
-```properties
-source.bootstrap.servers=localhost:9092
-target.bootstrap.servers=localhost:19092
-```
-
-Every tunable key is listed in the [Config reference](#config-reference). If your source Kafka
-cluster uses SASL or TLS, add the security pass-through keys — see [Security](#security-sasltls).
-
----
-
-## Step 5 — Dry run
-
-Verify the migration scope before copying any data:
+To push a *hand-edited* `realm.json` to an already-running realm — the only case that needs a
+manual upload — use that port:
 
 ```bash
-cd kafka_to_kof_migration   # directory containing run-kafka-to-kof.sh
-./run-kafka-to-kof.sh \
-  --config ../kof-output/kafka-to-kof.properties \
-  --dry-run
+tibrealmadmin --server <KOF-HOST-1>:5600 --realm my-realm upload-realm ./kof-output/realm.json
 ```
-
-The tool prints per-topic and per-partition record counts from the source cluster.
-No records are written to KOF. Review the output and confirm the topic list and
-counts look correct.
-
----
-
-## Step 6 — Run the migration
-
-```bash
-./run-kafka-to-kof.sh --config ../kof-output/kafka-to-kof.properties
-```
-
-The tool:
-1. Discovers all matching topics and partitions on the source.
-2. Prints pre-copy message counts.
-3. Creates any missing topics on the target KOF cluster.
-4. Reads all records from each partition (from offset 0) and publishes them to KOF.
-5. Prints post-copy planned vs. published counts.
-
----
-
-## Step 7 — Verify
-
-The tool exits 0 on success. Confirm the published counts match the pre-copy counts
-in the output. If any counts diverge, re-run the migration — the tool reads from
-the beginning offset each time, so re-runs are idempotent (records may be
-duplicated if KOF already has data; use `--dry-run` first to assess).
 
 ---
 
@@ -352,10 +554,10 @@ duplicated if KOF already has data; use `--dry-run` first to assess).
 ```
 
 With no arguments it falls back to `conf/kafka-to-kof.properties` next to the script, so pass
-`--config` whenever your properties file lives elsewhere (as it does after Step 2).
+`--config` whenever your properties file lives elsewhere — as it does after generation.
 
 `KAFKA_CLASSPATH` must be set or the script exits 1 before compiling. On this path it is **not**
-derived from `KAFKA_HOME` — that convenience exists only in the UI server.
+derived from `KAFKA_HOME`; that convenience exists only in the UI server.
 
 ### Options
 
@@ -380,24 +582,9 @@ Flags that take a value require it as the next argument; `--dry-run` and `--help
 unrecognized flag is a hard error rather than a warning, so a typo stops the run before any data
 moves.
 
-### Minimal end-to-end run
+### Without a properties file
 
-Against clusters that already exist:
-
-```bash
-export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
-export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
-
-cd kafka_to_kof_migration
-
-# 1. Confirm scope — reads the source, writes nothing
-./run-kafka-to-kof.sh --config /path/to/kafka-to-kof.properties --dry-run
-
-# 2. Migrate
-./run-kafka-to-kof.sh --config /path/to/kafka-to-kof.properties
-```
-
-Or skip the properties file entirely and pass both endpoints inline:
+Both endpoints can be passed inline:
 
 ```bash
 ./run-kafka-to-kof.sh \
@@ -407,10 +594,10 @@ Or skip the properties file entirely and pass both endpoints inline:
   --dry-run
 ```
 
-Note that SASL/TLS settings have no flag equivalents — they are prefixed properties and must come
-from a `--config` file. See [Security](#security-sasltls).
+SASL/TLS settings have no flag equivalents — they are prefixed properties and must come from a
+`--config` file. See [Security](#security-sasltls).
 
-### Running without the wrapper script
+### Without the wrapper script
 
 The wrapper only adds `javac` plus a `java -cp` invocation. Where bash is unavailable, or to
 compile once and run many times, call the class directly:
@@ -449,9 +636,8 @@ job or CI pipeline.
 
 ## Security (SASL/TLS)
 
-Pass Kafka security settings with prefixed keys in the config file. The prefix
-routes the property to the right Kafka client (`source.admin`, `source.consumer`,
-`target.admin`, `target.producer`).
+Pass Kafka security settings with prefixed keys in the config file. The prefix routes the property
+to the right Kafka client (`source.admin`, `source.consumer`, `target.admin`, `target.producer`).
 
 ### SASL/PLAIN example (source cluster)
 
