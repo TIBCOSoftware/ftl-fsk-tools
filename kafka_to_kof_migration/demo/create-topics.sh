@@ -59,4 +59,4 @@ done
 
 echo ""
 echo "All topics created. Verify with:"
-echo "  \$KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server $BOOTSTRAP --list"
+echo "  bash demo/verify-kof.sh --bootstrap-server $BOOTSTRAP --no-sample"

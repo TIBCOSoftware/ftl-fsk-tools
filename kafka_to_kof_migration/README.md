@@ -42,8 +42,10 @@ export PATH=$FTL_HOME/bin:$PATH
 
 `KAFKA_CLASSPATH` is read by `run-kafka-to-kof.sh` and by `demo/populate-kafka.sh`; both exit 1
 without it. It is deliberately kept out of `CLASSPATH`, because the Kafka CLI scripts build their
-own classpath and an older `snakeyaml` reachable through `CLASSPATH` makes them fail with
-`NoSuchMethodError`.
+own classpath starting from whatever `CLASSPATH` holds, and an older `snakeyaml` reachable that way
+makes them fail with `NoSuchMethodError`. Every script here that calls the Kafka CLI clears both
+variables itself, so you do not have to — only a Kafka CLI command you type by hand needs
+`unset CLASSPATH KAFKA_CLASSPATH` first.
 
 ---
 
@@ -164,10 +166,15 @@ Check that `planned` equals `published` in the summary.
 ### 8. Verify against KOF directly
 
 ```bash
-( unset CLASSPATH KAFKA_CLASSPATH
-  $KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list
-  $KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 \
-    --topic insurance.fraud.alerts --from-beginning --max-messages 3 --timeout-ms 30000 )
+bash demo/verify-kof.sh --bootstrap-server localhost:19092
+```
+
+Lists the topics on KOF, sums each one's partition end offsets to get its record count, and prints
+the first few records of `insurance.fraud.alerts`. To compare against the source, point it there
+too — the counts should match what the migration reported:
+
+```bash
+bash demo/verify-kof.sh --bootstrap-server localhost:9092 --no-sample
 ```
 
 ### 9. Shut down
@@ -266,10 +273,15 @@ empty — kill the servers, `rm -rf /var/tmp/kof/data`, and repeat this step.
 ### 8. Verify against KOF directly
 
 ```bash
-( unset CLASSPATH KAFKA_CLASSPATH
-  $KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list
-  $KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 \
-    --topic insurance.fraud.alerts --from-beginning --max-messages 3 --timeout-ms 30000 )
+bash demo/verify-kof.sh --bootstrap-server localhost:19092
+```
+
+Lists the topics on KOF, sums each one's partition end offsets to get its record count, and prints
+the first few records of `insurance.fraud.alerts`. To compare against the source, point it there
+too — the counts should match what the migration reported:
+
+```bash
+bash demo/verify-kof.sh --bootstrap-server localhost:9092 --no-sample
 ```
 
 ### 9. Shut down
@@ -370,10 +382,15 @@ grep -c "elected quorum leader" /tmp/kof-SRV1.log
 ### 8. Verify against KOF directly
 
 ```bash
-( unset CLASSPATH KAFKA_CLASSPATH
-  $KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list
-  $KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 \
-    --topic insurance.fraud.alerts --from-beginning --max-messages 3 --timeout-ms 30000 )
+bash demo/verify-kof.sh --bootstrap-server localhost:19092
+```
+
+Lists the topics on KOF, sums each one's partition end offsets to get its record count, and prints
+the first few records of `insurance.fraud.alerts`. To compare against the source, point it there
+too — the counts should match what the migration reported:
+
+```bash
+bash demo/verify-kof.sh --bootstrap-server localhost:9092 --no-sample
 ```
 
 ### 9. Shut down
@@ -465,10 +482,15 @@ grep -h "Full quorum" /tmp/kof-SRV*.log
 ### 8. Verify against KOF directly
 
 ```bash
-( unset CLASSPATH KAFKA_CLASSPATH
-  $KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list
-  $KAFKA_HOME/bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 \
-    --topic insurance.fraud.alerts --from-beginning --max-messages 3 --timeout-ms 30000 )
+bash demo/verify-kof.sh --bootstrap-server localhost:19092
+```
+
+Lists the topics on KOF, sums each one's partition end offsets to get its record count, and prints
+the first few records of `insurance.fraud.alerts`. To compare against the source, point it there
+too — the counts should match what the migration reported:
+
+```bash
+bash demo/verify-kof.sh --bootstrap-server localhost:9092 --no-sample
 ```
 
 ### 9. Shut down
