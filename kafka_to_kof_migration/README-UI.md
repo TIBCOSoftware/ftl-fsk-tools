@@ -53,12 +53,20 @@ The `demo/` directory contains a ready-to-run insurance provider scenario with 1
 
 ### Quick start
 
+> **NOTE — skip block 1 if you already have a Kafka cluster running with data.** Those three
+> commands only stand up a throwaway cluster and fill it with sample records. Against your own
+> cluster, start at block 2 and pass one real broker `server.properties` per node in place of the
+> `demo/kraft/` files, then skip `demo/stop-kafka.sh` at the end. `setup-kafka-kraft.sh` and
+> `create-topics.sh` write to the cluster you point them at, so do not run them against anything
+> you care about. The dashboard's topology draws three Kafka nodes, so a source cluster with a
+> different node count will not line up with the diagram — the migration itself is unaffected.
+
 ```bash
 export KAFKA_HOME=/opt/kafka
 export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
 export TIBFTLSERVER=/opt/tibco/ftl/current-version/bin/tibftlserver   # path to your tibftlserver binary
 
-# 1. Start source Kafka (3-broker KRaft cluster)
+# 1. Start source Kafka (3-broker KRaft cluster) — skip if yours is already running
 bash demo/setup-kafka-kraft.sh
 bash demo/create-topics.sh
 bash demo/populate-kafka.sh             # sends 10 000 sample JSON messages
@@ -89,7 +97,9 @@ by the live migration.
 The demo scripts that call Kafka CLI tools unset `KAFKA_CLASSPATH` automatically to avoid classpath
 conflicts.
 
-To stop everything: `bash demo/stop-kafka.sh` and `bash demo/stop-kof-brokers.sh`.
+To stop everything: `bash demo/stop-kafka.sh` and `bash demo/stop-kof-brokers.sh`. Run the first
+only if block 1 started the cluster — if you migrated from your own Kafka, stop KOF and leave the
+source alone.
 
 ---
 

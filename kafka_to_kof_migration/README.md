@@ -8,6 +8,12 @@ Pick one of the four paths below and paste the commands in order. Each path is s
 start a Kafka cluster, load it with demo data, generate the KOF configuration, start KOF, migrate,
 verify, shut down. Nothing here needs Node.js or a browser.
 
+> **NOTE — steps 1, 2 and part of 9 are demo scaffolding.** They start a throwaway Kafka cluster
+> and fill it with sample records so there is something to migrate. If you already have a Kafka
+> broker or cluster running **and it already holds the data you want to move**, skip them: start
+> each path at **step 3**, and in step 9 stop only KOF. Every step from 3 onward is the same
+> whether the source cluster came from `kafka-examples/` or from your own deployment.
+
 | Path | Source cluster | Kafka version | Verified |
 |---|---|---|---|
 | **Path 1** | Single-node, KRaft | 4.x | Yes, end to end |
@@ -101,11 +107,20 @@ path and the one to use if you are trying the tool for the first time.
 
 ### 1. Start the Kafka broker
 
+> **NOTE — skip this step if a Kafka broker is already running.** `--clean` wipes the example
+> cluster's log directories, so do not point this at anything you care about. Against your own
+> broker, go straight to step 3 and pass its real `server.properties` instead of the
+> `kafka-examples/` one.
+
 ```bash
 bash kafka-examples/start-kafka.sh single-node --clean
 ```
 
 ### 2. Create topics and load demo data
+
+> **NOTE — skip this step if your broker already has the data you want to migrate.** This only
+> manufactures something to move. Running it against a real cluster would add ten unwanted
+> `insurance.*` topics to it.
 
 ```bash
 bash demo/create-topics.sh --bootstrap-server localhost:9092
@@ -187,6 +202,9 @@ bash demo/verify-kof.sh --bootstrap-server localhost:9092 --no-sample
 
 ### 9. Shut down
 
+> **NOTE — run the second line only if step 1 started the broker.** If you migrated from your own
+> Kafka, stop KOF and leave the source cluster alone; the migration never modified it.
+
 ```bash
 tibftladmin -ftls http://localhost:5600 -x
 bash kafka-examples/stop-kafka.sh
@@ -207,6 +225,11 @@ host is fine for a trial.
 
 ### 1. Start the three Kafka brokers
 
+> **NOTE — skip this step if your Kafka cluster is already running.** `--clean` wipes the example
+> cluster's log directories, so do not point this at anything you care about. Against your own
+> cluster, go straight to step 3 and pass one real `server.properties` per broker instead of the
+> `kafka-examples/` ones.
+
 ```bash
 bash kafka-examples/start-kafka.sh three-node --clean
 ```
@@ -214,6 +237,10 @@ bash kafka-examples/start-kafka.sh three-node --clean
 Both layouts bind the same ports, so stop a `single-node` cluster before starting this one.
 
 ### 2. Create topics and load demo data
+
+> **NOTE — skip this step if your cluster already has the data you want to migrate.** This only
+> manufactures something to move. Running it against a real cluster would add ten unwanted
+> `insurance.*` topics to it.
 
 ```bash
 bash demo/create-topics.sh --bootstrap-server localhost:9092
@@ -303,6 +330,9 @@ bash demo/verify-kof.sh --bootstrap-server localhost:9092 --no-sample
 
 ### 9. Shut down
 
+> **NOTE — run the second line only if step 1 started the brokers.** If you migrated from your own
+> Kafka, stop KOF and leave the source cluster alone; the migration never modified it.
+
 ```bash
 tibftladmin -ftls http://localhost:5600 -xc
 bash kafka-examples/stop-kafka.sh
@@ -336,6 +366,11 @@ export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
 
 ### 1. Start ZooKeeper and the broker
 
+> **NOTE — skip this step if your ZooKeeper-backed broker is already running.** `--clean` wipes
+> the example cluster's log directories, so do not point this at anything you care about. Against
+> your own broker, go straight to step 3 and pass its real `server.properties` instead of the
+> `kafka-examples/` one.
+
 ```bash
 bash kafka-examples/start-kafka-zk.sh single-node --clean
 ```
@@ -344,6 +379,10 @@ ZooKeeper on `localhost:2181`, one broker on `localhost:9092`. The script starts
 waits for it to accept connections, then starts the broker.
 
 ### 2. Create topics and load demo data
+
+> **NOTE — skip this step if your broker already has the data you want to migrate.** This only
+> manufactures something to move. Running it against a real cluster would add ten unwanted
+> `insurance.*` topics to it.
 
 ```bash
 bash demo/create-topics.sh --bootstrap-server localhost:9092
@@ -414,6 +453,10 @@ bash demo/verify-kof.sh --bootstrap-server localhost:9092 --no-sample
 
 ### 9. Shut down
 
+> **NOTE — run the second line only if step 1 started ZooKeeper and the broker.** If you migrated
+> from your own Kafka, stop KOF and leave the source cluster alone; the migration never modified
+> it.
+
 ```bash
 tibftladmin -ftls http://localhost:5600 -x
 bash kafka-examples/stop-kafka-zk.sh
@@ -437,6 +480,11 @@ export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
 
 ### 1. Start ZooKeeper and the three brokers
 
+> **NOTE — skip this step if your ZooKeeper-backed cluster is already running.** `--clean` wipes
+> the example cluster's log directories, so do not point this at anything you care about. Against
+> your own cluster, go straight to step 3 and pass one real `server.properties` per broker
+> instead of the `kafka-examples/` ones.
+
 ```bash
 bash kafka-examples/start-kafka-zk.sh three-node --clean
 ```
@@ -446,6 +494,10 @@ ZooKeeper is a deliberate simplification for a local example — production uses
 three or five.
 
 ### 2. Create topics and load demo data
+
+> **NOTE — skip this step if your cluster already has the data you want to migrate.** This only
+> manufactures something to move. Running it against a real cluster would add ten unwanted
+> `insurance.*` topics to it.
 
 ```bash
 bash demo/create-topics.sh --bootstrap-server localhost:9092
@@ -516,6 +568,10 @@ bash demo/verify-kof.sh --bootstrap-server localhost:9092 --no-sample
 
 ### 9. Shut down
 
+> **NOTE — run the second line only if step 1 started ZooKeeper and the brokers.** If you migrated
+> from your own Kafka, stop KOF and leave the source cluster alone; the migration never modified
+> it.
+
 ```bash
 tibftladmin -ftls http://localhost:5600 -xc
 bash kafka-examples/stop-kafka-zk.sh
@@ -532,8 +588,9 @@ ZooKeeper.
 ## Migrating from an existing cluster
 
 The paths above start a Kafka cluster only so there is something to migrate. Against a cluster you
-already run, the procedure is Path 1 or Path 2 with steps 1, 2 and 9 removed — nothing about the
-source cluster needs to change, and it keeps serving traffic throughout.
+already run, the procedure is Path 1 or Path 2 with steps 1 and 2 dropped and step 9 reduced to
+stopping KOF — nothing about the source cluster needs to change, and it keeps serving traffic
+throughout.
 
 ```bash
 # 1. Generate, from the real server.properties — one file per broker
