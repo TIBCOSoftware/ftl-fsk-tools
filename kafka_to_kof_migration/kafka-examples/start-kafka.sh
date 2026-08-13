@@ -2,7 +2,7 @@
 # Start a local Kafka 4.x KRaft cluster from the example configs in this directory.
 #
 # Usage:
-#   export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
+#   export KAFKA_HOME=/opt/kafka
 #   bash kafka-examples/start-kafka.sh single-node [--clean]
 #   bash kafka-examples/start-kafka.sh three-node  [--clean]
 #
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-KAFKA_HOME="${KAFKA_HOME:-/usr/local/Cellar/kafka/4.2.0/libexec}"
+KAFKA_HOME="${KAFKA_HOME:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="/tmp/kafka-examples"
 PID_FILE="$SCRIPT_DIR/kafka-examples.pid"
@@ -53,10 +53,17 @@ else
   BOOTSTRAP="localhost:9092,localhost:9093,localhost:9094"
 fi
 
+if [[ -z "$KAFKA_HOME" ]]; then
+  echo "ERROR: KAFKA_HOME is not set."
+  echo "Set it to your Kafka 4.x installation, e.g.:"
+  echo "  export KAFKA_HOME=/opt/kafka"
+  exit 1
+fi
+
 if [[ ! -x "$KAFKA_HOME/bin/kafka-server-start.sh" ]]; then
   echo "ERROR: kafka-server-start.sh not found under KAFKA_HOME=$KAFKA_HOME"
   echo "Set KAFKA_HOME to your Kafka installation, e.g.:"
-  echo "  export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec"
+  echo "  export KAFKA_HOME=/opt/kafka"
   exit 1
 fi
 

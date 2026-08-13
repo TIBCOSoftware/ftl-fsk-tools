@@ -54,7 +54,7 @@ The `demo/` directory contains a ready-to-run insurance provider scenario with 1
 ### Quick start
 
 ```bash
-export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
+export KAFKA_HOME=/opt/kafka
 export KAFKA_CLASSPATH="$KAFKA_HOME/libs/*"
 export TIBFTLSERVER=/opt/tibco/ftl/current-version/bin/tibftlserver   # path to your tibftlserver binary
 
@@ -123,7 +123,7 @@ These are read by the UI server (`ui/server.js`) and do not apply to
 |---|---|---|
 | `SOURCE_BOOTSTRAP` | read from `kof-output/kafka-to-kof.properties` | Source Kafka bootstrap addresses |
 | `TARGET_BOOTSTRAP` | read from `kof-output/kafka-to-kof.properties` | Target KOF bootstrap addresses |
-| `KAFKA_HOME` | _(none)_ | Path to your Kafka installation (e.g. `/usr/local/Cellar/kafka/4.2.0/libexec`). Used to auto-build `KAFKA_CLASSPATH` from `$KAFKA_HOME/libs/*` if `KAFKA_CLASSPATH` is not set. |
+| `KAFKA_HOME` | _(none)_ | Path to your Kafka installation (e.g. `/opt/kafka`). Used to auto-build `KAFKA_CLASSPATH` from `$KAFKA_HOME/libs/*` if `KAFKA_CLASSPATH` is not set. |
 | `KAFKA_CLASSPATH` | auto-built from `KAFKA_HOME/libs/*` | Kafka client JARs for the migration tool. Explicit value takes precedence over auto-detection from `KAFKA_HOME`. |
 | `PORT` | `3000` | HTTP port for the dashboard |
 

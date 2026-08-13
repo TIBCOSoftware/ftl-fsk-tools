@@ -4,7 +4,7 @@
 # topic. Point it at the source Kafka cluster instead to compare the two.
 #
 # Usage:
-#   export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
+#   export KAFKA_HOME=/opt/kafka
 #   bash demo/verify-kof.sh [--bootstrap-server localhost:19092]
 #                           [--topic insurance.fraud.alerts]
 #                           [--max-messages 3]
@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-KAFKA_HOME="${KAFKA_HOME:-/usr/local/Cellar/kafka/4.2.0/libexec}"
+KAFKA_HOME="${KAFKA_HOME:-}"
 BOOTSTRAP="localhost:19092"
 TOPIC="insurance.fraud.alerts"
 MAX_MESSAGES=3
@@ -34,6 +34,18 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
+
+if [[ -z "$KAFKA_HOME" ]]; then
+  echo "ERROR: KAFKA_HOME is not set."
+  echo "Set it to your Kafka installation, e.g.:"
+  echo "  export KAFKA_HOME=/opt/kafka"
+  exit 1
+fi
+
+if [[ ! -x "$KAFKA_HOME/bin/kafka-topics.sh" ]]; then
+  echo "ERROR: kafka-topics.sh not found under KAFKA_HOME=$KAFKA_HOME"
+  exit 1
+fi
 
 echo "==> Topics on $BOOTSTRAP"
 TOPICS="$("$KAFKA_HOME/bin/kafka-topics.sh" --bootstrap-server "$BOOTSTRAP" --list)"

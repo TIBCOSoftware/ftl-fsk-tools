@@ -3,12 +3,12 @@
 # Each topic is created with 3 partitions and replication-factor 1.
 #
 # Usage:
-#   export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
+#   export KAFKA_HOME=/opt/kafka
 #   bash demo/create-topics.sh [--bootstrap-server localhost:9092]
 
 set -euo pipefail
 
-KAFKA_HOME="${KAFKA_HOME:-/usr/local/Cellar/kafka/4.2.0/libexec}"
+KAFKA_HOME="${KAFKA_HOME:-}"
 BOOTSTRAP="localhost:9092"
 PARTITIONS=3
 REPLICATION=1
@@ -24,6 +24,18 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
+
+if [[ -z "$KAFKA_HOME" ]]; then
+  echo "ERROR: KAFKA_HOME is not set."
+  echo "Set it to your Kafka installation, e.g.:"
+  echo "  export KAFKA_HOME=/opt/kafka"
+  exit 1
+fi
+
+if [[ ! -x "$KAFKA_HOME/bin/kafka-topics.sh" ]]; then
+  echo "ERROR: kafka-topics.sh not found under KAFKA_HOME=$KAFKA_HOME"
+  exit 1
+fi
 
 TOPICS=(
   "insurance.auto.claims"

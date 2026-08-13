@@ -18,7 +18,7 @@ ZooKeeper support entirely.
 KRaft:
 
 ```bash
-export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec   # a Kafka 4.x installation
+export KAFKA_HOME=/opt/kafka   # a Kafka 4.x installation
 
 bash kafka-examples/start-kafka.sh single-node     # or: three-node
 bash kafka-examples/stop-kafka.sh

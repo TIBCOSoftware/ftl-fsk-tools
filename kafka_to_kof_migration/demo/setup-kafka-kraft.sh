@@ -3,14 +3,14 @@
 # Brokers listen on localhost:9092, localhost:9093, localhost:9094.
 #
 # Usage:
-#   export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec
+#   export KAFKA_HOME=/opt/kafka
 #   bash demo/setup-kafka-kraft.sh [--clean]
 #
 # --clean  Delete existing log.dirs data before formatting (full reset).
 
 set -euo pipefail
 
-KAFKA_HOME="${KAFKA_HOME:-/usr/local/Cellar/kafka/4.2.0/libexec}"
+KAFKA_HOME="${KAFKA_HOME:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KRAFT_DIR="$SCRIPT_DIR/kraft"
 LOG_DIR="/tmp/kafka-kraft"
@@ -31,10 +31,17 @@ for arg in "$@"; do
   esac
 done
 
+if [[ -z "$KAFKA_HOME" ]]; then
+  echo "ERROR: KAFKA_HOME is not set."
+  echo "Set it to your Kafka installation, e.g.:"
+  echo "  export KAFKA_HOME=/opt/kafka"
+  exit 1
+fi
+
 if [[ ! -x "$KAFKA_HOME/bin/kafka-server-start.sh" ]]; then
   echo "ERROR: kafka-server-start.sh not found under KAFKA_HOME=$KAFKA_HOME"
   echo "Set KAFKA_HOME to your Kafka installation, e.g.:"
-  echo "  export KAFKA_HOME=/usr/local/Cellar/kafka/4.2.0/libexec"
+  echo "  export KAFKA_HOME=/opt/kafka"
   exit 1
 fi
 
