@@ -27,7 +27,7 @@ tibkafkatokof \
   JKS/PKCS12 keystores are flagged as RESOLVE-REQUIRED; PLAIN/OAUTHBEARER mechanisms
   are accepted; custom callback handlers are flagged for manual resolution.
 - Use `--tls-cert` and/or `--auth-users-file` (or `--oauth-token-url`) to generate
-  `kof-cluster-secure.yaml` alongside the base `kof-cluster.yaml`.
+  `tibftlserver-cluster-secure.yaml` alongside the base `tibftlserver-cluster.yaml`.
 
 ## SASL Admin API authentication
 
@@ -43,8 +43,8 @@ tibkafkatokof \
 ## Output
 
 ```
-output/kof-cluster.yaml         (base config; one realm block per server)
-output/kof-cluster-secure.yaml  (FTL server TLS/auth settings; generated when --tls-cert is given)
+output/tibftlserver-cluster.yaml         (base config; one realm block per server)
+output/tibftlserver-cluster-secure.yaml  (FTL server TLS/auth settings; generated when --tls-cert is given)
 output/realm.json
 output/kof.broker.1.properties
 output/kof.broker.2.properties

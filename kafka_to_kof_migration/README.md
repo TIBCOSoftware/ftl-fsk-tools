@@ -154,7 +154,7 @@ rm -f kof-output/*.bak
 
 ```bash
 rm -rf /var/tmp/kof/data
-tibftlserver -c kof-output/kof-cluster.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
+tibftlserver -c kof-output/tibftlserver_standalone.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
 bash demo/wait-for-kof.sh --server localhost:5600
 ```
 
@@ -164,7 +164,7 @@ soon as the cluster has quorum with every pserver joined, so there is nothing to
 prints `✓ kof.cluster.0 has quorum: 1/1 members` and exits 0; on failure it exits 1, and the
 migration in step 6 never runs against a half-started cluster.
 
-`--server` is the **FTL server** port from `core.servers` in `kof-cluster.yaml`, not the KOF
+`--server` is the **FTL server** port from `core.servers` in `tibftlserver_standalone.yaml`, not the KOF
 Kafka listener port.
 
 No realm upload is needed. Every `- realm:` entry in the generated YAML carries
@@ -280,7 +280,7 @@ rm -f kof-output/*.bak
 ```bash
 rm -rf /var/tmp/kof/data
 for n in 1 2 3; do
-  tibftlserver -c kof-output/kof-cluster.yaml -n SRV$n > /tmp/kof-SRV$n.log 2>&1 &
+  tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV$n > /tmp/kof-SRV$n.log 2>&1 &
 done
 bash demo/wait-for-kof.sh --server localhost:5600
 ```
@@ -291,7 +291,7 @@ quorum with all three pservers joined. It prints `✓ kof.cluster.0 has quorum: 
 exits 0. Note `3/3`: quorum alone is reached with two of three members, and migrating then leaves
 the third to catch up, so the script waits for the full set.
 
-`--server` is the **FTL server** port from `core.servers` in `kof-cluster.yaml`, not the KOF
+`--server` is the **FTL server** port from `core.servers` in `tibftlserver-cluster.yaml`, not the KOF
 Kafka listener port. Any of the three works; SRV1 is just the first.
 
 On failure the script exits 1 rather than letting step 6 migrate into a half-started cluster. The
@@ -299,7 +299,7 @@ usual cause is a `/var/tmp/kof/data` left over from a run with a different numbe
 which shows up in the logs as `Quorum contains an inadequate number of members` — stop the servers
 (step 9), `rm -rf /var/tmp/kof/data`, and repeat this step.
 
-In production each `tibftlserver` runs on its own host, with the same `kof-cluster.yaml` deployed
+In production each `tibftlserver` runs on its own host, with the same `tibftlserver-cluster.yaml` deployed
 to all three.
 
 ### 6. Dry run
@@ -418,7 +418,7 @@ rm -f kof-output/*.bak
 
 ```bash
 rm -rf /var/tmp/kof/data
-tibftlserver -c kof-output/kof-cluster.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
+tibftlserver -c kof-output/tibftlserver_standalone.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
 bash demo/wait-for-kof.sh --server localhost:5600
 ```
 
@@ -532,7 +532,7 @@ rm -f kof-output/*.bak
 ```bash
 rm -rf /var/tmp/kof/data
 for n in 1 2 3; do
-  tibftlserver -c kof-output/kof-cluster.yaml -n SRV$n > /tmp/kof-SRV$n.log 2>&1 &
+  tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV$n > /tmp/kof-SRV$n.log 2>&1 &
 done
 bash demo/wait-for-kof.sh --server localhost:5600
 ```
@@ -611,8 +611,8 @@ This writes into `./kof-output/`:
 
 | File | Purpose |
 |---|---|
-| `kof-cluster.yaml` | FTL server cluster config; also seeds the realm via `initial.realm.config` |
-| `kof-cluster-aux1.yaml` | Additional pserver groups, one file per extra three pservers |
+| `tibftlserver-cluster.yaml` | FTL server cluster config; also seeds the realm via `initial.realm.config` |
+| `tibftlserver-cluster-aux1.yaml` | Additional pserver groups, one file per extra three pservers |
 | `realm.json` | FTL realm with the `kof.cluster` definitions |
 | `kof.broker.N.properties` | Per-pserver Kafka broker properties |
 | `unsupported.properties` | Source keys with no KOF equivalent, for review |
@@ -620,9 +620,9 @@ This writes into `./kof-output/`:
 
 Then:
 
-2. Deploy `kof-cluster.yaml` (plus any `kof-cluster-auxN.yaml`), `realm.json`, and the
+2. Deploy `tibftlserver-cluster.yaml` (plus any `tibftlserver-cluster-auxN.yaml`), `realm.json`, and the
    `kof.broker.N.properties` files to your KOF hosts, and start one `tibftlserver -c
-   kof-cluster.yaml -n SRVn` per server entry. On separate hosts there is no port collision, so no
+   tibftlserver-cluster.yaml -n SRVn` per server entry. On separate hosts there is no port collision, so no
    `sed` step. Wait for the cluster to form with
    `bash demo/wait-for-kof.sh --server <kof-host-1>:5600`, pointing at the `core.servers` port of
    any one of them.

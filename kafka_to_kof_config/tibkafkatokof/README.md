@@ -4,12 +4,16 @@ Translates a Kafka KRaft broker `server.properties` file into the FTL KOF artifa
 
 | Output file | Purpose |
 |---|---|
-| `kof-cluster.yaml` | FTL primary cluster config (realm servers + up to 3 pservers) |
-| `kof-cluster-secure.yaml` | Secure variant with TLS/auth blocks (generated when TLS/OAuth flags are provided) |
-| `kof-cluster-dr.yaml` | DR replica cluster config (generated when `-dr-servers` is provided) |
+| `tibftlserver-cluster.yaml` | FTL primary cluster config (realm servers + up to 3 pservers) |
+| `tibftlserver-cluster-secure.yaml` | Secure variant with TLS/auth blocks (generated when TLS/OAuth flags are provided) |
+| `tibftlserver-cluster-dr.yaml` | DR replica cluster config (generated when `-dr-servers` is provided) |
 | `realm.json` | FTL realm config with `kof.cluster.N` (N is 0-based), stores, and pserver definitions |
 | `kof.broker.N.properties` | Per-broker properties file (N is 1-based, one per pserver); only contains properties in the KoF whitelist |
 | `unsupported.properties` | Properties from the input not in the KoF whitelist; written when any such properties exist |
+
+A single-broker conversion produces one pserver — a standalone server rather than a cluster — so
+its YAMLs are named `tibftlserver_standalone.yaml`, `tibftlserver_standalone-secure.yaml` and
+`tibftlserver_standalone-dr.yaml`.
 
 ---
 
@@ -83,6 +87,7 @@ The sections below list the same flags as the corresponding `-h <group>` topic.
 | `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` lets the OS choose; `dtcp` is optimized for low latency |
 | `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated pserver. This is the *output* FTL servers' logging, not this tool's. |
 | `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `kafka_to_kof_migration` data migration tool) |
+| `-tibschemad` | `false` | Add the FTL schema daemon to the generated cluster YAML: every server gains a `schemaN` persistence and a `- tibschemad:` entry with `auth.type: none` and `cluster.size` set to the number of realm servers. No extra servers and no extra ports — the schema pserver shares the `tibftlserver` process that already hosts the KOF pserver. |
 
 ### Live broker fetch flags (`-h brokers`)
 
@@ -96,7 +101,7 @@ for and the current limitations.
 
 ### TLS and mTLS flags (`-h tls`)
 
-Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` listener and you want a `kof-cluster-secure.yaml` emitted. The `-tls-server-trust` / `-tls-client-*` flags are the ones required when a Kafka mTLS listener (`ssl.client.auth=required`) is present and you want FTL server-to-server mutual TLS.
+Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` listener and you want a `tibftlserver-cluster-secure.yaml` emitted. The `-tls-server-trust` / `-tls-client-*` flags are the ones required when a Kafka mTLS listener (`ssl.client.auth=required`) is present and you want FTL server-to-server mutual TLS.
 
 | Flag | Description |
 |---|---|
@@ -138,7 +143,7 @@ Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` lis
 | `-realm-service-user` | `primary` | Realm `user` credential for oauth2 mode, written into each per-server realm block |
 | `-realm-service-password` | `primary-pw` | Realm `password` credential for oauth2 mode, written into each per-server realm block |
 
-`kof-cluster-secure.yaml` is only emitted when **security is detected** in the input props AND at least one of `-tls-cert`, `-oauth-token-url`, or `-auth-users-file` is provided.
+`tibftlserver-cluster-secure.yaml` is only emitted when **security is detected** in the input props AND at least one of `-tls-cert`, `-oauth-token-url`, or `-auth-users-file` is provided.
 
 ### DR (Disaster Recovery) flags (`-h dr`)
 
@@ -197,12 +202,12 @@ Notes and limitations:
 
 ## Multi-cluster split (9 input files → 3 shards)
 
-The number of shards is determined by the number of `server.properties` files passed on the command line. Every 3 input files → 1 KOF cluster (shard). The primary `kof-cluster.yaml` always holds the first 3 pservers with FTL realm servers. Every additional group of up to 3 pservers goes into `kof-cluster-aux1.yaml`, `kof-cluster-aux2.yaml`, etc. Auxiliary files contain **no realm server entries** — pservers connect to the primary realm cluster via `globals.core.servers`.
+The number of shards is determined by the number of `server.properties` files passed on the command line. Every 3 input files → 1 KOF cluster (shard). The primary `tibftlserver-cluster.yaml` always holds the first 3 pservers with FTL realm servers. Every additional group of up to 3 pservers goes into `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, etc. Auxiliary files contain **no realm server entries** — pservers connect to the primary realm cluster via `globals.core.servers`.
 
 ```
-9 input files → kof-cluster.yaml      (pserver1–3 + SRV1–3 realm servers)
-                kof-cluster-aux1.yaml  (pserver4–6, no realm)
-                kof-cluster-aux2.yaml  (pserver7–9, no realm)
+9 input files → tibftlserver-cluster.yaml      (pserver1–3 + SRV1–3 realm servers)
+                tibftlserver-cluster-aux1.yaml  (pserver4–6, no realm)
+                tibftlserver-cluster-aux2.yaml  (pserver7–9, no realm)
                 realm.json             (kof.cluster.0, kof.cluster.1, kof.cluster.2)
 ```
 
@@ -212,20 +217,20 @@ The number of shards is determined by the number of `server.properties` files pa
 
 When `-dr-servers` is provided, DR mode is activated for all output files:
 
-- **`kof-cluster.yaml`** gains `globals.dr:` (pointing to DR servers), `auto.init.primary.on.first.startup: true`, and `label: PRIMARY_SERVER` on each realm block.
-- **`kof-cluster-dr.yaml`** is generated with DR servers as `core.servers`, a back-reference `globals.dr:` to the primary servers, and `label: DR_SERVER` on realm blocks. Pservers are named `drpserver1..N`.
+- **`tibftlserver-cluster.yaml`** gains `globals.dr:` (pointing to DR servers), `auto.init.primary.on.first.startup: true`, and `label: PRIMARY_SERVER` on each realm block.
+- **`tibftlserver-cluster-dr.yaml`** is generated with DR servers as `core.servers`, a back-reference `globals.dr:` to the primary servers, and `label: DR_SERVER` on realm blocks. Pservers are named `drpserver1..N`.
 - **`realm.json`** clusters get `dr_enabled: true`, a second pserver set `_DRset` with DR replicas, and transport roles swapped (`dr_transport` populated, `inter_cluster_transport` empty for all pservers).
 
 With 9 input files, DR aux files are also produced:
 
 ```
 9 files + -dr-servers ... →
-    kof-cluster.yaml           (primary: pserver1–3)
-    kof-cluster-aux1.yaml      (primary: pserver4–6)
-    kof-cluster-aux2.yaml      (primary: pserver7–9)
-    kof-cluster-dr.yaml        (DR: drpserver1–3)
-    kof-cluster-dr-aux1.yaml   (DR: drpserver4–6)
-    kof-cluster-dr-aux2.yaml   (DR: drpserver7–9)
+    tibftlserver-cluster.yaml           (primary: pserver1–3)
+    tibftlserver-cluster-aux1.yaml      (primary: pserver4–6)
+    tibftlserver-cluster-aux2.yaml      (primary: pserver7–9)
+    tibftlserver-cluster-dr.yaml        (DR: drpserver1–3)
+    tibftlserver-cluster-dr-aux1.yaml   (DR: drpserver4–6)
+    tibftlserver-cluster-dr-aux2.yaml   (DR: drpserver7–9)
     realm.json                 (kof.cluster.0/1/2 with dr_enabled: true)
 ```
 
@@ -248,7 +253,7 @@ tibkafkatokof \
   examples/01-single-node-plaintext/server-1.properties
 ```
 
-**Output:** `kof-cluster.yaml` (1 SRV + 1 pserver), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
+**Output:** `tibftlserver_standalone.yaml` (1 SRV + 1 pserver), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
 
 ---
 
@@ -266,7 +271,7 @@ tibkafkatokof \
   examples/02-single-node-sasl/server-1.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (auth mode: file-auth+tls), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
+**Output:** `tibftlserver_standalone.yaml`, `tibftlserver_standalone-secure.yaml` (auth mode: file-auth+tls), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
 
 ---
 
@@ -288,7 +293,7 @@ tibkafkatokof \
   examples/03-single-node-oauth/server-1.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (auth mode: oauth2), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
+**Output:** `tibftlserver_standalone.yaml`, `tibftlserver_standalone-secure.yaml` (auth mode: oauth2), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
 
 ---
 
@@ -302,7 +307,7 @@ tibkafkatokof \
   examples/04-3broker-plaintext/server-1.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
 
 ---
 
@@ -323,7 +328,7 @@ tibkafkatokof \
   examples/05-3broker-sasl/server-1.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (auth mode: file-auth+tls), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: file-auth+tls), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
 
 ---
 
@@ -340,7 +345,7 @@ tibkafkatokof \
   examples/06-3broker-tls-only/server-1.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (auth mode: tls-only), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: tls-only), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
 
 ---
 
@@ -366,7 +371,7 @@ tibkafkatokof \
   examples/07-3broker-multi-sasl/server-1.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (auth mode: oauth2 + mTLS props), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS props), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
 
 ---
 
@@ -391,7 +396,7 @@ tibkafkatokof \
   examples/08-3broker-multi-listener/server-1.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `kof-cluster-secure.yaml` (auth mode: oauth2; includes all mTLS FTL properties), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2; includes all mTLS FTL properties), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
 
 ---
 
@@ -416,7 +421,7 @@ tibkafkatokof \
   examples/09-10broker-scale/server-9.properties
 ```
 
-**Output:** `kof-cluster.yaml` (SRV1–3 + pserver1–3), `kof-cluster-aux1.yaml` (pserver4–6), `kof-cluster-aux2.yaml` (pserver7–9), `realm.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml` (SRV1–3 + pserver1–3), `tibftlserver-cluster-aux1.yaml` (pserver4–6), `tibftlserver-cluster-aux2.yaml` (pserver7–9), `realm.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `unsupported.properties`
 
 ---
 
@@ -452,7 +457,7 @@ tibkafkatokof \
   examples/10-10broker-secure/server-9.properties
 ```
 
-**Output:** `kof-cluster.yaml`, `kof-cluster-aux1.yaml`, `kof-cluster-aux2.yaml`, `kof-cluster-secure.yaml` (auth mode: oauth2 + mTLS), `realm.json` (3 clusters), `kof.broker.{1–9}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS), `realm.json` (3 clusters), `kof.broker.{1–9}.properties`, `unsupported.properties`
 
 ---
 
@@ -473,7 +478,7 @@ tibkafkatokof \
 
 **Output:**
 
-`kof-cluster.yaml` — primary cluster (start with `tibftlserver -c kof-cluster.yaml -n SRV1`):
+`tibftlserver-cluster.yaml` — primary cluster (start with `tibftlserver -c tibftlserver-cluster.yaml -n SRV1`):
 ```yaml
 globals:
   core.servers:
@@ -490,7 +495,7 @@ servers:
       name: pserver1  ...
 ```
 
-`kof-cluster-dr.yaml` — DR replica cluster (start with `tibftlserver -c kof-cluster-dr.yaml -n drserver1`):
+`tibftlserver-cluster-dr.yaml` — DR replica cluster (start with `tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver1`):
 ```yaml
 globals:
   core.servers:
@@ -528,8 +533,8 @@ tibkafkatokof \
 
 **Output:**
 ```
-kof-cluster.yaml              (primary: globals.dr + PRIMARY_SERVER labels on realm blocks)
-kof-cluster-dr.yaml           (DR replica: DRSRV1–3 as core.servers, DR_SERVER labels, drpserver1–3)
+tibftlserver-cluster.yaml              (primary: globals.dr + PRIMARY_SERVER labels on realm blocks)
+tibftlserver-cluster-dr.yaml           (DR replica: DRSRV1–3 as core.servers, DR_SERVER labels, drpserver1–3)
 realm.json                    (dr_enabled: true; _setA primary + _DRset DR pserver sets)
 kof.broker.{1,2,3}.properties
 unsupported.properties
@@ -543,14 +548,14 @@ Combine the example 10 flags above with `-dr-servers` to generate DR-enabled out
 
 ## Output details
 
-### `kof-cluster.yaml`
+### `tibftlserver-cluster.yaml`
 
 Primary cluster with realm servers (SRV1–SRV3) and first 3 pservers. Realm server ports are either from `-core-servers` or randomly chosen in 5600–5699.
 
 ```sh
-tibftlserver -c kof-cluster.yaml -n SRV1
-tibftlserver -c kof-cluster.yaml -n SRV2
-tibftlserver -c kof-cluster.yaml -n SRV3
+tibftlserver -c tibftlserver-cluster.yaml -n SRV1
+tibftlserver -c tibftlserver-cluster.yaml -n SRV2
+tibftlserver -c tibftlserver-cluster.yaml -n SRV3
 ```
 
 **No `services:` section.** Realm settings are written per server, on each `- realm:` entry, rather
@@ -572,25 +577,53 @@ servers:
 
 This applies to every cluster YAML the tool writes — primary, secure, and DR.
 
-### `kof-cluster-auxN.yaml`
+**Schema daemon (`-tibschemad`).** With the flag set, every server that carries a realm block also
+gets a schema pserver and a `- tibschemad:` entry. No extra `tibftlserver` processes and no extra
+ports — the schema pserver rides the process that already hosts the KOF pserver, so a 3-broker
+conversion is still three servers:
+
+```yaml
+servers:
+  SRV1:
+  - realm:
+      data: /var/tmp/kof/data
+      initial.realm.config: realm.json
+  - persistence:
+      name: pserver1
+      data: /var/tmp/kof/data/pserver1
+      kof.broker.properties: kof.broker.1.properties
+      loglevel: connections:info;kof:info;durables:info;store:info
+  - persistence:
+      name: schema1
+  - tibschemad:
+      auth.type: none
+      cluster.size: 3
+```
+
+`cluster.size` is the number of realm servers in the file — 1 for a standalone server, 3 for a
+cluster. The block is written to the primary and secure YAMLs. Auxiliary files never get it, since
+their pservers have no realm entry to attach a schema daemon to, and DR files are not covered yet.
+`auth.type` is always `none` for now; OAuth options for `tibschemad` are a later addition.
+
+### `tibftlserver-cluster-auxN.yaml`
 
 Auxiliary pserver groups. Each file references the same `globals.core.servers` as the primary. No realm entries at all — these pservers join the primary realm cluster.
 
 ```sh
-tibftlserver -c kof-cluster-aux1.yaml -n PSRV4
+tibftlserver -c tibftlserver-cluster-aux1.yaml -n PSRV4
 ```
 
-### `kof-cluster-dr.yaml`
+### `tibftlserver-cluster-dr.yaml`
 
 DR replica cluster. Start on the DR hosts using the DR server names from `-dr-servers`:
 
 ```sh
-tibftlserver -c kof-cluster-dr.yaml -n DRSRV1
-tibftlserver -c kof-cluster-dr.yaml -n DRSRV2
-tibftlserver -c kof-cluster-dr.yaml -n DRSRV3
+tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV1
+tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV2
+tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV3
 ```
 
-### `kof-cluster-secure.yaml`
+### `tibftlserver-cluster-secure.yaml`
 
 Adds `ftlserver.properties` blocks (TLS, auth) to each realm server. Auth mode is determined by the Kafka listener types:
 
@@ -654,8 +687,21 @@ Written when any input properties are not in the KoF whitelist. Contains KRaft c
 | `examples/18-3broker-sasl+mtls+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
 | `examples/19-from-brokers-plaintext/` | N/A (live brokers) | PLAINTEXT — fetch from live brokers | 3 |
 | `examples/20-from-brokers-sasl/` | N/A (live brokers) | SASL — fetch from live brokers | 3 |
+| `examples/21-single-node-tibschemad/` | 1 (broker+controller) | PLAINTEXT + `-tibschemad` | 1 |
+| `examples/22-3broker-tibschemad/` | 3 (broker+controller) | PLAINTEXT + `-tibschemad` | 3 |
 
-Examples 01–18 each ship a checked-in `output/` directory, regenerated by
+Examples 01–18, 21 and 22 each ship a checked-in `output/` directory, regenerated by
 `examples/regen-examples.sh`. Examples 19 and 20 cover the `-from-brokers` mode and hold a
 `README.md` only: their input is a running Kafka cluster, so there is nothing reproducible to
 check in. Follow the commands in those READMEs against a live cluster of your own.
+
+Examples 21 and 22 take the same inputs as 01 and 04 and add only `-tibschemad`, so diffing
+their outputs shows exactly what the flag contributes — the standalone case at `cluster.size: 1`
+and the cluster case at `cluster.size: 3`:
+
+```bash
+diff examples/01-single-node-plaintext/output/tibftlserver_standalone.yaml \
+     examples/21-single-node-tibschemad/output/tibftlserver_standalone.yaml
+diff examples/04-3broker-plaintext/output/tibftlserver-cluster.yaml \
+     examples/22-3broker-tibschemad/output/tibftlserver-cluster.yaml
+```

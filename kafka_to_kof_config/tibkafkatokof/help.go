@@ -34,6 +34,7 @@ var flagGroups = []flagGroup{
 			"transport-type",
 			"ftl-loglevel",
 			"migration-config",
+			"tibschemad",
 		},
 	},
 	{
@@ -194,12 +195,15 @@ func writeOverview(w io.Writer) {
 	writeSynopsis(w)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Output files:")
-	fmt.Fprintln(w, "  kof-cluster.yaml          FTL pserver cluster configuration (primary, first 3 pservers)")
-	fmt.Fprintln(w, "  kof-cluster-auxN.yaml     Additional pserver groups (one per group of 3 pservers beyond the first)")
-	fmt.Fprintln(w, "  kof-cluster-secure.yaml   Secure variant with TLS/auth settings for FTL server")
-	fmt.Fprintln(w, "  kof-cluster-dr.yaml       DR replica cluster (with -dr-servers)")
-	fmt.Fprintln(w, "  realm.json                FTL realm configuration with kof.cluster")
-	fmt.Fprintln(w, "  kof.broker.N.properties   Per-pserver broker properties (N is 1-based)")
+	fmt.Fprintln(w, "  tibftlserver-cluster.yaml         FTL pserver cluster configuration (primary, first 3 pservers)")
+	fmt.Fprintln(w, "  tibftlserver-cluster-auxN.yaml    Additional pserver groups (one per group of 3 pservers beyond the first)")
+	fmt.Fprintln(w, "  tibftlserver-cluster-secure.yaml  Secure variant with TLS/auth settings for FTL server")
+	fmt.Fprintln(w, "  tibftlserver-cluster-dr.yaml      DR replica cluster (with -dr-servers)")
+	fmt.Fprintln(w, "  realm.json                        FTL realm configuration with kof.cluster")
+	fmt.Fprintln(w, "  kof.broker.N.properties           Per-pserver broker properties (N is 1-based)")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "A single-broker conversion produces one pserver -- a standalone server rather than a")
+	fmt.Fprintln(w, "cluster -- so its YAMLs are named tibftlserver_standalone.yaml, -secure.yaml, -dr.yaml.")
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Common flags:")

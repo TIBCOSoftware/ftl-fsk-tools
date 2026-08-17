@@ -12,11 +12,14 @@ tool generates:
 
 | File | Purpose |
 |---|---|
-| `kof-cluster.yaml` | FTL pserver cluster configuration |
+| `tibftlserver-cluster.yaml` | FTL pserver cluster configuration |
 | `realm.json` | FTL realm with `kof.cluster` definition |
 | `kof.broker.N.properties` | Per-pserver broker properties (1-based) |
 | `unsupported.properties` | Settings with no KOF equivalent (reference only) |
-| `kof-cluster-secure.yaml` | TLS/auth overlay (when security flags are provided) |
+| `tibftlserver-cluster-secure.yaml` | TLS/auth overlay (when security flags are provided) |
+
+A single-broker conversion produces one pserver — a standalone server rather than a cluster — so
+its YAMLs are named `tibftlserver_standalone.yaml` and `tibftlserver_standalone-secure.yaml`.
 
 :::tip No properties file handy?
 If the Kafka cluster is already running, `--from-brokers host:port,...` reads each broker's
@@ -74,7 +77,7 @@ tibkafkatokof \
 ```
 Writing file: ./kof-output/kof.broker.1.properties [
 Writing file: ./kof-output/unsupported.properties
-Writing file: ./kof-output/kof-cluster.yaml
+Writing file: ./kof-output/tibftlserver_standalone.yaml
 Writing file: ./kof-output/realm.json
 
 All kof.broker.*.properties files are processed successfully.
@@ -167,7 +170,7 @@ tibkafkatokof \
 ```
 
 The `--auth-users-file` points to an FTL users file that maps usernames extracted
-from the inline JAAS config. The tool writes a `kof-cluster-secure.yaml` alongside
+from the inline JAAS config. The tool writes a `tibftlserver-cluster-secure.yaml` alongside
 the main cluster YAML when TLS or auth flags are supplied.
 
 **→ Continue to [Step 3](#step-3--single-node-oauth2) to replace SASL/PLAIN with OAuth2,
@@ -282,13 +285,13 @@ Writing file: ./kof-output/kof.broker.1.properties [
 Writing file: ./kof-output/kof.broker.2.properties [
 Writing file: ./kof-output/kof.broker.3.properties [
 Writing file: ./kof-output/unsupported.properties
-Writing file: ./kof-output/kof-cluster.yaml
+Writing file: ./kof-output/tibftlserver-cluster.yaml
 Writing file: ./kof-output/realm.json
 
 All kof.broker.*.properties files are processed successfully.
 ```
 
-The generated `kof-cluster.yaml` contains three pserver entries (`SRV1`, `SRV2`,
+The generated `tibftlserver-cluster.yaml` contains three pserver entries (`SRV1`, `SRV2`,
 `SRV3`) with randomly assigned FTL ports in the 5600–5799 range. To pin specific
 ports use `--core-servers SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`.
 
@@ -525,6 +528,7 @@ tibkafkatokof \
 | `--transport-type` | `auto` | FTL transport: `auto` or `dtcp` (low-latency) |
 | `--auto` | off | Convert JKS/PKCS12 keystores to PEM automatically |
 | `--migration-config` | off | Also write `kafka-to-kof.properties` for the migration tool |
+| `--tibschemad` | off | Add the FTL schema daemon to the generated cluster YAML |
 | `--list-properties` | off | Print how each Kafka property is handled, then exit |
 
 ### Finding the rest

@@ -35,10 +35,20 @@ else
   exit 1
 fi
 
-CLUSTER_YAML="$KOF_OUTPUT_DIR/kof-cluster.yaml"
+# The demo is a three-broker cluster, so tibkafkatokof names the file
+# tibftlserver-cluster.yaml. A single-broker conversion is named
+# tibftlserver_standalone.yaml instead, and this script cannot use it: it starts
+# SRV1/SRV2/SRV3, which a standalone output does not define.
+CLUSTER_YAML="$KOF_OUTPUT_DIR/tibftlserver-cluster.yaml"
 if [[ ! -f "$CLUSTER_YAML" ]]; then
   echo "ERROR: $CLUSTER_YAML not found."
-  echo "Run tibkafkatokof against demo/kraft/server-*.properties first to generate kof-output/."
+  if [[ -f "$KOF_OUTPUT_DIR/tibftlserver_standalone.yaml" ]]; then
+    echo "Found tibftlserver_standalone.yaml instead — that output came from a single broker."
+    echo "This script starts SRV1/SRV2/SRV3; re-run tibkafkatokof with all three"
+    echo "demo/kraft/server-*.properties files."
+  else
+    echo "Run tibkafkatokof against demo/kraft/server-*.properties first to generate kof-output/."
+  fi
   exit 1
 fi
 

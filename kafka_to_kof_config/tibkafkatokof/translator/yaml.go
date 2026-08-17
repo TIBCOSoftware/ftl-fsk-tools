@@ -46,6 +46,33 @@ type ClusterOpts struct {
 	// so it has to be switched off explicitly. Set by the undocumented
 	// -disable-disk-index flag.
 	DisableDiskIndex bool
+
+	// Tibschemad adds the FTL schema daemon to every server that carries a realm
+	// block: a second "- persistence: name: schemaN" plus a "- tibschemad:" entry.
+	// No extra FTL servers and no extra ports -- the schema pserver shares the
+	// tibftlserver process that already hosts the KOF pserver. Set by --tibschemad.
+	Tibschemad bool
+}
+
+// clusterYAMLStem returns the base name for every generated tibftlserver YAML.
+// A single-pserver deployment is a standalone server, not a cluster, so it gets
+// its own stem. n is the primary pserver count (min3 of the broker count).
+func clusterYAMLStem(n int) string {
+	if n <= 1 {
+		return "tibftlserver_standalone"
+	}
+	return "tibftlserver-cluster"
+}
+
+// writeTibschemadBlock appends the schema daemon entries to the server currently
+// being written. size is the number of servers in the schemad cluster, which is
+// the primary pserver count -- one schema pserver per realm server.
+func writeTibschemadBlock(f *os.File, n, size int) {
+	fmt.Fprintln(f, "  - persistence:")
+	fmt.Fprintf(f, "      name: schema%d\n", n)
+	fmt.Fprintln(f, "  - tibschemad:")
+	fmt.Fprintln(f, "      auth.type: none")
+	fmt.Fprintf(f, "      cluster.size: %d\n", size)
 }
 
 // writeRealmBlock writes a server's "- realm:" entry. Every generated YAML carries
@@ -82,9 +109,11 @@ func buildDRString(servers []CoreServer) string {
 	return strings.Join(parts, "|")
 }
 
-// WriteKOFClusterYAML generates kof-cluster.yaml (primary) and, when numPservers > 3,
-// one or more kof-cluster-auxN.yaml files for additional pserver groups.
-// When drOpts.Enabled(), also generates kof-cluster-dr.yaml (and aux DR files).
+// WriteKOFClusterYAML generates the primary tibftlserver YAML and, when numPservers > 3,
+// one or more <stem>-auxN.yaml files for additional pserver groups.
+// When drOpts.Enabled(), also generates <stem>-dr.yaml (and aux DR files).
+// The stem is tibftlserver-cluster, or tibftlserver_standalone for a single pserver
+// (see clusterYAMLStem).
 func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, authUsersFile, kafkaUsersFile string, drOpts DROpts, copts ClusterOpts) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
@@ -97,14 +126,15 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPath
 
 	// Primary cluster: first 3 pservers with realm servers.
 	primaryCount := min3(numPservers)
-	primaryPath := filepath.Join(outputDir, "kof-cluster.yaml")
+	stem := clusterYAMLStem(primaryCount)
+	primaryPath := filepath.Join(outputDir, stem+".yaml")
 	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPaths, realmPath, primaryCount, ports, cores, authUsersFile, kafkaUsersFile, drOpts, copts); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "Writing file: %s\n", primaryPath)
 
 	if drOpts.Enabled() {
-		drPath := filepath.Join(outputDir, "kof-cluster-dr.yaml")
+		drPath := filepath.Join(outputDir, stem+"-dr.yaml")
 		if err := writeDRYAML(drPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, 0, primaryCount, drOpts.DRServers, cores, copts); err != nil {
 			return err
 		}
@@ -118,14 +148,14 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPath
 		if end > numPservers {
 			end = numPservers
 		}
-		auxPath := filepath.Join(outputDir, fmt.Sprintf("kof-cluster-aux%d.yaml", auxIdx))
+		auxPath := filepath.Join(outputDir, fmt.Sprintf("%s-aux%d.yaml", stem, auxIdx))
 		if err := writeAuxYAML(auxPath, cfg, dataDir, propsPaths, start, end, ports, cores, drOpts, copts); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stdout, "Writing file: %s\n", auxPath)
 
 		if drOpts.Enabled() {
-			drAuxPath := filepath.Join(outputDir, fmt.Sprintf("kof-cluster-dr-aux%d.yaml", auxIdx))
+			drAuxPath := filepath.Join(outputDir, fmt.Sprintf("%s-dr-aux%d.yaml", stem, auxIdx))
 			if err := writeDRYAML(drAuxPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, start, end, drOpts.DRServers, cores, copts); err != nil {
 				return err
 			}
@@ -148,7 +178,7 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 	fmt.Fprintln(f, "#")
 	fmt.Fprintln(f, "# Start the cluster (one tibftlserver per SRV entry):")
 	for i := 0; i < numPservers; i++ {
-		fmt.Fprintf(f, "#   tibftlserver -c kof-cluster.yaml -n SRV%d\n", i+1)
+		fmt.Fprintf(f, "#   tibftlserver -c %s -n SRV%d\n", filepath.Base(path), i+1)
 	}
 	fmt.Fprintln(f)
 
@@ -195,6 +225,9 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
 		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
 		fmt.Fprintf(f, "      loglevel: %s\n", copts.LogLevel)
+		if copts.Tibschemad {
+			writeTibschemadBlock(f, i+1, numPservers)
+		}
 		fmt.Fprintln(f)
 	}
 	return nil
@@ -244,7 +277,8 @@ func writeAuxYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []s
 	return nil
 }
 
-// writeDRYAML writes a kof-cluster-dr.yaml (or aux DR YAML) for the DR replica cluster.
+// writeDRYAML writes the primary DR YAML (<stem>-dr.yaml) or an aux DR YAML for the
+// DR replica cluster.
 // start=0 produces the primary DR YAML with realm entries; start>0 produces an aux DR file.
 // drServers is the list of DR server names/addresses; primaryCores is the primary core.servers list
 // (used as the back-reference in globals.dr of the DR YAML).

@@ -1,11 +1,14 @@
 // tibkafkatokof translates one or more Kafka broker server.properties files into
 // the FTL artifacts needed to run a KOF-enabled pserver cluster:
 //
-//	kof-cluster.yaml          — FTL pserver cluster configuration (primary)
-//	kof-cluster-auxN.yaml     — Auxiliary pserver groups (one per additional group of 3 pservers)
-//	kof-cluster-secure.yaml   — Secure variant with TLS/auth (when --tls-cert or --oauth-token-url provided)
-//	realm.json                — FTL realm configuration with kof.cluster definition
-//	kof.broker.N.properties   — Per-pserver broker properties (one file per input, N is 1-based)
+//	tibftlserver-cluster.yaml         — FTL pserver cluster configuration (primary)
+//	tibftlserver-cluster-auxN.yaml    — Auxiliary pserver groups (one per additional group of 3 pservers)
+//	tibftlserver-cluster-secure.yaml  — Secure variant with TLS/auth (when --tls-cert or --oauth-token-url provided)
+//	realm.json                        — FTL realm configuration with kof.cluster definition
+//	kof.broker.N.properties           — Per-pserver broker properties (one file per input, N is 1-based)
+//
+// A single-broker conversion produces one pserver, which is a standalone server
+// rather than a cluster, so those YAMLs are named tibftlserver_standalone*.yaml.
 //
 // Usage:
 //
@@ -99,6 +102,10 @@ func main() {
 
 	writeMigrationConfig := flag.Bool("migration-config", false,
 		"write kafka-to-kof.properties to the output directory (migration tool configuration)")
+
+	writeTibschemad := flag.Bool("tibschemad", false,
+		"add a tibschemad (FTL schema daemon) section to the generated cluster YAML\n"+
+			"    each server gains a schemaN persistence and a tibschemad entry; no extra servers or ports")
 
 	fromBrokers := flag.String("from-brokers", "",
 		"comma-separated host:port list of live Kafka brokers to fetch config from via Admin API\n"+
@@ -207,6 +214,7 @@ func main() {
 	clusterOpts := translator.ClusterOpts{
 		LogLevel:         *ftlLogLevel,
 		DisableDiskIndex: *disableDiskIndex,
+		Tibschemad:       *writeTibschemad,
 	}
 
 	// Build SecureOpts from flags.
@@ -315,12 +323,12 @@ func main() {
 		}
 	}
 	if err := translator.WriteKOFClusterYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, ftlUsersFile, kafkaUsersFile, drOpts, clusterOpts); err != nil {
-		fmt.Fprintln(os.Stderr, "error writing kof-cluster.yaml:", err)
+		fmt.Fprintln(os.Stderr, "error writing cluster YAML:", err)
 		os.Exit(1)
 	}
 	if translator.ShouldWriteSecure(cfgs[0], secureOpts) {
 		// Wire the auto-generated FTL + Kafka users into the secure YAML's
-		// auth.providers, same as the base kof-cluster.yaml. Without this the secure
+		// auth.providers, same as the base cluster YAML. Without this the secure
 		// YAML would be TLS-without-auth, which the FTL server rejects at startup.
 		if secureOpts.AuthUsersFile == "" {
 			secureOpts.AuthUsersFile = ftlUsersFile
@@ -329,7 +337,7 @@ func main() {
 			secureOpts.KafkaUsersFile = kafkaUsersFile
 		}
 		if err := translator.WriteKOFSecureYAML(cfgs[0], *outputDir, *dataDir, propsPaths, realmPath, numPservers, ports, coreServers, secureOpts, drOpts, clusterOpts); err != nil {
-			fmt.Fprintln(os.Stderr, "error writing kof-cluster-secure.yaml:", err)
+			fmt.Fprintln(os.Stderr, "error writing secure cluster YAML:", err)
 			os.Exit(1)
 		}
 	}

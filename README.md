@@ -4,7 +4,7 @@ Tools for configuring and migrating to KOF (Kafka-on-FTL) persistence clusters.
 
 | Tool | Language | Description |
 |------|----------|-------------|
-| [kafka_to_kof_config/tibkafkatokof](kafka_to_kof_config/tibkafkatokof/README.md) | Go | Translates Kafka KRaft `server.properties` into FTL KOF artifacts (`realm.json`, `kof-cluster.yaml`, etc.) |
+| [kafka_to_kof_config/tibkafkatokof](kafka_to_kof_config/tibkafkatokof/README.md) | Go | Translates Kafka KRaft `server.properties` into FTL KOF artifacts (`realm.json`, `tibftlserver-cluster.yaml`, etc.) |
 | [kafka_to_kof_migration](kafka_to_kof_migration/README.md) | Java | Replicates records from a source Kafka cluster to a target KOF cluster |
 
 The migration tool also ships an optional web dashboard and a runnable demo scenario —

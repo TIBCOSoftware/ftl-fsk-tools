@@ -168,7 +168,7 @@ export TIBFTLSERVER=/opt/tibco/ftl/current-version/bin/tibftlserver   # or put t
 bash demo/start-kof-brokers.sh --output-dir ./kof-output
 ```
 
-This starts SRV1 / SRV2 / SRV3 from `kof-output/kof-cluster.yaml` and saves PIDs to
+This starts SRV1 / SRV2 / SRV3 from `kof-output/tibftlserver-cluster.yaml` and saves PIDs to
 `demo/kof-brokers.pid`.
 
 To stop: `bash demo/stop-kof-brokers.sh`

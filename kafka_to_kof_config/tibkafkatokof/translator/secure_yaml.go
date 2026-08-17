@@ -49,7 +49,7 @@ type SecureOpts struct {
 	AuthUsersFile string
 	// KafkaUsersFile is the tool's OWN auto-generated kafka-users.txt (inline JAAS
 	// PLAIN users), wired as a second file: provider -- same as the base
-	// kof-cluster.yaml. Not an operator input; populated from the generated file.
+	// cluster YAML. Not an operator input; populated from the generated file.
 	KafkaUsersFile string
 
 	// mTLS — needed when a Kafka mTLS listener is present
@@ -86,7 +86,7 @@ func detectAuth(cfg *BrokerConfig, opts SecureOpts) authFlags {
 		ac.MTLS = true
 	}
 	// A secured cluster's FTL servers need auth (TLS requires auth). The base
-	// kof-cluster.yaml wires file:ftl-users whenever a users file exists; mirror that
+	// cluster YAML wires file:ftl-users whenever a users file exists; mirror that
 	// here so a non-SASL (pure SSL/mTLS) listener's secure YAML isn't TLS-without-auth.
 	if opts.AuthUsersFile != "" {
 		ac.FileAuth = true
@@ -122,12 +122,14 @@ func ShouldWriteSecure(cfg *BrokerConfig, opts SecureOpts) bool {
 	return opts.TLSCert != "" || opts.OAuthTokenURL != "" || opts.AuthUsersFile != ""
 }
 
-// WriteKOFSecureYAML generates kof-cluster-secure.yaml for the primary cluster (first 3 pservers).
+// WriteKOFSecureYAML generates the secure variant of the primary cluster YAML
+// (<stem>-secure.yaml, first 3 pservers). See clusterYAMLStem for the stem.
 func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, opts SecureOpts, drOpts DROpts, copts ClusterOpts) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
-	path := filepath.Join(outputDir, "kof-cluster-secure.yaml")
+	primaryCount := min3(numPservers)
+	path := filepath.Join(outputDir, clusterYAMLStem(primaryCount)+"-secure.yaml")
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -136,7 +138,6 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 
 	host := resolveHost(cfg.KOFHost)
 	cores := buildCoreServers(coreServers, host, ports)
-	primaryCount := min3(numPservers)
 	ac := detectAuth(cfg, opts)
 	providers := buildAuthProviders(ac, opts)
 
@@ -151,7 +152,7 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 	fmt.Fprintln(f, "#")
 	fmt.Fprintln(f, "# Start the cluster (one tibftlserver per SRV entry):")
 	for i := 0; i < primaryCount; i++ {
-		fmt.Fprintf(f, "#   tibftlserver -c kof-cluster-secure.yaml -n SRV%d\n", i+1)
+		fmt.Fprintf(f, "#   tibftlserver -c %s -n SRV%d\n", filepath.Base(path), i+1)
 	}
 	fmt.Fprintln(f)
 
@@ -223,6 +224,11 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
 		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
 		fmt.Fprintf(f, "      loglevel: %s\n", copts.LogLevel)
+		// auth.type stays none here in phase 1; wiring the schema daemon to oauth2
+		// alongside the rest of this file's security settings is phase 2.
+		if copts.Tibschemad {
+			writeTibschemadBlock(f, i+1, primaryCount)
+		}
 		fmt.Fprintln(f)
 	}
 

@@ -18,7 +18,7 @@
 #                             [--timeout 120]
 #
 # --server is the FTL SERVER port -- the core.servers port from
-# kof-cluster.yaml -- not the KOF Kafka listener port.
+# tibftlserver-cluster.yaml -- not the KOF Kafka listener port.
 #
 # Exits 0 once the cluster is ready, 1 on timeout.
 

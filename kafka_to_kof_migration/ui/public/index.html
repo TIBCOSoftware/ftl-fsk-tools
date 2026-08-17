@@ -424,7 +424,7 @@ function drawKafka(){
   drawSvgCluster(document.getElementById('ksvg'),'#f97316',nodes,'Source Kafka Cluster');
 }
 function drawKof(){
-  // Default ports: FTL core.servers from kof-cluster.yaml (5635, 5620, 5623)
+  // Default ports: FTL core.servers from tibftlserver-cluster.yaml (5635, 5620, 5623)
   var nodes=kofCl
     ?kofCl.nodes.map(function(n,i){ return {name:'SRV-'+(n.id||i+1),port:n.port||[5635,5620,5623][i],status:n.status||'unknown'}; })
     :[{name:'SRV-1',port:5635,status:'unknown'},{name:'SRV-2',port:5620,status:'unknown'},{name:'SRV-3',port:5623,status:'unknown'}];

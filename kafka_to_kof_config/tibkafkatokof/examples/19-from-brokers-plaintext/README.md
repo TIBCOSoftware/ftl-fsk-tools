@@ -31,6 +31,10 @@ tibkafkatokof --from-brokers localhost:9092 --output-dir output
 tibkafkatokof --from-brokers localhost:9092,localhost:9093,localhost:9094 --output-dir output
 ```
 
+The single-pserver form is a standalone server rather than a cluster, so its YAML is
+named `tibftlserver_standalone.yaml`; the three-address form produces
+`tibftlserver-cluster.yaml`.
+
 ## How it works
 
 1. `tibkafkatokof` connects to each broker address in turn.
@@ -45,7 +49,7 @@ tibkafkatokof --from-brokers localhost:9092,localhost:9093,localhost:9094 --outp
 The `output/` directory will contain the same artifacts as file-based invocations:
 
 ```
-output/kof-cluster.yaml
+output/tibftlserver-cluster.yaml
 output/realm.json
 output/kof.broker.1.properties   (one per broker address)
 output/kof.broker.2.properties

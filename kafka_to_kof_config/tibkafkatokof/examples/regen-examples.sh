@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Regenerate all 18 tibkafkatokof example outputs using relative paths.
+# Regenerate all 20 tibkafkatokof example outputs using relative paths.
+# (Examples 19 and 20 need live brokers and are documented, not regenerated.)
 set -euo pipefail
 
 # Resolve everything relative to this script so this copy regenerates its own
@@ -181,4 +182,18 @@ run 18-3broker-sasl+mtls+oauth2 \
   "${OAUTH_SVR[@]}" \
   server-1.properties server-2.properties server-3.properties
 
-echo "==> Done regenerating all 18 examples."
+# ── 21: single-node + schema daemon ──────────────────────────────────────
+# Same input as 01; --tibschemad is the only difference. cluster.size: 1.
+run 21-single-node-tibschemad \
+  --core-servers "SRV1=localhost:5663" \
+  --tibschemad \
+  server-1.properties
+
+# ── 22: 3-broker + schema daemon ─────────────────────────────────────────
+# Same input as 04; --tibschemad is the only difference. cluster.size: 3.
+run 22-3broker-tibschemad \
+  --core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602" \
+  --tibschemad \
+  server-1.properties server-2.properties server-3.properties
+
+echo "==> Done regenerating all 20 examples."
