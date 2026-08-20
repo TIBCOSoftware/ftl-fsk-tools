@@ -1,11 +1,11 @@
 # kof-tools
 
-Tools for configuring and migrating to KOF (Kafka-on-FTL) persistence clusters.
+Tools for configuring and migrating to TIBCO FTL(R) Service for Kafka (FKS) persistence clusters.
 
 | Tool | Language | Description |
 |------|----------|-------------|
-| [kafka_to_kof_config/tibkafkatokof](kafka_to_kof_config/tibkafkatokof/README.md) | Go | Translates Kafka KRaft `server.properties` into FTL KOF artifacts (`realm.json`, `tibftlserver-cluster.yaml`, etc.) |
-| [kafka_to_kof_migration](kafka_to_kof_migration/README.md) | Java | Replicates records from a source Kafka cluster to a target KOF cluster |
+| [kafka_to_kof_config/tibkafkatokof](kafka_to_kof_config/tibkafkatokof/README.md) | Go | Translates Apache Kafka KRaft `server.properties` into FKS artifacts (`realm.json`, `tibftlserver-cluster.yaml`, etc.) |
+| [kafka_to_kof_migration](kafka_to_kof_migration/README.md) | Java | Replicates records from a source Apache Kafka cluster to a target FKS cluster |
 
 The migration tool also ships an optional web dashboard and a runnable demo scenario —
 see [kafka_to_kof_migration/README-UI.md](kafka_to_kof_migration/README-UI.md).
@@ -21,7 +21,7 @@ see [kafka_to_kof_migration/README-UI.md](kafka_to_kof_migration/README-UI.md).
 | CMake | 3.15 | |
 | Go | 1.25 | For `tibkafkatokof`. Set `GO_EXECUTABLE` if the right version is not first on `PATH`. |
 | Java (JDK) | 11 | For `kafka_to_kof_migration`. |
-| Kafka client jars | — | `kafka-clients.jar` + `slf4j-api.jar`; see below. |
+| Apache Kafka client jars | — | `kafka-clients.jar` + `slf4j-api.jar`; see below. |
 
 ### Build (both tools)
 
@@ -62,11 +62,11 @@ If Go 1.25+ is not on your `PATH` but is installed elsewhere:
 cmake .. -DGO_EXECUTABLE=/usr/local/go/bin/go
 ```
 
-### Obtaining Kafka client jars
+### Obtaining Apache Kafka client jars
 
-The Kafka client jars are not bundled in this repository. Common sources:
+The Apache Kafka client jars are not bundled in this repository. Common sources:
 
-- **Kafka installation**: `$KAFKA_HOME/libs/kafka-clients-*.jar` and `$KAFKA_HOME/libs/slf4j-api-*.jar`
+- **Apache Kafka installation**: `$KAFKA_HOME/libs/kafka-clients-*.jar` and `$KAFKA_HOME/libs/slf4j-api-*.jar`
 - **Maven Central**: `org.apache.kafka:kafka-clients` and `org.slf4j:slf4j-api`
 
 At runtime, `run-kafka-to-kof.sh` also needs a logging binding such as `slf4j-simple.jar`.

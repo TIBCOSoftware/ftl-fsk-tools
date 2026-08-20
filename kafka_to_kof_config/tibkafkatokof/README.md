@@ -1,6 +1,6 @@
 # tibkafkatokof
 
-Translates a Kafka KRaft broker `server.properties` file into the FTL KOF artifacts needed to run a KOF-enabled pserver cluster:
+Translates an Apache Kafka KRaft broker `server.properties` file into the TIBCO FTL(R) Service for Kafka (FKS) artifacts needed to run an FKS-enabled pserver cluster:
 
 | Output file | Purpose |
 |---|---|
@@ -8,8 +8,8 @@ Translates a Kafka KRaft broker `server.properties` file into the FTL KOF artifa
 | `tibftlserver-cluster-secure.yaml` | Secure variant with TLS/auth blocks (generated when TLS/OAuth flags are provided) |
 | `tibftlserver-cluster-dr.yaml` | DR replica cluster config (generated when `-dr-servers` is provided) |
 | `realm.json` | FTL realm config with `kof.cluster.N` (N is 0-based), stores, and pserver definitions |
-| `kof.broker.N.properties` | Per-broker properties file (N is 1-based, one per pserver); only contains properties in the KoF whitelist |
-| `unsupported.properties` | Properties from the input not in the KoF whitelist; written when any such properties exist |
+| `kof.broker.N.properties` | Per-broker properties file (N is 1-based, one per pserver); only contains properties in the FKS whitelist |
+| `unsupported.properties` | Properties from the input not in the FKS whitelist; written when any such properties exist |
 
 A single-broker conversion produces one pserver — a standalone server rather than a cluster — so
 its YAMLs are named `tibftlserver_standalone.yaml`, `tibftlserver_standalone-secure.yaml` and
@@ -47,7 +47,7 @@ There are two ways to give the tool a broker configuration, and they are mutuall
 
 - **From files.** Positional arguments are one or more `server.properties` files (1–9).
 - **From live brokers.** `-from-brokers` takes a comma-separated `host:port` list (1–9) and reads
-  each broker's configuration over the Kafka Admin API instead — see
+  each broker's configuration over the Apache Kafka Admin API instead — see
   [Fetching from live brokers](#fetching-from-live-brokers).
 
 Either way, each broker becomes one pserver — the pserver count is derived from the number of
@@ -66,7 +66,7 @@ tibkafkatokof -h all        # every flag, grouped
 | Group | `-h <group>` covers |
 |---|---|
 | `core` | output location, realm name, data dir, server addresses, transport |
-| `brokers` | read the config from running Kafka brokers instead of properties files |
+| `brokers` | read the config from running Apache Kafka brokers instead of properties files |
 | `tls` | server and client certificates, private keys, trust files |
 | `oauth` | token/JWKS endpoints, claims, audience, server and UI client credentials |
 | `auth` | users file, role map, and the FTL service credentials |
@@ -82,18 +82,18 @@ The sections below list the same flags as the corresponding `-h <group>` topic.
 |---|---|---|
 | `-output-dir` | `./kof-output` | Directory where output files are written |
 | `-realm-name` | `_default_realm` | Realm name in `realm.json` |
-| `-data-dir` | `/var/tmp/kof/data` | KOF data directory path on pserver hosts |
+| `-data-dir` | `/var/tmp/kof/data` | FKS data directory path on pserver hosts |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are randomly generated in range 5600–5699 |
 | `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br>`dtcp` pins every transport to dynamic TCP |
 | `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated pserver. This is the *output* FTL servers' logging, not this tool's. |
 | `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `kafka_to_kof_migration` data migration tool) |
-| `-tibschemad` | `false` | Add the FTL schema daemon to the generated cluster YAML: every server gains a `schemaN` persistence and a `- tibschemad:` entry with `auth.type: none` and `cluster.size` set to the number of realm servers. No extra servers and no extra ports — the schema pserver shares the `tibftlserver` process that already hosts the KOF pserver. |
+| `-tibschemad` | `false` | Add the FTL schema daemon to the generated cluster YAML: every server gains a `schemaN` persistence and a `- tibschemad:` entry with `auth.type: none` and `cluster.size` set to the number of realm servers. No extra servers and no extra ports — the schema pserver shares the `tibftlserver` process that already hosts the FKS pserver. |
 
 ### Live broker fetch flags (`-h brokers`)
 
 | Flag | Default | Description |
 |---|---|---|
-| `-from-brokers` | _(none)_ | Comma-separated `host:port` list of running Kafka brokers (1–9) to read the configuration from via the Admin API. Mutually exclusive with positional `server.properties` arguments. |
+| `-from-brokers` | _(none)_ | Comma-separated `host:port` list of running Apache Kafka brokers (1–9) to read the configuration from via the Admin API. Mutually exclusive with positional `server.properties` arguments. |
 | `-from-brokers-timeout-ms` | `10000` | Admin API connect/read/write timeout in milliseconds |
 
 See [Fetching from live brokers](#fetching-from-live-brokers) for what the tool asks each broker
@@ -101,7 +101,7 @@ for and the current limitations.
 
 ### TLS and mTLS flags (`-h tls`)
 
-Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` listener and you want a `tibftlserver-cluster-secure.yaml` emitted. The `-tls-server-trust` / `-tls-client-*` flags are the ones required when a Kafka mTLS listener (`ssl.client.auth=required`) is present and you want FTL server-to-server mutual TLS.
+Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` listener and you want a `tibftlserver-cluster-secure.yaml` emitted. The `-tls-server-trust` / `-tls-client-*` flags are the ones required when an Apache Kafka mTLS listener (`ssl.client.auth=required`) is present and you want FTL server-to-server mutual TLS.
 
 | Flag | Description |
 |---|---|
@@ -156,7 +156,7 @@ Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` lis
 
 | Flag | Default | Description |
 |---|---|---|
-| `-list-properties` | `false` | Print how each Kafka listener/security property is treated, then exit |
+| `-list-properties` | `false` | Print how each Apache Kafka listener/security property is treated, then exit |
 | `-color` | `auto` | Colorize `-list-properties` output: `auto`, `always`, or `never` |
 | `-auto` | `false` | Run the mechanical conversions automatically (JKS/PKCS12 keystores → PEM via `keytool`/`openssl`); items needing a human stay `RESOLVE-REQUIRED` |
 
@@ -172,7 +172,7 @@ tibkafkatokof -output-dir ./kof-output \
   -from-brokers kafka-1:9092,kafka-2:9092,kafka-3:9092
 ```
 
-For each address the tool connects with the Kafka Admin API, resolves that address to its broker
+For each address the tool connects with the Apache Kafka Admin API, resolves that address to its broker
 node ID from cluster metadata, and issues `DescribeConfigs` for that node. The returned entries —
 the broker's *effective* configuration, including defaults the operator never wrote down — feed
 into exactly the same translation pipeline as a parsed file, so the generated artifacts, the
@@ -202,7 +202,7 @@ Notes and limitations:
 
 ## Multi-cluster split (9 input files → 3 shards)
 
-The number of shards is determined by the number of `server.properties` files passed on the command line. Every 3 input files → 1 KOF cluster (shard). The primary `tibftlserver-cluster.yaml` always holds the first 3 pservers with FTL realm servers. Every additional group of up to 3 pservers goes into `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, etc. Auxiliary files contain **no realm server entries** — pservers connect to the primary realm cluster via `globals.core.servers`.
+The number of shards is determined by the number of `server.properties` files passed on the command line. Every 3 input files → 1 FKS cluster (shard). The primary `tibftlserver-cluster.yaml` always holds the first 3 pservers with FTL realm servers. Every additional group of up to 3 pservers goes into `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, etc. Auxiliary files contain **no realm server entries** — pservers connect to the primary realm cluster via `globals.core.servers`.
 
 ```
 9 input files → tibftlserver-cluster.yaml      (pserver1–3 + SRV1–3 realm servers)
@@ -238,7 +238,7 @@ With 9 input files, DR aux files are also produced:
 
 ## Examples
 
-Each example is a directory under `examples/` holding one `server-N.properties` per Kafka broker plus a checked-in `output/`. **One input file becomes one pserver**, so pass every broker's properties file — the tool has no flag for the pserver count.
+Each example is a directory under `examples/` holding one `server-N.properties` per Apache Kafka broker plus a checked-in `output/`. **One input file becomes one pserver**, so pass every broker's properties file — the tool has no flag for the pserver count.
 
 Each command below is written to be run from inside its own example directory, with `--output-dir output`, which is how the checked-in `output/` was produced. Run it that way and you reproduce the checked-in files (the generated YAML embeds the output directory as a relative path, so a different `--output-dir` changes the result). `examples/regen-examples.sh` runs exactly these commands for every example at once.
 
@@ -246,7 +246,7 @@ Each command below is written to be run from inside its own example directory, w
 
 ### 01 — Single node, PLAINTEXT
 
-**Kafka config:** 1 node, KRaft (broker+controller), PLAINTEXT, no security. Suitable for local development.
+**Apache Kafka config:** 1 node, KRaft (broker+controller), PLAINTEXT, no security. Suitable for local development.
 
 Generated reference output: [`examples/01-single-node-plaintext/output/`](examples/01-single-node-plaintext/output/)
 
@@ -264,7 +264,7 @@ tibkafkatokof \
 
 ### 02 — Single node, SASL_SSL PLAIN
 
-**Kafka config:** 1 node, KRaft, SASL_SSL PLAIN on broker listener, SSL on controller.
+**Apache Kafka config:** 1 node, KRaft, SASL_SSL PLAIN on broker listener, SSL on controller.
 
 Generated reference output: [`examples/02-single-node-sasl/output/`](examples/02-single-node-sasl/output/)
 
@@ -284,7 +284,7 @@ tibkafkatokof \
 
 ### 03 — Single node, OAuth2
 
-**Kafka config:** 1 node, KRaft, SASL_SSL OAUTHBEARER on broker listener, SSL on controller.
+**Apache Kafka config:** 1 node, KRaft, SASL_SSL OAUTHBEARER on broker listener, SSL on controller.
 
 Generated reference output: [`examples/03-single-node-oauth/output/`](examples/03-single-node-oauth/output/)
 
@@ -309,7 +309,7 @@ tibkafkatokof \
 
 ### 04 — 3-broker, PLAINTEXT
 
-**Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT listeners, no security.
+**Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT listeners, no security.
 
 Generated reference output: [`examples/04-3broker-plaintext/output/`](examples/04-3broker-plaintext/output/)
 
@@ -327,7 +327,7 @@ tibkafkatokof \
 
 ### 05 — 3-broker, SASL_SSL PLAIN
 
-**Kafka config:** 3 nodes, KRaft, SASL_SSL PLAIN on broker listener, SSL on controller listener.
+**Apache Kafka config:** 3 nodes, KRaft, SASL_SSL PLAIN on broker listener, SSL on controller listener.
 
 Generated reference output: [`examples/05-3broker-sasl/output/`](examples/05-3broker-sasl/output/)
 
@@ -346,7 +346,7 @@ tibkafkatokof \
 
 ### 06 — 3-broker, TLS-only (no SASL)
 
-**Kafka config:** 3 nodes, KRaft, SSL listener with `ssl.client.auth=none` — wire encryption only, no authentication mechanism.
+**Apache Kafka config:** 3 nodes, KRaft, SSL listener with `ssl.client.auth=none` — wire encryption only, no authentication mechanism.
 
 Generated reference output: [`examples/06-3broker-tls-only/output/`](examples/06-3broker-tls-only/output/)
 
@@ -365,7 +365,7 @@ tibkafkatokof \
 
 ### 07 — 3-broker, multi-SASL (PLAIN + OAuth2 + mTLS)
 
-**Kafka config:** 3 nodes, KRaft, four listeners: BASIC_AUTH (SASL_SSL PLAIN), OAUTH (SASL_SSL OAUTHBEARER), MTLS (SSL mutual TLS), CONTROLLER (SSL).
+**Apache Kafka config:** 3 nodes, KRaft, four listeners: BASIC_AUTH (SASL_SSL PLAIN), OAUTH (SASL_SSL OAUTHBEARER), MTLS (SSL mutual TLS), CONTROLLER (SSL).
 
 Generated reference output: [`examples/07-3broker-multi-sasl/output/`](examples/07-3broker-multi-sasl/output/)
 
@@ -390,7 +390,7 @@ tibkafkatokof \
 
 ### 08 — 3-broker, multi-listener (PLAIN + OAuth2 + per-listener mTLS)
 
-**Kafka config:** 3 nodes, KRaft, four listeners: BASIC_AUTH (SASL_SSL PLAIN), OAUTH (SASL_SSL OAUTHBEARER), MTLS (SSL, `listener.name.mtls.ssl.client.auth=required`), CONTROLLER (SSL).
+**Apache Kafka config:** 3 nodes, KRaft, four listeners: BASIC_AUTH (SASL_SSL PLAIN), OAUTH (SASL_SSL OAUTHBEARER), MTLS (SSL, `listener.name.mtls.ssl.client.auth=required`), CONTROLLER (SSL).
 
 Generated reference output: [`examples/08-3broker-multi-listener/output/`](examples/08-3broker-multi-listener/output/)
 
@@ -415,9 +415,9 @@ tibkafkatokof \
 
 ### 09 — 9-broker scale-out (3 shards)
 
-**Kafka config:** 9 nodes — nodes 1–3 are broker+controller, nodes 4–9 are broker-only; SASL_SSL PLAIN + OAuth2 + mTLS listeners. The 9 input files map to 9 pservers across 3 KOF shards (`kof.cluster.0` / `.1` / `.2`).
+**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller, nodes 4–9 are broker-only; SASL_SSL PLAIN + OAuth2 + mTLS listeners. The 9 input files map to 9 pservers across 3 FKS shards (`kof.cluster.0` / `.1` / `.2`).
 
-The inputs declare secured Kafka listeners, but **no FTL security flags are passed on the command line on purpose**: this example is about the sharding split, so the output stays minimal. That is why there is no `tibftlserver-cluster-secure.yaml` here — only an `ftl-users.txt` derived from the SASL PLAIN users in the inputs. [Example 10](#10--9-broker-full-security-stack-3-shards) is the same nine inputs *with* the security flags supplied, and that is where the secure YAML appears.
+The inputs declare secured Apache Kafka listeners, but **no FTL security flags are passed on the command line on purpose**: this example is about the sharding split, so the output stays minimal. That is why there is no `tibftlserver-cluster-secure.yaml` here — only an `ftl-users.txt` derived from the SASL PLAIN users in the inputs. [Example 10](#10--9-broker-full-security-stack-3-shards) is the same nine inputs *with* the security flags supplied, and that is where the secure YAML appears.
 
 Generated reference output: [`examples/09-9broker-scale/output/`](examples/09-9broker-scale/output/)
 
@@ -437,7 +437,7 @@ tibkafkatokof \
 
 ### 10 — 9-broker, full security stack (3 shards)
 
-**Kafka config:** 9 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–9 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). The 9 input files map to 9 pservers across 3 KOF shards. Same inputs as example 09, with the FTL security flags supplied.
+**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–9 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). The 9 input files map to 9 pservers across 3 FKS shards. Same inputs as example 09, with the FTL security flags supplied.
 
 Generated reference output: [`examples/10-9broker-secure/output/`](examples/10-9broker-secure/output/)
 
@@ -471,7 +471,7 @@ tibkafkatokof \
 
 ### 11 — 3-broker, PLAINTEXT + DR
 
-**Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT. Primary servers named `primary1/2/3`; DR servers named `drserver1/2/3`. Mirrors the layout of the FTL `dr-simple` sample cluster configuration.
+**Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT. Primary servers named `primary1/2/3`; DR servers named `drserver1/2/3`. Mirrors the layout of the FTL `dr-simple` sample cluster configuration.
 
 Generated reference output: [`examples/11-3broker-dr/output/`](examples/11-3broker-dr/output/)
 
@@ -598,7 +598,7 @@ This applies to every cluster YAML the tool writes — primary, secure, and DR.
 
 **Schema daemon (`-tibschemad`).** With the flag set, every server that carries a realm block also
 gets a schema pserver and a `- tibschemad:` entry. No extra `tibftlserver` processes and no extra
-ports — the schema pserver rides the process that already hosts the KOF pserver, so a 3-broker
+ports — the schema pserver rides the process that already hosts the FKS pserver, so a 3-broker
 conversion is still three servers:
 
 ```yaml
@@ -644,9 +644,9 @@ tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV3
 
 ### `tibftlserver-cluster-secure.yaml`
 
-Adds `ftlserver.properties` blocks (TLS, auth) to each realm server. Auth mode is determined by the Kafka listener types:
+Adds `ftlserver.properties` blocks (TLS, auth) to each realm server. Auth mode is determined by the Apache Kafka listener types:
 
-| Kafka auth | FTL secure YAML mode |
+| Apache Kafka auth | FTL secure YAML mode |
 |---|---|
 | `sasl_tls` (PLAIN) | `auth.providers: file:<auth-users-file>` + TLS fields |
 | `oauth_tls` (OAUTHBEARER) | `auth.providers: oauth2` + `oauth2.*` globals and per-server properties |
@@ -674,11 +674,11 @@ In DR mode, each cluster has `dr_enabled: true` and two pserver sets: `_setA` (p
 
 ### `kof.broker.N.properties`
 
-One file per pserver (N is 1-based). Contains only properties that pass the KoF broker properties whitelist: listener/security keys in the section 1 allowlist, plus general broker/topic/tuning keys. Listener keys appear first, followed by remaining properties in their original order.
+One file per pserver (N is 1-based). Contains only properties that pass the FKS broker properties whitelist: listener/security keys in the section 1 allowlist, plus general broker/topic/tuning keys. Listener keys appear first, followed by remaining properties in their original order.
 
 ### `unsupported.properties`
 
-Written when any input properties are not in the KoF whitelist. Contains KRaft cluster-control keys (`process.roles`, `controller.*`, etc.) and security-domain keys not on the section 1 allowlist (passwords, JAAS configs, handler classes, etc.). Kept for reference — the KoF pserver does not load this file.
+Written when any input properties are not in the FKS whitelist. Contains KRaft cluster-control keys (`process.roles`, `controller.*`, etc.) and security-domain keys not on the section 1 allowlist (passwords, JAAS configs, handler classes, etc.). Kept for reference — the FKS pserver does not load this file.
 
 ---
 
@@ -711,7 +711,7 @@ Written when any input properties are not in the KoF whitelist. Contains KRaft c
 
 Examples 01–18, 21 and 22 each ship a checked-in `output/` directory, regenerated by
 `examples/regen-examples.sh`. Examples 19 and 20 cover the `-from-brokers` mode and hold a
-`README.md` only: their input is a running Kafka cluster, so there is nothing reproducible to
+`README.md` only: their input is a running Apache Kafka cluster, so there is nothing reproducible to
 check in. Follow the commands in those READMEs against a live cluster of your own.
 
 Examples 21 and 22 take the same inputs as 01 and 04 and add only `-tibschemad`, so diffing
