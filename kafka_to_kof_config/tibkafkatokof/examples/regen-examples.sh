@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate all 20 tibkafkatokof example outputs using relative paths.
+# Regenerate all tibkafkatokof example outputs using relative paths.
 # (Examples 19 and 20 need live brokers and are documented, not regenerated.)
 set -euo pipefail
 
@@ -18,14 +18,21 @@ if [[ ! -x "$TOOL" ]]; then
   exit 1
 fi
 
+# run_to <example-dir> <output-subdir> <tool flags and input files...>
+run_to() {
+  local ex="$1"; shift
+  local out="$1"; shift
+  echo "==> $ex ($out)"
+  cd "$EXAMPLES/$ex"
+  rm -rf "$out"
+  mkdir -p "$out"
+  "$TOOL" --output-dir "$out" "$@" 2>&1 || true  # exit 2 is INVALID (ok for regen)
+  echo ""
+}
+
 run() {
   local ex="$1"; shift
-  echo "==> $ex"
-  cd "$EXAMPLES/$ex"
-  rm -rf output
-  mkdir -p output
-  "$TOOL" --output-dir output "$@" 2>&1 || true  # exit 2 is INVALID (ok for regen)
-  echo ""
+  run_to "$ex" output "$@"
 }
 
 # Shared OAuth2 flags used by many examples
@@ -72,6 +79,14 @@ run 04-3broker-plaintext \
   --core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602" \
   server-1.properties server-2.properties server-3.properties
 
+# ── 04-dr: same inputs and core servers as 04, plus DR ───────────────────
+# Written to output-dr/ so `diff output output-dr` shows exactly what --dr-servers adds.
+run_to 04-3broker-plaintext output-dr \
+  --core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602" \
+  --dr-servers "DRSRV1=dr-host-1:5800,DRSRV2=dr-host-2:5801,DRSRV3=dr-host-3:5802" \
+  --dr-data-dir /var/kof/dr \
+  server-1.properties server-2.properties server-3.properties
+
 # ── 05: 3-broker, SASL (file-auth+tls) ───────────────────────────────────
 run 05-3broker-sasl \
   --core-servers "SRV1=localhost:5695,SRV2=localhost:5641,SRV3=localhost:5693" \
@@ -96,15 +111,18 @@ run 08-3broker-multi-listener \
   "${OAUTH_COMMON[@]}" \
   server-1.properties server-2.properties server-3.properties
 
-# ── 09: 10-broker, plaintext scale-out ────────────────────────────────────
-run 09-10broker-scale \
+# ── 09: 9-broker scale-out (3 shards) ─────────────────────────────────────
+# The inputs declare SASL_SSL + mTLS listeners, but no FTL security flags are
+# passed here on purpose: the output then isolates the sharding behaviour.
+# Example 10 is the same nine inputs with the security flags supplied.
+run 09-9broker-scale \
   --core-servers "SRV1=localhost:5619,SRV2=localhost:5698,SRV3=localhost:5635" \
   server-1.properties server-2.properties server-3.properties \
   server-4.properties server-5.properties server-6.properties \
   server-7.properties server-8.properties server-9.properties
 
-# ── 10: 10-broker, secure (mTLS+OAuth2) ───────────────────────────────────
-run 10-10broker-secure \
+# ── 10: 9-broker, secure (mTLS+OAuth2) ────────────────────────────────────
+run 10-9broker-secure \
   --core-servers "SRV1=localhost:5601,SRV2=localhost:5602,SRV3=localhost:5603" \
   --tls-cert /etc/ftl/certs/server.pem \
   "${MTLS_FLAGS[@]}" \
@@ -196,4 +214,4 @@ run 22-3broker-tibschemad \
   --tibschemad \
   server-1.properties server-2.properties server-3.properties
 
-echo "==> Done regenerating all 20 examples."
+echo "==> Done regenerating all examples."

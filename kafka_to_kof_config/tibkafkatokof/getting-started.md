@@ -525,7 +525,7 @@ tibkafkatokof \
 | `--data-dir` | `/var/tmp/kof/data` | KOF data directory on pserver hosts |
 | `--core-servers` | _(auto)_ | Pin pserver names and ports: `SRV1=host:5600,...` |
 | `--from-brokers` | _(none)_ | Fetch the config from running brokers instead of files: `host:port,...` |
-| `--transport-type` | `auto` | FTL transport: `auto` or `dtcp` (low-latency) |
+| `--transport-type` | `auto` | FTL transport: `auto` (realm server resolves each connection — dynamic TCP within a cluster, static TCP between clusters and to DR) or `dtcp` (dynamic TCP everywhere) |
 | `--auto` | off | Convert JKS/PKCS12 keystores to PEM automatically |
 | `--migration-config` | off | Also write `kafka-to-kof.properties` for the migration tool |
 | `--tibschemad` | off | Add the FTL schema daemon to the generated cluster YAML |

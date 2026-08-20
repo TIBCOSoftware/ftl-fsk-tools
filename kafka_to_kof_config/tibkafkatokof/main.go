@@ -39,7 +39,10 @@ func main() {
 			"e.g. connections:debug;kof:info;durables:info;store:info)")
 	transportType := flag.String("transport-type", "auto",
 		"transport type for all pserver connections in realm.json: auto|dtcp\n"+
-			"    auto uses OS-selected transport; dtcp is optimized for low latency")
+			"    auto lets the realm server pick the concrete transport for each connection\n"+
+			"    at deployment time: dynamic TCP for client and intra-cluster transports,\n"+
+			"    static TCP for inter-cluster and DR transports\n"+
+			"    dtcp pins every transport to dynamic TCP")
 	coreServersFlag := flag.String("core-servers", "",
 		"comma-separated NAME=host:port list for globals.core.servers\n"+
 			"    e.g. SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602\n"+
