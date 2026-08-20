@@ -486,30 +486,34 @@ tibkafkatokof \
 
 **Output:**
 
-`tibftlserver-cluster.yaml` — primary cluster (start with `tibftlserver -c tibftlserver-cluster.yaml -n SRV1`):
+`tibftlserver-cluster.yaml` — primary cluster (start with `tibftlserver -c tibftlserver-cluster.yaml -n primary1`):
 ```yaml
 globals:
   core.servers:
     primary1: primary-host-1:8585
     primary2: primary-host-2:8686
     primary3: primary-host-3:8787
-  dr: drserver1@dr-host-1:9585|drserver2@dr-host-2:9686|drserver3@dr-host-3:9787
+  dr: drserver1@localhost:9585|drserver2@localhost:9686|drserver3@localhost:9787
   auto.init.primary.on.first.startup: true
 servers:
-  SRV1:
+  primary1:
   - realm:
       label: PRIMARY_SERVER
   - persistence:
       name: pserver1  ...
 ```
 
+Note the `servers:` keys are the `-core-servers` names, not a fixed `SRV1/2/3`. These servers carry
+no `ftl:` block, so `tibftlserver` resolves each one's listen address by matching `-n` against
+`globals.core.servers` — the two name lists have to agree.
+
 `tibftlserver-cluster-dr.yaml` — DR replica cluster (start with `tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver1`):
 ```yaml
 globals:
   core.servers:
-    drserver1: dr-host-1:9585
-    drserver2: dr-host-2:9686
-    drserver3: dr-host-3:9787
+    drserver1: localhost:9585
+    drserver2: localhost:9686
+    drserver3: localhost:9787
   dr: primary1@primary-host-1:8585|primary2@primary-host-2:8686|primary3@primary-host-3:8787
 servers:
   drserver1:
@@ -562,7 +566,10 @@ Combine the example 10 flags above with `-dr-servers` to generate DR-enabled out
 
 ### `tibftlserver-cluster.yaml`
 
-Primary cluster with realm servers (SRV1–SRV3) and first 3 pservers. Realm server ports are either from `-core-servers` or randomly chosen in 5600–5699.
+Primary cluster with realm servers (SRV1–SRV3) and first 3 pservers. Realm server names and ports
+both come from `-core-servers`; if that flag is omitted the names default to `SRV1–SRV3` and the
+ports are randomly chosen in 5600–5699. The `-n` argument is the `servers:` key, which is always the
+core-server name:
 
 ```sh
 tibftlserver -c tibftlserver-cluster.yaml -n SRV1
