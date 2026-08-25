@@ -25,13 +25,14 @@ var flagGroups = []flagGroup{
 	{
 		name:  "core",
 		title: "Core flags",
-		blurb: "output location, realm name, data dir, server addresses, transport",
+		blurb: "output location, realm name, data dir, server addresses, transport, persistence",
 		flags: []string{
 			"output-dir",
 			"realm-name",
 			"data-dir",
 			"core-servers",
 			"transport-type",
+			"disk-persistence",
 			"ftl-loglevel",
 			"migration-config",
 			"tibschemad",

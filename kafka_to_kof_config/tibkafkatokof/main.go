@@ -103,6 +103,16 @@ func main() {
 	drDataDirFlag := flag.String("dr-data-dir", "",
 		"data directory for DR pservers (default: <data-dir>/dr)")
 
+	diskPersistence := flag.String("disk-persistence", "async",
+		"disk persistence for the generated kof.cluster: async, sync, or in-memory\n"+
+			"    async      writes reach disk in the background\n"+
+			"    sync       every write is flushed to disk before it is acknowledged\n"+
+			"    in-memory  nothing is written to disk; also turns off the cluster's\n"+
+			"               disk index and compaction, which require disk persistence\n"+
+			"    the data store is always async and the sync and meta stores always sync,\n"+
+			"    whichever the cluster is -- except under in-memory, where the stores are\n"+
+			"    in-memory too, since an override would otherwise put them back on disk")
+
 	writeMigrationConfig := flag.Bool("migration-config", false,
 		"write kafka-to-kof.properties to the output directory (migration tool configuration)")
 
@@ -136,6 +146,12 @@ func main() {
 
 	if *transportType != "auto" && *transportType != "dtcp" {
 		fmt.Fprintf(os.Stderr, "error: --transport-type must be auto or dtcp (got %q)\n", *transportType)
+		os.Exit(1)
+	}
+
+	if _, ok := translator.RealmDiskPersistence(*diskPersistence); !ok {
+		fmt.Fprintf(os.Stderr, "error: --disk-persistence must be one of %s (got %q)\n",
+			strings.Join(translator.DiskPersistenceModeNames, ", "), *diskPersistence)
 		os.Exit(1)
 	}
 
@@ -217,6 +233,7 @@ func main() {
 	clusterOpts := translator.ClusterOpts{
 		LogLevel:         *ftlLogLevel,
 		DisableDiskIndex: *disableDiskIndex,
+		DiskPersistence:  *diskPersistence,
 		Tibschemad:       *writeTibschemad,
 	}
 

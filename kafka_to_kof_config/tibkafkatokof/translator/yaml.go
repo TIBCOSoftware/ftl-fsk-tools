@@ -47,6 +47,11 @@ type ClusterOpts struct {
 	// -disable-disk-index flag.
 	DisableDiskIndex bool
 
+	// DiskPersistence is the -disk-persistence flag token ("async", "sync" or
+	// "in-memory") setting disk_persistence on the generated kof.cluster. The empty
+	// string means the default, async. See RealmDiskPersistence.
+	DiskPersistence string
+
 	// Tibschemad adds the FTL schema daemon to every server that carries a realm
 	// block: a second "- persistence: name: schemaN" plus a "- tibschemad:" entry.
 	// No extra FTL servers and no extra ports -- the schema pserver shares the

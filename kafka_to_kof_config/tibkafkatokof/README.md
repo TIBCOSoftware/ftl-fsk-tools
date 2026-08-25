@@ -85,6 +85,7 @@ The sections below list the same flags as the corresponding `-h <group>` topic.
 | `-data-dir` | `/var/tmp/kof/data` | FKS data directory path on pserver hosts |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are randomly generated in range 5600–5699 |
 | `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br>`dtcp` pins every transport to dynamic TCP |
+| `-disk-persistence` | `async` | `disk_persistence` for the generated `kof.cluster.N`: `async`, `sync` or `in-memory`<br>`async` writes reach disk in the background; `sync` flushes every write before acknowledging it; `in-memory` writes nothing to disk and turns off the cluster's `disk_index` and `disk_compact`, which require disk persistence<br>The data store stays `async` and the sync and meta stores `sync` whichever the cluster is — except under `in-memory`, where the stores are in-memory too (see [`realm.json`](#realmjson)) |
 | `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated pserver. This is the *output* FTL servers' logging, not this tool's. |
 | `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `kafka_to_kof_migration` data migration tool) |
 | `-tibschemad` | `false` | Add the FTL schema daemon to the generated cluster YAML: every server gains a `schemaN` persistence and a `- tibschemad:` entry with `auth.type: none` and `cluster.size` set to the number of realm servers. No extra servers and no extra ports — the schema pserver shares the `tibftlserver` process that already hosts the FKS pserver. |
@@ -661,13 +662,20 @@ onto each per-server `- realm:` entry, since there is no shared `services:` bloc
 
 Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores per cluster (`kof.data.store.N`, `kof.sync.store.N`, `kof.meta.store.N`), and pservers distributed across clusters.
 
-Each cluster is generated with `disk_persistence: sync`, and every store overrides it explicitly:
+Each cluster is generated with `disk_persistence: async`; `-disk-persistence` selects `sync` or
+`in-memory` instead. Every store then overrides the cluster explicitly:
 
 | Store | `disk_persistence` |
 |---|---|
 | `kof.data.store.N` | `async` — bulk message path, tuned for throughput |
 | `kof.sync.store.N` | `sync` |
 | `kof.meta.store.N` | `sync` |
+
+The split holds whether the cluster is `async` or `sync`, so the sync and meta stores are durable
+even when the bulk path is not. `-disk-persistence in-memory` is the exception: an override would
+put the stores back on disk and make the mode a no-op, so there the stores are in-memory too — the
+key is omitted and each store inherits the cluster. In-memory also turns off the cluster's
+`disk_index` and `disk_compact`, since an index on disk requires `sync` or `async` persistence.
 
 No upload step is needed: every generated cluster YAML names this file through
 `initial.realm.config` on each per-server `- realm:` entry (see above), so `tibftlserver` seeds the
