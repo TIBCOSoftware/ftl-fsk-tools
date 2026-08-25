@@ -15,7 +15,7 @@
     "min_disk_inuse_ratio": 0.05
    },
    "disk_index": true,
-   "disk_persistence": "async",
+   "disk_persistence": "sync",
    "disk_swap": true,
    "dr_enabled": true,
    "force_quorum_delay": 0,
@@ -417,6 +417,7 @@
      },
      "bytelimit": "",
      "description": "",
+     "disk_persistence": "async",
      "durable_templates": [
       {
        "ack_settings": {
@@ -459,6 +460,7 @@
      },
      "bytelimit": "",
      "description": "",
+     "disk_persistence": "sync",
      "durable_templates": [
       {
        "ack_settings": {
@@ -501,6 +503,7 @@
      },
      "bytelimit": "",
      "description": "",
+     "disk_persistence": "sync",
      "durable_templates": [
       {
        "ack_settings": {

@@ -110,8 +110,9 @@ func buildRealmProps(cfg *BrokerConfig, copts ClusterOpts) map[string]any {
 
 // buildKOFCluster constructs the kof.cluster map per KOF requirements:
 //   - cluster name: "kof.cluster.N" where N is the 0-based cluster index
-//   - kof_enabled: true, disk_persistence: async
-//   - 3 required stores: kof.data.store.N, kof.sync.store.N, kof.meta.store.N
+//   - kof_enabled: true, disk_persistence: sync
+//   - 3 required stores: kof.data.store.N, kof.sync.store.N, kof.meta.store.N,
+//     each overriding disk_persistence explicitly (see buildKOFStores)
 //   - pserver_sets: one _setA set (non-DR) or _setA + _DRset (DR mode)
 func buildKOFCluster(cfg *BrokerConfig, clusterIdx, numPservers int, drOpts DROpts, transportType string) map[string]any {
 	startPserver := clusterIdx*3 + 1
@@ -137,7 +138,7 @@ func buildKOFCluster(cfg *BrokerConfig, clusterIdx, numPservers int, drOpts DROp
 		"disk_compact":              true,
 		"disk_compact_settings":     map[string]any{"min_disk_inuse_ratio": 0.05},
 		"disk_index":                true,
-		"disk_persistence":          "async",
+		"disk_persistence":          "sync",
 		"disk_swap":                 true,
 		"dr_enabled":                drOpts.Enabled(),
 		"force_quorum_delay":        0,
@@ -319,15 +320,21 @@ func buildTransportDef(name, desc string, isSecure bool, transportType string) m
 }
 
 // buildKOFStores returns the three required KOF stores with their durable templates.
+//
+// Each store overrides the cluster's disk_persistence explicitly. The sync and meta
+// stores must be "sync" so their writes are durable; the data store stays "async" for
+// throughput on the bulk path. The data store's "async" is load-bearing, not decorative:
+// the cluster default is "sync", so omitting it would silently make the data path
+// synchronous.
 func buildKOFStores(clusterIdx int) []any {
 	return []any{
-		buildStore(fmt.Sprintf("kof.data.store.%d", clusterIdx), buildTemplate("kof.data.template", "shared")),
-		buildStore(fmt.Sprintf("kof.sync.store.%d", clusterIdx), buildTemplate("kof.sync.template", "shared")),
-		buildStore(fmt.Sprintf("kof.meta.store.%d", clusterIdx), buildTemplate("kof.meta.template", "lastvalue")),
+		buildStore(fmt.Sprintf("kof.data.store.%d", clusterIdx), buildTemplate("kof.data.template", "shared"), "async"),
+		buildStore(fmt.Sprintf("kof.sync.store.%d", clusterIdx), buildTemplate("kof.sync.template", "shared"), "sync"),
+		buildStore(fmt.Sprintf("kof.meta.store.%d", clusterIdx), buildTemplate("kof.meta.template", "lastvalue"), "sync"),
 	}
 }
 
-func buildStore(name string, template map[string]any) map[string]any {
+func buildStore(name string, template map[string]any, diskPersistence string) map[string]any {
 	return map[string]any{
 		"acl": map[string]any{
 			"roles": []any{},
@@ -335,6 +342,7 @@ func buildStore(name string, template map[string]any) map[string]any {
 		},
 		"bytelimit":             "",
 		"description":           "",
+		"disk_persistence":      diskPersistence,
 		"durable_templates":     []any{template},
 		"durables":              []any{},
 		"dynamic_durable_limit": 0,

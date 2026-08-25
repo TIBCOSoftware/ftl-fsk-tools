@@ -661,6 +661,14 @@ onto each per-server `- realm:` entry, since there is no shared `services:` bloc
 
 Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores per cluster (`kof.data.store.N`, `kof.sync.store.N`, `kof.meta.store.N`), and pservers distributed across clusters.
 
+Each cluster is generated with `disk_persistence: sync`, and every store overrides it explicitly:
+
+| Store | `disk_persistence` |
+|---|---|
+| `kof.data.store.N` | `async` — bulk message path, tuned for throughput |
+| `kof.sync.store.N` | `sync` |
+| `kof.meta.store.N` | `sync` |
+
 No upload step is needed: every generated cluster YAML names this file through
 `initial.realm.config` on each per-server `- realm:` entry (see above), so `tibftlserver` seeds the
 realm from it at startup. Upload manually only to push a *hand-edited* `realm.json` to a realm that
