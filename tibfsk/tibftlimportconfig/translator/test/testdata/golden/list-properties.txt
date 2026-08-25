@@ -1,0 +1,233 @@
+tibftlimportconfig -- Apache Kafka listener/security property support
+                      in TIBCO FTL(R) Service for Kafka (FSK)
+
+Disposition legend:
+  accept         honored as written, passed through to the FSK listener
+  depends        cannot be decided statically; the line states the rule
+                 (e.g. a recognized class is rewritten, a custom class is flagged)
+  not-applicable Kafka-internal; FTL handles it natively, so it is ignored
+  unsupported    not implemented by FSK; rejected or ignored with a warning
+
+== Listener layout ==
+listeners  [accept]
+    The NAME://host:port addresses the broker binds. FSK binds the client
+    listeners.
+advertised.listeners  [accept]
+    The addresses clients are told to connect to. Passed through unchanged.
+listener.security.protocol.map  [accept]
+    Maps each listener name to its security protocol
+    (PLAINTEXT/SSL/SASL_PLAINTEXT/SASL_SSL).
+listener.name.<listener>.<property>  [accept]
+    Per-listener override of any property below. Honored for the listener it
+    names.
+inter.broker.listener.name  [not-applicable]
+    Inter-broker traffic uses the FTL servers' own connections, not a Kafka
+    listener. Filtered out, not bound -- unless it is the only client-facing
+    listener, in which case it is kept and bound for Kafka clients.
+controller.listener.names  [not-applicable]
+    The controller quorum is FTL-native (not KRaft over a Kafka listener).
+    Filtered out.
+control.plane.listener.name  [not-applicable]
+    Control-plane traffic is carried by the FTL servers' own connections.
+    Ignored.
+sasl.mechanism.inter.broker.protocol  [not-applicable]
+    The SASL mechanism for inter-broker traffic. Inter-broker traffic uses the
+    FTL servers' own connections, not a Kafka SASL listener, so it is ignored.
+sasl.mechanism.controller.protocol  [not-applicable]
+    The SASL mechanism for controller traffic. The controller quorum is
+    FTL-native, so it is ignored.
+
+== TLS (server certificate and client-cert verification) ==
+ssl.keystore.location  [accept]
+    Path to the listener's server certificate/key used to terminate TLS on the
+    Kafka listener.
+ssl.keystore.password  [accept]
+    Password for the server keystore. Honored.
+ssl.keystore.key  [accept]
+    The server private key given inline as PEM (instead of a keystore file).
+    Honored.
+ssl.keystore.certificate.chain  [accept]
+    The server certificate chain given inline as PEM. Honored.
+ssl.key.password  [accept]
+    Passphrase for the server private key. Honored.
+ssl.keystore.type  [depends]
+    PEM is accepted directly. A Java keystore (JKS or PKCS12) is flagged
+    RESOLVE-REQUIRED, because FSK reads PEM and a Java keystore would silently
+    not work: convert the keystore to PEM (keytool/openssl) and set the type to
+    PEM.
+ssl.truststore.location  [accept]
+    CA bundle used to verify inbound client certificates when the listener is
+    mutual-TLS. Honored.
+ssl.truststore.password  [accept]
+    Password for the truststore. Honored.
+ssl.truststore.certificates  [accept]
+    Trusted CA certificates given inline as PEM. Honored.
+ssl.truststore.type  [depends]
+    Same as ssl.keystore.type: PEM is accepted; a Java truststore (JKS or
+    PKCS12) is flagged RESOLVE-REQUIRED and must be converted to PEM first.
+ssl.client.auth  [accept]
+    none/requested/required. 'required' makes the listener mutual-TLS (the
+    client certificate is verified).
+ssl.enabled.protocols  [accept]
+    The TLS versions the listener allows (e.g. TLSv1.2, TLSv1.3). Honored.
+ssl.protocol  [accept]
+    The default TLS protocol version. Honored.
+ssl.cipher.suites  [accept]
+    The allowed TLS cipher suites. Honored; the suite names are applied to FSK's
+    OpenSSL TLS stack.
+ssl.principal.mapping.rules  [depends]
+    Maps a client certificate's subject DN to a principal. Simple CN extraction
+    is honored; complex multi-rule sets are not fully evaluated and need review.
+ssl.endpoint.identification.algorithm  [not-applicable]
+    Hostname verification done by a TLS client against a server's certificate.
+    FSK's inbound listener verifies client certificates by CA chain, not by
+    hostname, so this does not apply.
+ssl.provider  [unsupported]
+    Names a Java JSSE security provider. FSK uses OpenSSL, so a named Java
+    provider has no effect.
+ssl.secure.random.implementation  [unsupported]
+    Selects a Java SecureRandom implementation. FSK uses the OpenSSL RNG; not
+    applicable.
+ssl.keymanager.algorithm  [unsupported]
+    A Java KeyManager algorithm. FSK does not use the Java TLS stack; not
+    applicable.
+ssl.trustmanager.algorithm  [unsupported]
+    A Java TrustManager algorithm. FSK does not use the Java TLS stack; not
+    applicable.
+ssl.engine.factory.class  [unsupported]
+    A custom Java SSL engine. FSK terminates TLS with OpenSSL and cannot load a
+    Java class.
+ssl.allow.dn.changes  [not-applicable]
+    Whether a certificate's DN may change across a re-authentication. FSK does
+    not implement this policy.
+ssl.allow.san.changes  [not-applicable]
+    Whether a certificate's SANs may change across a re-authentication. FSK does
+    not implement this policy.
+
+== SASL authentication ==
+sasl.enabled.mechanisms  [accept]
+    The SASL mechanisms the listener offers. PLAIN and OAUTHBEARER are
+    supported; SCRAM and GSSAPI are not.
+sasl.jaas.config  [depends]
+    Its meaning depends on the login module it names. PlainLoginModule: the
+    inline user_<name>="<password>" entries are read as credentials.
+    OAuthBearerLoginModule: selects OAUTHBEARER (OAuth2); the token validation
+    is configured by the sasl.oauthbearer.* properties and the server callback
+    handler class, not by inline users. ScramLoginModule and Kerberos
+    (Krb5LoginModule) are unsupported, and any custom or delegated module is not
+    run.
+sasl.server.callback.handler.class  [depends]
+    A Java class. A recognized standard class is translated to a FSK backend
+    (e.g. oauth, inline); an unrecognized custom class cannot be run and is
+    flagged RESOLVE-REQUIRED for the operator.
+sasl.client.callback.handler.class  [not-applicable]
+    A callback handler used by a SASL client, not by the broker accepting
+    connections. Ignored.
+sasl.login.callback.handler.class  [not-applicable]
+    A callback handler used during a SASL client's login, not by the broker.
+    Ignored.
+sasl.login.class  [not-applicable]
+    A custom client-side Login class. Not used by the broker's inbound listener;
+    ignored.
+sasl.server.max.receive.size  [not-applicable]
+    Maximum size of a SASL handshake message buffer in the Java broker. FSK
+    manages its own buffers.
+sasl.kerberos.*  [unsupported]
+    GSSAPI/Kerberos is not implemented in FSK. The whole family
+    (sasl.kerberos.service.name, kinit.cmd, ticket.renew.window.factor,
+    ticket.renew.jitter, min.time.before.relogin, principal.to.local.rules) is
+    unsupported.
+sasl.login.refresh.*  [not-applicable]
+    Token-refresh timing for a SASL client maintaining its own login
+    (window.factor, window.jitter, min.period.seconds, buffer.seconds). FSK's
+    inbound listener validates tokens; it does not run a client login.
+sasl.login.connect.timeout.ms / read.timeout.ms / retry.backoff[.max].ms  [not-applicable]
+    Network tuning for a SASL client contacting a token endpoint to obtain a
+    login. Not used by the broker's listener.
+connections.max.reauth.ms  [accept]
+    SASL re-authentication deadline (KIP-368). Honored; the connection must
+    re-authenticate before it elapses.
+
+== SASL OAUTHBEARER token validation ==
+sasl.oauthbearer.jwks.endpoint.url  [accept]
+    The JWKS endpoint whose keys validate inbound OAUTHBEARER token signatures.
+    Honored by the token validator.
+sasl.oauthbearer.expected.issuer  [accept]
+    The required 'iss' claim. A token whose issuer differs is rejected. Honored.
+sasl.oauthbearer.expected.audience  [accept]
+    The required 'aud' claim. A token whose audience does not match is rejected.
+    Honored.
+sasl.oauthbearer.sub.claim.name  [accept]
+    Which token claim provides the principal (default 'sub'). Honored; that
+    claim becomes the Kafka principal.
+sasl.oauthbearer.clock.skew.seconds  [accept]
+    Allowed clock skew when checking token expiry/not-before. Honored.
+sasl.oauthbearer.jwks.endpoint.refresh.ms  [accept]
+    How often the validator refreshes the JWKS keys. Honored.
+sasl.oauthbearer.jwks.endpoint.retry.backoff[.max].ms  [accept]
+    Retry backoff for fetching the JWKS keys. Honored.
+sasl.oauthbearer.scope.claim.name  [not-applicable]
+    Which claim carries OAuth scopes. FSK authorization is principal-based (ACLs
+    keyed on the principal); OAuth scopes are not mapped to authorization, so
+    this is ignored.
+sasl.oauthbearer.token.endpoint.url  [not-applicable]
+    The IdP token endpoint used to OBTAIN a token, by a producer/consumer or by
+    a broker acting as an OAuth client for inter-broker auth. The FSK listener
+    only validates the token a client presents (against jwks.endpoint.url); it
+    never acquires one, and inter-broker auth uses the FTL servers' own
+    connections, not a Kafka SASL listener. So nothing on the FSK Kafka
+    listeners uses it.
+sasl.oauthbearer.unsecured.*  [depends]
+    Options for the unsecured (no-signature) validator used in testing. The
+    OAuthBearerUnsecuredValidatorCallbackHandler is recognized as a backend, but
+    an unsecured token is for testing only and must not be relied on in
+    production.
+
+== Authorization (ACLs) ==
+authorizer.class.name  [depends]
+    The built-in ACL authorizers are recognized:
+    org.apache.kafka.metadata.authorizer.StandardAuthorizer (KRaft mode) and
+    kafka.security.authorizer.AclAuthorizer (ZooKeeper mode). When one of these
+    is named, the tool rewrites the value to 'KofAuthorizer' and FSK enforces
+    the same ACL model: default-deny, super.users bypass, and per-principal
+    allow rules. Any other authorizer is a custom Java class FSK cannot run, so
+    it is flagged RESOLVE-REQUIRED.
+super.users  [accept]
+    Principals that bypass the ACL table. Canonicalized (User: prefix stripped)
+    and installed as the bypass list.
+allow.everyone.if.no.acl.found  [accept]
+    When true, an operation with no matching ACL is allowed instead of denied.
+    Honored; it changes the default policy.
+principal.builder.class  [unsupported]
+    A custom Java class that derives the principal. FSK derives the principal
+    natively (cert CN / SASL username).
+security.providers  [unsupported]
+    Custom Java security provider classes loaded by the broker. FSK cannot load
+    Java provider classes.
+early.start.listeners  [not-applicable]
+    Which listeners start before the KRaft metadata is caught up. The
+    controller/quorum is FTL-native, so this does not apply.
+
+== Connection limits ==
+max.connections  [accept]
+    Maximum concurrent connections, applied per listener. Honored; a new
+    connection past the limit is refused.
+max.connections.per.ip  [unsupported]
+    A per-source-IP connection cap. Not implemented in this release; the setting
+    is ignored.
+max.connections.per.ip.overrides  [unsupported]
+    Per-IP overrides of the per-IP cap. Not implemented in this release;
+    ignored.
+connection.failed.authentication.delay.ms  [unsupported]
+    A delay before closing a connection that failed authentication. Not
+    implemented; a failed auth is closed immediately.
+connections.max.idle.ms  [not-applicable]
+    Idle-connection timeout in the Java broker. FSK manages connection lifetime
+    through the FTL servers.
+
+== Delegation tokens ==
+delegation.token.*  [unsupported]
+    Delegation tokens are not implemented in FSK. The whole family
+    (delegation.token.secret.key, max.lifetime.ms, expiry.time.ms,
+    expiry.check.interval.ms) is unsupported.
+
