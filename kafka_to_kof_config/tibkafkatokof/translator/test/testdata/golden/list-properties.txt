@@ -1,15 +1,15 @@
-tibkafkatokof -- Kafka listener/security property support
+tibkafkatokof -- Apache Kafka listener/security property support in TIBCO FTL(R) Service for Kafka (FKS)
 
 Disposition legend:
-  accept         honored as written, passed through to the KoF listener
+  accept         honored as written, passed through to the FKS listener
   depends        cannot be decided statically; the line states the rule
                  (e.g. a recognized class is rewritten, a custom class is flagged)
   not-applicable Kafka-internal; FTL handles it natively, so it is ignored
-  unsupported    not implemented by KoF; rejected or ignored with a warning
+  unsupported    not implemented by FKS; rejected or ignored with a warning
 
 == Listener layout ==
 listeners  [accept]
-    The NAME://host:port addresses the broker binds. KoF binds the client
+    The NAME://host:port addresses the broker binds. FKS binds the client
     listeners.
 advertised.listeners  [accept]
     The addresses clients are told to connect to. Passed through unchanged.
@@ -51,7 +51,7 @@ ssl.key.password  [accept]
     Passphrase for the server private key. Honored.
 ssl.keystore.type  [depends]
     PEM is accepted directly. A Java keystore (JKS or PKCS12) is flagged
-    RESOLVE-REQUIRED, because KoF reads PEM and a Java keystore would silently
+    RESOLVE-REQUIRED, because FKS reads PEM and a Java keystore would silently
     not work: convert the keystore to PEM (keytool/openssl) and set the type to
     PEM.
 ssl.truststore.location  [accept]
@@ -72,35 +72,35 @@ ssl.enabled.protocols  [accept]
 ssl.protocol  [accept]
     The default TLS protocol version. Honored.
 ssl.cipher.suites  [accept]
-    The allowed TLS cipher suites. Honored; the suite names are applied to KoF's
+    The allowed TLS cipher suites. Honored; the suite names are applied to FKS's
     OpenSSL TLS stack.
 ssl.principal.mapping.rules  [depends]
     Maps a client certificate's subject DN to a principal. Simple CN extraction
     is honored; complex multi-rule sets are not fully evaluated and need review.
 ssl.endpoint.identification.algorithm  [not-applicable]
     Hostname verification done by a TLS client against a server's certificate.
-    KoF's inbound listener verifies client certificates by CA chain, not by
+    FKS's inbound listener verifies client certificates by CA chain, not by
     hostname, so this does not apply.
 ssl.provider  [unsupported]
-    Names a Java JSSE security provider. KoF uses OpenSSL, so a named Java
+    Names a Java JSSE security provider. FKS uses OpenSSL, so a named Java
     provider has no effect.
 ssl.secure.random.implementation  [unsupported]
-    Selects a Java SecureRandom implementation. KoF uses the OpenSSL RNG; not
+    Selects a Java SecureRandom implementation. FKS uses the OpenSSL RNG; not
     applicable.
 ssl.keymanager.algorithm  [unsupported]
-    A Java KeyManager algorithm. KoF does not use the Java TLS stack; not
+    A Java KeyManager algorithm. FKS does not use the Java TLS stack; not
     applicable.
 ssl.trustmanager.algorithm  [unsupported]
-    A Java TrustManager algorithm. KoF does not use the Java TLS stack; not
+    A Java TrustManager algorithm. FKS does not use the Java TLS stack; not
     applicable.
 ssl.engine.factory.class  [unsupported]
-    A custom Java SSL engine. KoF terminates TLS with OpenSSL and cannot load a
+    A custom Java SSL engine. FKS terminates TLS with OpenSSL and cannot load a
     Java class.
 ssl.allow.dn.changes  [not-applicable]
-    Whether a certificate's DN may change across a re-authentication. KoF does
+    Whether a certificate's DN may change across a re-authentication. FKS does
     not implement this policy.
 ssl.allow.san.changes  [not-applicable]
-    Whether a certificate's SANs may change across a re-authentication. KoF does
+    Whether a certificate's SANs may change across a re-authentication. FKS does
     not implement this policy.
 
 == SASL authentication ==
@@ -116,7 +116,7 @@ sasl.jaas.config  [depends]
     (Krb5LoginModule) are unsupported, and any custom or delegated module is not
     run.
 sasl.server.callback.handler.class  [depends]
-    A Java class. A recognized standard class is translated to a KoF backend
+    A Java class. A recognized standard class is translated to a FKS backend
     (e.g. oauth, inline); an unrecognized custom class cannot be run and is
     flagged RESOLVE-REQUIRED for the operator.
 sasl.client.callback.handler.class  [not-applicable]
@@ -129,16 +129,16 @@ sasl.login.class  [not-applicable]
     A custom client-side Login class. Not used by the broker's inbound listener;
     ignored.
 sasl.server.max.receive.size  [not-applicable]
-    Maximum size of a SASL handshake message buffer in the Java broker. KoF
+    Maximum size of a SASL handshake message buffer in the Java broker. FKS
     manages its own buffers.
 sasl.kerberos.*  [unsupported]
-    GSSAPI/Kerberos is not implemented in KoF. The whole family
+    GSSAPI/Kerberos is not implemented in FKS. The whole family
     (sasl.kerberos.service.name, kinit.cmd, ticket.renew.window.factor,
     ticket.renew.jitter, min.time.before.relogin, principal.to.local.rules) is
     unsupported.
 sasl.login.refresh.*  [not-applicable]
     Token-refresh timing for a SASL client maintaining its own login
-    (window.factor, window.jitter, min.period.seconds, buffer.seconds). KoF's
+    (window.factor, window.jitter, min.period.seconds, buffer.seconds). FKS's
     inbound listener validates tokens; it does not run a client login.
 sasl.login.connect.timeout.ms / read.timeout.ms / retry.backoff[.max].ms  [not-applicable]
     Network tuning for a SASL client contacting a token endpoint to obtain a
@@ -166,15 +166,15 @@ sasl.oauthbearer.jwks.endpoint.refresh.ms  [accept]
 sasl.oauthbearer.jwks.endpoint.retry.backoff[.max].ms  [accept]
     Retry backoff for fetching the JWKS keys. Honored.
 sasl.oauthbearer.scope.claim.name  [not-applicable]
-    Which claim carries OAuth scopes. KoF authorization is principal-based (ACLs
+    Which claim carries OAuth scopes. FKS authorization is principal-based (ACLs
     keyed on the principal); OAuth scopes are not mapped to authorization, so
     this is ignored.
 sasl.oauthbearer.token.endpoint.url  [not-applicable]
     The IdP token endpoint used to OBTAIN a token, by a producer/consumer or by
-    a broker acting as an OAuth client for inter-broker auth. The KoF listener
+    a broker acting as an OAuth client for inter-broker auth. The FKS listener
     only validates the token a client presents (against jwks.endpoint.url); it
     never acquires one, and inter-broker auth uses the FTL servers' own
-    connections, not a Kafka SASL listener. So nothing on the KoF Kafka
+    connections, not a Kafka SASL listener. So nothing on the FKS Kafka
     listeners uses it.
 sasl.oauthbearer.unsecured.*  [depends]
     Options for the unsecured (no-signature) validator used in testing. The
@@ -187,9 +187,9 @@ authorizer.class.name  [depends]
     The built-in ACL authorizers are recognized:
     org.apache.kafka.metadata.authorizer.StandardAuthorizer (KRaft mode) and
     kafka.security.authorizer.AclAuthorizer (ZooKeeper mode). When one of these
-    is named, the tool rewrites the value to 'KofAuthorizer' and KoF enforces
+    is named, the tool rewrites the value to 'KofAuthorizer' and FKS enforces
     the same ACL model: default-deny, super.users bypass, and per-principal
-    allow rules. Any other authorizer is a custom Java class KoF cannot run, so
+    allow rules. Any other authorizer is a custom Java class FKS cannot run, so
     it is flagged RESOLVE-REQUIRED.
 super.users  [accept]
     Principals that bypass the ACL table. Canonicalized (User: prefix stripped)
@@ -198,10 +198,10 @@ allow.everyone.if.no.acl.found  [accept]
     When true, an operation with no matching ACL is allowed instead of denied.
     Honored; it changes the default policy.
 principal.builder.class  [unsupported]
-    A custom Java class that derives the principal. KoF derives the principal
+    A custom Java class that derives the principal. FKS derives the principal
     natively (cert CN / SASL username).
 security.providers  [unsupported]
-    Custom Java security provider classes loaded by the broker. KoF cannot load
+    Custom Java security provider classes loaded by the broker. FKS cannot load
     Java provider classes.
 early.start.listeners  [not-applicable]
     Which listeners start before the KRaft metadata is caught up. The
@@ -221,12 +221,12 @@ connection.failed.authentication.delay.ms  [unsupported]
     A delay before closing a connection that failed authentication. Not
     implemented; a failed auth is closed immediately.
 connections.max.idle.ms  [not-applicable]
-    Idle-connection timeout in the Java broker. KoF manages connection lifetime
+    Idle-connection timeout in the Java broker. FKS manages connection lifetime
     through the FTL servers.
 
 == Delegation tokens ==
 delegation.token.*  [unsupported]
-    Delegation tokens are not implemented in KoF. The whole family
+    Delegation tokens are not implemented in FKS. The whole family
     (delegation.token.secret.key, max.lifetime.ms, expiry.time.ms,
     expiry.check.interval.ms) is unsupported.
 

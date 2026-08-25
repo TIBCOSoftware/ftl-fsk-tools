@@ -32,7 +32,7 @@ func main() {
 	// Core flags
 	outputDir := flag.String("output-dir", "./kof-output", "output directory for generated files")
 	realmName := flag.String("realm-name", "_default_realm", "realm name written into realm.json")
-	dataDir := flag.String("data-dir", "/var/tmp/kof/data", "KOF data directory path on pserver hosts")
+	dataDir := flag.String("data-dir", "/var/tmp/kof/data", "FKS data directory path on pserver hosts")
 	ftlLogLevel := flag.String("ftl-loglevel", translator.DefaultFTLLogLevel,
 		"loglevel for the generated FTL servers, written into each pserver in the "+
 			"cluster YAML (the output servers' logging, NOT this tool's own logging; "+
@@ -391,7 +391,8 @@ func main() {
 // human. The operator runs --auto and/or edits the >>>>>>> blocks, then re-runs.
 func printResolveSummary(w io.Writer, s translator.ResolveSummary, outputDir string, autoRan bool, n int) {
 	brokerPath := filepath.Join(outputDir, fmt.Sprintf("kof.broker.%d.properties", n))
-	fmt.Fprintf(w, "\nINVALID -- %d setting(s) to fix in %s:\n", s.Total(), brokerPath)
+	fmt.Fprintf(w, "\nINVALID -- %d setting(s) TIBCO FTL(R) Service for Kafka (FKS) cannot use, in %s:\n",
+		s.Total(), brokerPath)
 
 	var autoLines, youLines []int
 	for i, it := range s.Items {
@@ -426,22 +427,22 @@ func printResolveSummary(w io.Writer, s translator.ResolveSummary, outputDir str
 func resolveExplain(kind translator.ResolveKind, autoRan bool) (what, fix string, autoFixable bool) {
 	switch kind {
 	case translator.KindKeystore:
-		what = "a Java keystore (JKS/PKCS12); KoF reads PEM only."
+		what = "a Java keystore (JKS/PKCS12); FKS reads PEM only."
 		if autoRan {
 			return what, "Fix: --auto couldn't here (file not on this host). Run --auto where the .jks is, or use the commands in the block.", true
 		}
 		return what, "Fix: run with --auto to convert it, or run the keytool/openssl commands in the block.", true
 	case translator.KindHandler:
-		return "a custom Java callback class KoF can't run.",
+		return "a custom Java callback class FKS can't run.",
 			"Fix: in the block, set a backend (oauth/file/inline) and fill its params.", false
 	case translator.KindBackendParams:
 		return "a backend is selected but its params are missing.",
 			"Fix: in the block, fill the params (oauth: jwks url + issuer + audience; inline: jaas users).", false
 	case translator.KindMechanism:
-		return "a SASL mechanism KoF can't serve (it serves PLAIN and OAUTHBEARER only).",
+		return "a SASL mechanism FKS can't serve (it serves PLAIN and OAUTHBEARER only).",
 			"Fix: in the block, switch this listener to PLAIN or OAUTHBEARER.", false
 	case translator.KindAuthorizer:
-		return "a custom authorizer; KoF supports the standard one.",
+		return "a custom authorizer; FKS supports the standard one.",
 			"Fix: in the block, set the value to: standard.", false
 	}
 	return "", "", false

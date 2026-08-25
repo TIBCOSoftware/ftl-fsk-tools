@@ -19,9 +19,9 @@ import (
 type Disposition string
 
 const (
-	// DispAccept: honored as written and passed through to the KoF listener.
+	// DispAccept: honored as written and passed through to the FKS listener.
 	DispAccept Disposition = "accept"
-	// DispTranslate: accepted, but the VALUE is rewritten to a KoF form (e.g. a
+	// DispTranslate: accepted, but the VALUE is rewritten to a FKS form (e.g. a
 	// handler class becomes a backend name).
 	DispTranslate Disposition = "translate"
 	// DispDepends: cannot be accepted or rejected statically -- it depends on the
@@ -30,7 +30,7 @@ const (
 	// DispNotApplicable: a Kafka-internal concern that FTL handles natively, so the
 	// property is ignored (e.g. inter-broker/controller listeners, KRaft bootstrap).
 	DispNotApplicable Disposition = "not-applicable"
-	// DispUnsupported: recognized but not implemented by KoF; rejected or ignored
+	// DispUnsupported: recognized but not implemented by FKS; rejected or ignored
 	// with a warning (e.g. Kerberos, delegation tokens, custom Java plug-in classes).
 	DispUnsupported Disposition = "unsupported"
 )
@@ -52,7 +52,7 @@ var propSections = []struct {
 		Name: "Listener layout",
 		Props: []PropSupport{
 			{"listeners", DispAccept,
-				"The NAME://host:port addresses the broker binds. KoF binds the client listeners."},
+				"The NAME://host:port addresses the broker binds. FKS binds the client listeners."},
 			{"advertised.listeners", DispAccept,
 				"The addresses clients are told to connect to. Passed through unchanged."},
 			{"listener.security.protocol.map", DispAccept,
@@ -86,7 +86,7 @@ var propSections = []struct {
 				"Passphrase for the server private key. Honored."},
 			{"ssl.keystore.type", DispDepends,
 				"PEM is accepted directly. A Java keystore (JKS or PKCS12) is flagged RESOLVE-REQUIRED, " +
-					"because KoF reads PEM and a Java keystore would silently not work: convert the keystore " +
+					"because FKS reads PEM and a Java keystore would silently not work: convert the keystore " +
 					"to PEM (keytool/openssl) and set the type to PEM."},
 			{"ssl.truststore.location", DispAccept,
 				"CA bundle used to verify inbound client certificates when the listener is mutual-TLS. Honored."},
@@ -104,27 +104,27 @@ var propSections = []struct {
 			{"ssl.protocol", DispAccept,
 				"The default TLS protocol version. Honored."},
 			{"ssl.cipher.suites", DispAccept,
-				"The allowed TLS cipher suites. Honored; the suite names are applied to KoF's OpenSSL TLS stack."},
+				"The allowed TLS cipher suites. Honored; the suite names are applied to FKS's OpenSSL TLS stack."},
 			{"ssl.principal.mapping.rules", DispDepends,
 				"Maps a client certificate's subject DN to a principal. Simple CN extraction is honored; " +
 					"complex multi-rule sets are not fully evaluated and need review."},
 			{"ssl.endpoint.identification.algorithm", DispNotApplicable,
-				"Hostname verification done by a TLS client against a server's certificate. KoF's inbound listener " +
+				"Hostname verification done by a TLS client against a server's certificate. FKS's inbound listener " +
 					"verifies client certificates by CA chain, not by hostname, so this does not apply."},
 			{"ssl.provider", DispUnsupported,
-				"Names a Java JSSE security provider. KoF uses OpenSSL, so a named Java provider has no effect."},
+				"Names a Java JSSE security provider. FKS uses OpenSSL, so a named Java provider has no effect."},
 			{"ssl.secure.random.implementation", DispUnsupported,
-				"Selects a Java SecureRandom implementation. KoF uses the OpenSSL RNG; not applicable."},
+				"Selects a Java SecureRandom implementation. FKS uses the OpenSSL RNG; not applicable."},
 			{"ssl.keymanager.algorithm", DispUnsupported,
-				"A Java KeyManager algorithm. KoF does not use the Java TLS stack; not applicable."},
+				"A Java KeyManager algorithm. FKS does not use the Java TLS stack; not applicable."},
 			{"ssl.trustmanager.algorithm", DispUnsupported,
-				"A Java TrustManager algorithm. KoF does not use the Java TLS stack; not applicable."},
+				"A Java TrustManager algorithm. FKS does not use the Java TLS stack; not applicable."},
 			{"ssl.engine.factory.class", DispUnsupported,
-				"A custom Java SSL engine. KoF terminates TLS with OpenSSL and cannot load a Java class."},
+				"A custom Java SSL engine. FKS terminates TLS with OpenSSL and cannot load a Java class."},
 			{"ssl.allow.dn.changes", DispNotApplicable,
-				"Whether a certificate's DN may change across a re-authentication. KoF does not implement this policy."},
+				"Whether a certificate's DN may change across a re-authentication. FKS does not implement this policy."},
 			{"ssl.allow.san.changes", DispNotApplicable,
-				"Whether a certificate's SANs may change across a re-authentication. KoF does not implement this policy."},
+				"Whether a certificate's SANs may change across a re-authentication. FKS does not implement this policy."},
 		},
 	},
 	{
@@ -139,7 +139,7 @@ var propSections = []struct {
 					"properties and the server callback handler class, not by inline users. ScramLoginModule " +
 					"and Kerberos (Krb5LoginModule) are unsupported, and any custom or delegated module is not run."},
 			{"sasl.server.callback.handler.class", DispDepends,
-				"A Java class. A recognized standard class is translated to a KoF backend (e.g. oauth, inline); " +
+				"A Java class. A recognized standard class is translated to a FKS backend (e.g. oauth, inline); " +
 					"an unrecognized custom class cannot be run and is flagged RESOLVE-REQUIRED for the operator."},
 			{"sasl.client.callback.handler.class", DispNotApplicable,
 				"A callback handler used by a SASL client, not by the broker accepting connections. Ignored."},
@@ -148,13 +148,13 @@ var propSections = []struct {
 			{"sasl.login.class", DispNotApplicable,
 				"A custom client-side Login class. Not used by the broker's inbound listener; ignored."},
 			{"sasl.server.max.receive.size", DispNotApplicable,
-				"Maximum size of a SASL handshake message buffer in the Java broker. KoF manages its own buffers."},
+				"Maximum size of a SASL handshake message buffer in the Java broker. FKS manages its own buffers."},
 			{"sasl.kerberos.*", DispUnsupported,
-				"GSSAPI/Kerberos is not implemented in KoF. The whole family (sasl.kerberos.service.name, kinit.cmd, " +
+				"GSSAPI/Kerberos is not implemented in FKS. The whole family (sasl.kerberos.service.name, kinit.cmd, " +
 					"ticket.renew.window.factor, ticket.renew.jitter, min.time.before.relogin, principal.to.local.rules) is unsupported."},
 			{"sasl.login.refresh.*", DispNotApplicable,
 				"Token-refresh timing for a SASL client maintaining its own login (window.factor, window.jitter, " +
-					"min.period.seconds, buffer.seconds). KoF's inbound listener validates tokens; it does not run a client login."},
+					"min.period.seconds, buffer.seconds). FKS's inbound listener validates tokens; it does not run a client login."},
 			{"sasl.login.connect.timeout.ms / read.timeout.ms / retry.backoff[.max].ms", DispNotApplicable,
 				"Network tuning for a SASL client contacting a token endpoint to obtain a login. Not used by the broker's listener."},
 			{"connections.max.reauth.ms", DispAccept,
@@ -179,13 +179,13 @@ var propSections = []struct {
 			{"sasl.oauthbearer.jwks.endpoint.retry.backoff[.max].ms", DispAccept,
 				"Retry backoff for fetching the JWKS keys. Honored."},
 			{"sasl.oauthbearer.scope.claim.name", DispNotApplicable,
-				"Which claim carries OAuth scopes. KoF authorization is principal-based (ACLs keyed on the principal); " +
+				"Which claim carries OAuth scopes. FKS authorization is principal-based (ACLs keyed on the principal); " +
 					"OAuth scopes are not mapped to authorization, so this is ignored."},
 			{"sasl.oauthbearer.token.endpoint.url", DispNotApplicable,
 				"The IdP token endpoint used to OBTAIN a token, by a producer/consumer or by a broker acting as " +
-					"an OAuth client for inter-broker auth. The KoF listener only validates the token a client " +
+					"an OAuth client for inter-broker auth. The FKS listener only validates the token a client " +
 					"presents (against jwks.endpoint.url); it never acquires one, and inter-broker auth uses the " +
-					"FTL servers' own connections, not a Kafka SASL listener. So nothing on the KoF Kafka listeners uses it."},
+					"FTL servers' own connections, not a Kafka SASL listener. So nothing on the FKS Kafka listeners uses it."},
 			{"sasl.oauthbearer.unsecured.*", DispDepends,
 				"Options for the unsecured (no-signature) validator used in testing. The OAuthBearerUnsecuredValidatorCallbackHandler " +
 					"is recognized as a backend, but an unsecured token is for testing only and must not be relied on in production."},
@@ -197,17 +197,17 @@ var propSections = []struct {
 			{"authorizer.class.name", DispDepends,
 				"The built-in ACL authorizers are recognized: org.apache.kafka.metadata.authorizer.StandardAuthorizer " +
 					"(KRaft mode) and kafka.security.authorizer.AclAuthorizer (ZooKeeper mode). When one of these is named, " +
-					"the tool rewrites the value to 'KofAuthorizer' and KoF enforces the same ACL model: default-deny, super.users " +
-					"bypass, and per-principal allow rules. Any other authorizer is a custom Java class KoF cannot run, so it " +
+					"the tool rewrites the value to 'KofAuthorizer' and FKS enforces the same ACL model: default-deny, super.users " +
+					"bypass, and per-principal allow rules. Any other authorizer is a custom Java class FKS cannot run, so it " +
 					"is flagged RESOLVE-REQUIRED."},
 			{"super.users", DispAccept,
 				"Principals that bypass the ACL table. Canonicalized (User: prefix stripped) and installed as the bypass list."},
 			{"allow.everyone.if.no.acl.found", DispAccept,
 				"When true, an operation with no matching ACL is allowed instead of denied. Honored; it changes the default policy."},
 			{"principal.builder.class", DispUnsupported,
-				"A custom Java class that derives the principal. KoF derives the principal natively (cert CN / SASL username)."},
+				"A custom Java class that derives the principal. FKS derives the principal natively (cert CN / SASL username)."},
 			{"security.providers", DispUnsupported,
-				"Custom Java security provider classes loaded by the broker. KoF cannot load Java provider classes."},
+				"Custom Java security provider classes loaded by the broker. FKS cannot load Java provider classes."},
 			{"early.start.listeners", DispNotApplicable,
 				"Which listeners start before the KRaft metadata is caught up. The controller/quorum is FTL-native, so this does not apply."},
 		},
@@ -224,14 +224,14 @@ var propSections = []struct {
 			{"connection.failed.authentication.delay.ms", DispUnsupported,
 				"A delay before closing a connection that failed authentication. Not implemented; a failed auth is closed immediately."},
 			{"connections.max.idle.ms", DispNotApplicable,
-				"Idle-connection timeout in the Java broker. KoF manages connection lifetime through the FTL servers."},
+				"Idle-connection timeout in the Java broker. FKS manages connection lifetime through the FTL servers."},
 		},
 	},
 	{
 		Name: "Delegation tokens",
 		Props: []PropSupport{
 			{"delegation.token.*", DispUnsupported,
-				"Delegation tokens are not implemented in KoF. The whole family (delegation.token.secret.key, " +
+				"Delegation tokens are not implemented in FKS. The whole family (delegation.token.secret.key, " +
 					"max.lifetime.ms, expiry.time.ms, expiry.check.interval.ms) is unsupported."},
 		},
 	},
@@ -280,14 +280,15 @@ func WriteSupportList(w io.Writer, color bool) {
 		return code + s + ansiReset
 	}
 
-	fmt.Fprintln(w, paint(ansiBold, "tibkafkatokof -- Kafka listener/security property support"))
+	fmt.Fprintln(w, paint(ansiBold,
+		"tibkafkatokof -- Apache Kafka listener/security property support in TIBCO FTL(R) Service for Kafka (FKS)"))
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Disposition legend:")
 	legend := []struct{ word, desc string }{
-		{"accept", "honored as written, passed through to the KoF listener"},
+		{"accept", "honored as written, passed through to the FKS listener"},
 		{"depends", "cannot be decided statically; the line states the rule"},
 		{"not-applicable", "Kafka-internal; FTL handles it natively, so it is ignored"},
-		{"unsupported", "not implemented by KoF; rejected or ignored with a warning"},
+		{"unsupported", "not implemented by FKS; rejected or ignored with a warning"},
 	}
 	for _, l := range legend {
 		pad := strings.Repeat(" ", 14-len(l.word))
