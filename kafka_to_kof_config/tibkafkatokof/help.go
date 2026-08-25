@@ -187,7 +187,7 @@ func writeSynopsis(w io.Writer) {
 	fmt.Fprintln(w, "       tibkafkatokof [flags] -from-brokers host:port[,host:port...]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Translates one or more Apache Kafka broker configurations into TIBCO FTL(R) Service")
-	fmt.Fprintln(w, "for Kafka (FKS) artifacts. Pass one server.properties file per broker (1-9 files),")
+	fmt.Fprintln(w, "for Kafka (FSK) artifacts. Pass one server.properties file per broker (1-9 files),")
 	fmt.Fprintln(w, "or use -from-brokers to read the config from running brokers over the Kafka Admin")
 	fmt.Fprintln(w, "API. The two are mutually exclusive; pserver count is derived from the number of")
 	fmt.Fprintln(w, "brokers.")

@@ -1,11 +1,11 @@
 # kof-tools
 
-Tools for configuring and migrating to TIBCO FTL(R) Service for Kafka (FKS) persistence clusters.
+Tools for configuring and migrating to TIBCO FTL(R) Service for Kafka (FSK) persistence clusters.
 
 | Tool | Language | Description |
 |------|----------|-------------|
-| [kafka_to_kof_config/tibkafkatokof](kafka_to_kof_config/tibkafkatokof/README.md) | Go | Translates Apache Kafka KRaft `server.properties` into FKS artifacts (`realm.json`, `tibftlserver-cluster.yaml`, etc.) |
-| [kafka_to_kof_migration](kafka_to_kof_migration/README.md) | Java | Replicates records from a source Apache Kafka cluster to a target FKS cluster |
+| [kafka_to_kof_config/tibkafkatokof](kafka_to_kof_config/tibkafkatokof/README.md) | Go | Translates Apache Kafka KRaft `server.properties` into FSK artifacts (`realm.json`, `tibftlserver-cluster.yaml`, etc.) |
+| [kafka_to_kof_migration](kafka_to_kof_migration/README.md) | Java | Replicates records from a source Apache Kafka cluster to a target FSK cluster |
 
 The migration tool also ships an optional web dashboard and a runnable demo scenario —
 see [kafka_to_kof_migration/README-UI.md](kafka_to_kof_migration/README-UI.md).
