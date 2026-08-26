@@ -7,8 +7,9 @@ Tools for configuring and migrating to TIBCO FTL(R) Service for Kafka (FSK) pers
 | [tibfsk/tibftlimportconfig](tibfsk/tibftlimportconfig/README.md) | Go | Translates Apache Kafka KRaft `server.properties` into FSK artifacts (`realm.json`, `tibftlserver-cluster.yaml`, etc.) |
 | [tibfsk/tibftlfskimportdata](tibfsk/tibftlfskimportdata/README.md) | Java | Replicates records from a source Apache Kafka cluster to a target FSK cluster |
 
-The migration tool also ships an optional web dashboard and a runnable demo scenario —
-see [tibfsk/tibftlfskimportdata/README-UI.md](tibfsk/tibftlfskimportdata/README-UI.md).
+The migration tool also ships a runnable demo scenario — see
+[tibfsk/tibftlfskimportdata/README.md](tibfsk/tibftlfskimportdata/README.md) for the four
+end-to-end paths.
 
 ---
 

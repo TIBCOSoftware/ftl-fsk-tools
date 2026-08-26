@@ -6,7 +6,7 @@ record from the beginning offset.
 
 Pick one of the four paths below and paste the commands in order. Each path is self-contained —
 start a Kafka cluster, load it with demo data, generate the FSK configuration, start FSK, migrate,
-verify, shut down. Nothing here needs Node.js or a browser.
+verify, shut down.
 
 > **NOTE — steps 1, 2 and part of 9 are demo scaffolding.** They start a throwaway Kafka cluster
 > and fill it with sample records so there is something to migrate. If you already have a Kafka
@@ -23,9 +23,6 @@ verify, shut down. Nothing here needs Node.js or a browser.
 
 Already have a Kafka cluster you want to migrate? Skip to
 [Migrating from an existing cluster](#migrating-from-an-existing-cluster).
-
-> There is also an optional web dashboard that runs the same migration and streams its output to a
-> browser. See [README-UI.md](README-UI.md).
 
 ---
 
@@ -662,7 +659,7 @@ before re-running a topic that partially completed.
 
 Unless you pass `--core-servers`, `tibftlimportconfig` picks each server's realm port randomly from
 5600–5699, and a regenerated configuration gets different ports. Pin them when the ports appear in
-firewall rules, scripts, or the UI dashboard:
+firewall rules or scripts:
 
 ```bash
 --core-servers "SRV1=localhost:5600"                                          # one server
@@ -690,8 +687,8 @@ tibrealmadmin --server <KOF-HOST-1>:5600 --realm my-realm upload-realm ./kof-out
 With no arguments it falls back to `conf/kafka-to-kof.properties` next to the script, so pass
 `--config` whenever your properties file lives elsewhere — as it does after generation.
 
-`KAFKA_CLASSPATH` must be set or the script exits 1 before compiling. On this path it is **not**
-derived from `KAFKA_HOME`; that convenience exists only in the UI server.
+`KAFKA_CLASSPATH` must be set or the script exits 1 before compiling. It is **not** derived from
+`KAFKA_HOME`.
 
 ### Options
 
