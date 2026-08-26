@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.15)
 project(ftl-fsk-tools LANGUAGES NONE)
 
 # ─── Go tool: tibftlimportconfig ───────────────────────────────────────────────────
-# Requires Go 1.24 or later (see tibfsk/tibftlimportconfig/go.mod).
+# Requires Go 1.24 or later (see tibfsk/importconfig/go.mod).
 find_program(GO_EXECUTABLE go
     HINTS /usr/local/go/bin ENV GOROOT_FINAL ENV GOROOT
     REQUIRED
     DOC "Go compiler (1.24+) — override with -DGO_EXECUTABLE=/path/to/go if needed"
 )
 
-set(TIBFTLIMPORTCONFIG_SRC "${CMAKE_CURRENT_SOURCE_DIR}/tibfsk/tibftlimportconfig")
+set(TIBFTLIMPORTCONFIG_SRC "${CMAKE_CURRENT_SOURCE_DIR}/tibfsk/importconfig")
 set(TIBFTLIMPORTCONFIG_BIN "${CMAKE_CURRENT_BINARY_DIR}/tibftlimportconfig${CMAKE_EXECUTABLE_SUFFIX}")
 
 file(GLOB_RECURSE TIBFTLIMPORTCONFIG_GO_SOURCES
@@ -38,4 +38,4 @@ install(PROGRAMS "${TIBFTLIMPORTCONFIG_BIN}"
 )
 
 # ─── Java tool: tibftlfskimportdata ──────────────────────────────────────────
-add_subdirectory(tibfsk/tibftlfskimportdata)
+add_subdirectory(tibfsk/importdata)

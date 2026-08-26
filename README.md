@@ -4,11 +4,11 @@ Tools for configuring and migrating to TIBCO FTL(R) Service for Kafka (FSK) pers
 
 | Tool | Language | Description |
 |------|----------|-------------|
-| [tibfsk/tibftlimportconfig](tibfsk/tibftlimportconfig/README.md) | Go | Translates Apache Kafka KRaft `server.properties` into FSK artifacts (`realm.json`, `tibftlserver-cluster.yaml`, etc.) |
-| [tibfsk/tibftlfskimportdata](tibfsk/tibftlfskimportdata/README.md) | Java | Replicates records from a source Apache Kafka cluster to a target FSK cluster |
+| [tibfsk/importconfig](tibfsk/importconfig/README.md) | Go | Translates Apache Kafka KRaft `server.properties` into FSK artifacts (`realm.json`, `tibftlserver-cluster.yaml`, etc.) |
+| [tibfsk/importdata](tibfsk/importdata/README.md) | Java | Replicates records from a source Apache Kafka cluster to a target FSK cluster |
 
 The migration tool also ships a runnable demo scenario — see
-[tibfsk/tibftlfskimportdata/README.md](tibfsk/tibftlfskimportdata/README.md) for the four
+[tibfsk/importdata/README.md](tibfsk/importdata/README.md) for the four
 end-to-end paths.
 
 ---
@@ -45,7 +45,7 @@ cmake --build .
 
 Outputs:
 - `build/tibftlimportconfig` — ready-to-run binary
-- `build/tibfsk/tibftlfskimportdata/classes/` — compiled Java class files (run via `run-apachekafka-to-fsk.sh`)
+- `build/tibfsk/importdata/classes/` — compiled Java class files (run via `run-apachekafka-to-fsk.sh`)
 
 ### Build tibftlimportconfig only (no Java required)
 

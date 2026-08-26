@@ -9,7 +9,7 @@ set -euo pipefail
 set -x
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIGRATION_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"  # tibftlfskimportdata root
+MIGRATION_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"  # importdata root
 KOF_OUTPUT_DIR="$SCRIPT_DIR/../kof-output"
 LOG_FILE="$SCRIPT_DIR/migration.log"
 DRY_RUN_ONLY=false
