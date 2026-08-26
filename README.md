@@ -47,12 +47,26 @@ Outputs:
 - `build/tibftlimportconfig` — ready-to-run binary
 - `build/tibfsk/importdata/classes/` — compiled Java class files (run via `run-apachekafka-to-fsk.sh`)
 
+`javac` runs only when the classes are missing or a `.java` source has changed, so repeat builds
+are no-ops. Because the compiled classes are installed next to `run-apachekafka-to-fsk.sh`, the
+script finds them and skips compiling entirely at run time — set `FSK_FORCE_REBUILD=1` if you edit
+the sources and want the script to recompile.
+
 ### Build tibftlimportconfig only (no Java required)
 
 ```sh
 mkdir build && cd build
 cmake ..   # omit -DKAFKA_CLASSPATH; Java tool is skipped with a warning
 cmake --build . --target tibftlimportconfig_build
+```
+
+Omitting `-DKAFKA_CLASSPATH` is not an error: the Java tool's compile step is skipped and the
+sources ship as-is, so `run-apachekafka-to-fsk.sh` compiles them into `build/` on first use.
+
+### Build the Java tool only
+
+```sh
+cmake --build . --target tibftlfskimportdata
 ```
 
 ### Selecting the Go toolchain

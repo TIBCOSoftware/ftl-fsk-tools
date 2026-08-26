@@ -677,8 +677,8 @@ tibrealmadmin --server <KOF-HOST-1>:5600 --realm my-realm upload-realm ./kof-out
 
 ## Command line reference
 
-`run-apachekafka-to-fsk.sh` is the only entry point the migration needs. It compiles the Java sources into
-`build/` and then runs the replicator, forwarding every argument through unchanged:
+`run-apachekafka-to-fsk.sh` is the only entry point the migration needs. It runs the replicator,
+forwarding every argument through unchanged:
 
 ```bash
 ./run-apachekafka-to-fsk.sh [options]
@@ -687,8 +687,43 @@ tibrealmadmin --server <KOF-HOST-1>:5600 --realm my-realm upload-realm ./kof-out
 With no arguments it falls back to `conf/kafka-to-kof.properties` next to the script, so pass
 `--config` whenever your properties file lives elsewhere — as it does after generation.
 
-`KAFKA_CLASSPATH` must be set or the script exits 1 before compiling. It is **not** derived from
-`KAFKA_HOME`.
+`KAFKA_CLASSPATH` must be set or the script exits 1. It is needed to *run*, not just to compile —
+the Kafka client jars are not bundled — and it is **not** derived from `KAFKA_HOME`.
+
+### Where the classes come from
+
+The script looks for compiled classes in two places before doing any work of its own:
+
+| Directory | Written by |
+|---|---|
+| `classes/` | CMake, when the package was built with `-DKAFKA_CLASSPATH=...` |
+| `build/` | this script, compiling `src/main/java` on demand |
+
+If neither holds the classes it compiles into `build/` once; on every later run it just launches.
+An installed package that already ships `classes/` never invokes `javac` at all.
+
+After editing the Java sources, set `FSK_FORCE_REBUILD=1` to recompile:
+
+```bash
+FSK_FORCE_REBUILD=1 ./run-apachekafka-to-fsk.sh --dry-run
+```
+
+### Prebuilding with CMake
+
+Passing the Kafka jars at configure time compiles the classes into the build tree and installs
+them alongside the script, so the tool is ready to run out of the package:
+
+```sh
+cmake -DKAFKA_CLASSPATH="/path/kafka-clients.jar:/path/slf4j-api.jar:/path/slf4j-simple.jar" ..
+cmake --build .
+```
+
+List the jars explicitly, colon-separated. A `libs/*` wildcard does **not** work here — the shell
+expands it inside the `javac` rule and every jar after the first is passed as a flag. The wildcard
+form is only valid for the *runtime* `KAFKA_CLASSPATH` the script reads.
+
+Without `-DKAFKA_CLASSPATH` the compile step is skipped with a status message and the build still
+succeeds; the sources ship instead and the script compiles them on first use.
 
 ### Options
 
@@ -730,8 +765,8 @@ SASL/TLS settings have no flag equivalents — they are prefixed properties and 
 
 ### Without the wrapper script
 
-The wrapper only adds `javac` plus a `java -cp` invocation. Where bash is unavailable, or to
-compile once and run many times, call the class directly:
+The wrapper only adds class-directory resolution, an on-demand `javac`, and a `java -cp`
+invocation. Where bash is unavailable, call the class directly:
 
 ```bash
 # Compile once

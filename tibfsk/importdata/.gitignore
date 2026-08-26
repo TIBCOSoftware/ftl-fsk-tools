@@ -1,6 +1,8 @@
 build/
+classes/
 demo/build/
 demo/*.pid
 demo/*.log
 kafka-examples/*.pid
 kof-output/
+*.swp
