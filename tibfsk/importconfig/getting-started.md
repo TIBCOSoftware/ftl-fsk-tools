@@ -141,7 +141,6 @@ controller quorum; without it, `kafka-storage.sh` refuses to format a config tha
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   server-1.properties
 ```
 
@@ -273,7 +272,6 @@ properties file carrying the truststore and JAAS settings, or just check the bro
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --tls-cert /etc/kafka/certs/server.keystore.pem \
   --tls-key  /etc/kafka/certs/server.keystore.pem \
   --auth-users-file /etc/ftl/users.txt \
@@ -367,7 +365,6 @@ that the tool reads and maps, as described below.
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --tls-cert /etc/kafka/certs/server.pem \
   --tls-key  /etc/kafka/certs/server.key \
   --oauth-token-url    https://auth.example.com/oauth/token \
@@ -465,7 +462,6 @@ The quorum forms once a majority of controllers are up. Confirm:
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   server-1.properties \
   server-2.properties \
   server-3.properties
@@ -546,7 +542,6 @@ check the broker logs under `$KAFKA_HOME/logs` instead.
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --tls-cert /etc/kafka/certs/server.pem \
   --tls-key  /etc/kafka/certs/server.key \
   --auth-users-file /etc/ftl/users.txt \
@@ -623,7 +618,6 @@ certificate it can verify, including your own verification attempts.
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --tls-cert         /etc/kafka/certs/server.pem \
   --tls-key          /etc/kafka/certs/server.key \
   --tls-server-trust /etc/kafka/certs/ca.pem \
@@ -715,7 +709,6 @@ FSK needs no equivalent jar — token validation is built in and driven by `--oa
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --tls-cert           /etc/kafka/certs/server.pem \
   --tls-key            /etc/kafka/certs/server.key \
   --auth-users-file    /etc/ftl/users.txt \
@@ -797,7 +790,6 @@ done
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --tls-cert         /etc/kafka/certs/server.pem \
   --tls-key          /etc/kafka/certs/server.key \
   --tls-server-trust /etc/kafka/certs/ca.pem \
@@ -854,7 +846,6 @@ done
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --tls-cert           /etc/kafka/certs/server.pem \
   --tls-key            /etc/kafka/certs/server.key \
   --tls-server-trust   /etc/kafka/certs/ca.pem \
@@ -915,7 +906,6 @@ done
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --tls-cert           /etc/kafka/certs/server.pem \
   --tls-key            /etc/kafka/certs/server.key \
   --tls-server-trust   /etc/kafka/certs/ca.pem \
@@ -953,7 +943,7 @@ active at once, so a client that authenticates by any one of them is accepted.
 | Flag | Default | Purpose |
 |---|---|---|
 | `--output-dir` | `./kof-output` | Directory for all generated files |
-| `--realm-name` | `_default_realm` | Realm name in `realm.json` |
+| `--realm-name` | `_default_realm` | Realm name in `realm.json`. Leave it at the default — the realm server names every deployed realm `_default_realm`, so any other value is discarded when the realm is loaded |
 | `--data-dir` | `/var/tmp/kof/data` | FSK data directory on pserver hosts |
 | `--core-servers` | _(auto)_ | Pin pserver names and ports: `SRV1=host:5600,...` |
 | `--from-brokers` | _(none)_ | Fetch the config from running brokers instead of files: `host:port,...` |
