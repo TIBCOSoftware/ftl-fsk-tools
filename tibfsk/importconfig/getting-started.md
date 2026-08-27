@@ -61,8 +61,9 @@ through. Either way the key itself is reported in `unsupported.properties`.
 
 **Stop Kafka before starting FSK.** The tool translates the client-facing listeners faithfully, so
 the FSK pservers bind the *same* ports the brokers were just using — 9092 in the single-node steps,
-9092/9102/9112 across the three brokers below, plus 9094 or 9095 wherever a second client listener
-is configured. On one host the two cannot run at once:
+9092/9102/9112 across the three brokers below, plus 9094/9104/9114 or 9095/9105/9115 wherever a
+second client listener is configured. Every 3-node step follows that convention: broker *n* takes
+each of broker 1's ports plus `10 × (n − 1)`. On one host the two cannot run at once:
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -421,9 +422,34 @@ transaction.state.log.replication.factor=3
 transaction.state.log.min.isr=2
 ```
 
-Brokers 2 and 3 use `node.id=2`/`3`, their own `log.dirs`, and the ports the voter list already
-names: `CLIENT` on 9102/9112 and `CONTROLLER` on 9103/9113. `controller.quorum.voters` is identical
-in all three files.
+### What changes in each broker file
+
+Copy the file above to `server-2.properties` and `server-3.properties`, then change these four
+lines in each — the ports are the ones the voter list already names:
+
+```properties
+# server-1.properties
+node.id=1
+listeners=CLIENT://localhost:9092,CONTROLLER://localhost:9093
+advertised.listeners=CLIENT://localhost:9092
+log.dirs=/var/tmp/kafka/data/broker-1
+
+# server-2.properties
+node.id=2
+listeners=CLIENT://localhost:9102,CONTROLLER://localhost:9103
+advertised.listeners=CLIENT://localhost:9102
+log.dirs=/var/tmp/kafka/data/broker-2
+
+# server-3.properties
+node.id=3
+listeners=CLIENT://localhost:9112,CONTROLLER://localhost:9113
+advertised.listeners=CLIENT://localhost:9112
+log.dirs=/var/tmp/kafka/data/broker-3
+```
+
+Every other line stays as it is in all three files. `controller.quorum.voters` in particular is
+identical everywhere — each broker needs the address of all three controllers, its own included,
+and a node that lists only itself forms its own quorum and never joins the others.
 
 ### Start Apache Kafka (KRaft)
 
@@ -511,9 +537,40 @@ other two join it. The cluster is available once two of the three are up.
 
 ## Step 5 — 3-node SASL/PLAIN cluster
 
-Add SASL/PLAIN + TLS to a 3-node cluster. Each broker's properties file carries the
-same listener and security configuration; per-broker differences are in `node.id`,
-ports, and `log.dirs` only.
+Add SASL/PLAIN + TLS to a 3-node cluster. Every broker carries the Step 2 listener and security
+configuration unchanged — the TLS keystores, the `BROKER` listener at `SASL_SSL`,
+`inter.broker.listener.name=BROKER`, `sasl.mechanism.inter.broker.protocol=PLAIN`, and the inline
+JAAS users.
+
+### What changes in each broker file
+
+```properties
+# server-1.properties
+node.id=1
+listeners=BROKER://localhost:9092,CONTROLLER://localhost:9093
+advertised.listeners=BROKER://localhost:9092
+log.dirs=/var/tmp/kafka/data/broker-1
+
+# server-2.properties
+node.id=2
+listeners=BROKER://localhost:9102,CONTROLLER://localhost:9103
+advertised.listeners=BROKER://localhost:9102
+log.dirs=/var/tmp/kafka/data/broker-2
+
+# server-3.properties
+node.id=3
+listeners=BROKER://localhost:9112,CONTROLLER://localhost:9113
+advertised.listeners=BROKER://localhost:9112
+log.dirs=/var/tmp/kafka/data/broker-3
+```
+
+Two things change identically in all three files, because Step 2 was a single node: swap
+`controller.quorum.bootstrap.servers` for the voter list
+`controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:9113`, and raise the
+replication settings to `offsets.topic.replication.factor=3`,
+`transaction.state.log.replication.factor=3` and `transaction.state.log.min.isr=2` — the values
+Step 4 uses. The three brokers share one server certificate, so nothing about the TLS configuration
+differs per file.
 
 ### Start Apache Kafka (KRaft)
 
@@ -582,7 +639,6 @@ Client certificates replace username/password. The Kafka `SSL` listener with
 ### Kafka server.properties highlights
 
 ```properties
-listeners=MTLS://localhost:9094,CONTROLLER://localhost:9093
 inter.broker.listener.name=MTLS
 listener.security.protocol.map=CONTROLLER:SSL,MTLS:SSL
 
@@ -591,6 +647,31 @@ listener.name.mtls.ssl.client.auth=required
 listener.name.mtls.ssl.truststore.type=JKS
 listener.name.mtls.ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
 listener.name.mtls.ssl.truststore.password=truststorePassword123
+```
+
+Those lines, plus `controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:9113`,
+are the same in all three files.
+
+### What changes in each broker file
+
+```properties
+# server-1.properties
+node.id=1
+listeners=MTLS://localhost:9094,CONTROLLER://localhost:9093
+advertised.listeners=MTLS://localhost:9094
+log.dirs=/var/tmp/kafka/data/broker-1
+
+# server-2.properties
+node.id=2
+listeners=MTLS://localhost:9104,CONTROLLER://localhost:9103
+advertised.listeners=MTLS://localhost:9104
+log.dirs=/var/tmp/kafka/data/broker-2
+
+# server-3.properties
+node.id=3
+listeners=MTLS://localhost:9114,CONTROLLER://localhost:9113
+advertised.listeners=MTLS://localhost:9114
+log.dirs=/var/tmp/kafka/data/broker-3
 ```
 
 ### Start Apache Kafka (KRaft)
@@ -661,7 +742,6 @@ clients use OAUTHBEARER. FSK runs both auth providers concurrently.
 ### Kafka server.properties highlights
 
 ```properties
-listeners=SASL_AUTH://localhost:9092,OAUTH://localhost:9095,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
 inter.broker.listener.name=INTERNAL
 listener.security.protocol.map=CONTROLLER:SSL,SASL_AUTH:SASL_SSL,OAUTH:SASL_SSL,INTERNAL:SSL
 
@@ -680,6 +760,35 @@ the two client listeners there would work for Kafka, but the tool would then rea
 internal and leave it out of the generated broker properties — and a step about serving SASL/PLAIN
 and OAUTHBEARER side by side would end up with one client port. `INTERNAL` is dropped instead,
 which is what you want, and both client listeners come through.
+
+### What changes in each broker file
+
+Four listeners means four ports to move per broker; the JAAS and OAuth lines above stay identical,
+as does `controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:9113`.
+
+```properties
+# server-1.properties
+node.id=1
+listeners=SASL_AUTH://localhost:9092,OAUTH://localhost:9095,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
+advertised.listeners=SASL_AUTH://localhost:9092,OAUTH://localhost:9095,INTERNAL://localhost:9098
+log.dirs=/var/tmp/kafka/data/broker-1
+
+# server-2.properties
+node.id=2
+listeners=SASL_AUTH://localhost:9102,OAUTH://localhost:9105,INTERNAL://localhost:9108,CONTROLLER://localhost:9103
+advertised.listeners=SASL_AUTH://localhost:9102,OAUTH://localhost:9105,INTERNAL://localhost:9108
+log.dirs=/var/tmp/kafka/data/broker-2
+
+# server-3.properties
+node.id=3
+listeners=SASL_AUTH://localhost:9112,OAUTH://localhost:9115,INTERNAL://localhost:9118,CONTROLLER://localhost:9113
+advertised.listeners=SASL_AUTH://localhost:9112,OAUTH://localhost:9115,INTERNAL://localhost:9118
+log.dirs=/var/tmp/kafka/data/broker-3
+```
+
+`INTERNAL` has to be advertised as well as bound: the other two brokers reach this one at the
+address it advertises for the inter-broker listener, so leaving it out of `advertised.listeners`
+stops the cluster forming.
 
 ### Start Apache Kafka (KRaft)
 
@@ -751,7 +860,6 @@ mTLS listener.
 ### Kafka server.properties highlights
 
 ```properties
-listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
 inter.broker.listener.name=INTERNAL
 listener.security.protocol.map=CONTROLLER:SSL,SASL_AUTH:SASL_SSL,MTLS:SSL,INTERNAL:SSL
 
@@ -768,6 +876,31 @@ listener.name.mtls.ssl.truststore.password=truststorePassword123
 As in Step 7, inter-broker traffic gets its own `INTERNAL` listener so that both client listeners
 survive the translation. `INTERNAL` is plain SSL — the brokers already trust each other's
 certificates, so there is no reason to make them authenticate over SASL as well.
+
+### What changes in each broker file
+
+```properties
+# server-1.properties
+node.id=1
+listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
+advertised.listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,INTERNAL://localhost:9098
+log.dirs=/var/tmp/kafka/data/broker-1
+
+# server-2.properties
+node.id=2
+listeners=SASL_AUTH://localhost:9102,MTLS://localhost:9104,INTERNAL://localhost:9108,CONTROLLER://localhost:9103
+advertised.listeners=SASL_AUTH://localhost:9102,MTLS://localhost:9104,INTERNAL://localhost:9108
+log.dirs=/var/tmp/kafka/data/broker-2
+
+# server-3.properties
+node.id=3
+listeners=SASL_AUTH://localhost:9112,MTLS://localhost:9114,INTERNAL://localhost:9118,CONTROLLER://localhost:9113
+advertised.listeners=SASL_AUTH://localhost:9112,MTLS://localhost:9114,INTERNAL://localhost:9118
+log.dirs=/var/tmp/kafka/data/broker-3
+```
+
+Everything else is identical across the three files, `controller.quorum.voters` and the truststore
+settings included.
 
 ### Start Apache Kafka (KRaft)
 
@@ -820,6 +953,50 @@ username/password or a certificate, depending on which port it connects to — 9
 
 The most secure multi-protocol configuration: mTLS for certificate-bearing clients,
 OAUTHBEARER for token-bearing clients.
+
+### Kafka server.properties highlights
+
+```properties
+inter.broker.listener.name=INTERNAL
+listener.security.protocol.map=CONTROLLER:SSL,MTLS:SSL,OAUTH:SASL_SSL,INTERNAL:SSL
+
+listener.name.mtls.ssl.client.auth=required
+listener.name.mtls.ssl.truststore.type=JKS
+listener.name.mtls.ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
+listener.name.mtls.ssl.truststore.password=truststorePassword123
+
+listener.name.oauth.sasl.enabled.mechanisms=OAUTHBEARER
+listener.name.oauth.oauthbearer.sasl.server.callback.handler.class=io.strimzi.kafka.oauth.server.JaasServerOauthValidatorCallbackHandler
+```
+
+Two client listeners again, so inter-broker traffic takes a dedicated `INTERNAL` listener for the
+reason Step 7 gives: name either client listener there and the tool reads it as internal and leaves
+it out of the generated broker properties.
+
+### What changes in each broker file
+
+```properties
+# server-1.properties
+node.id=1
+listeners=MTLS://localhost:9094,OAUTH://localhost:9095,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
+advertised.listeners=MTLS://localhost:9094,OAUTH://localhost:9095,INTERNAL://localhost:9098
+log.dirs=/var/tmp/kafka/data/broker-1
+
+# server-2.properties
+node.id=2
+listeners=MTLS://localhost:9104,OAUTH://localhost:9105,INTERNAL://localhost:9108,CONTROLLER://localhost:9103
+advertised.listeners=MTLS://localhost:9104,OAUTH://localhost:9105,INTERNAL://localhost:9108
+log.dirs=/var/tmp/kafka/data/broker-2
+
+# server-3.properties
+node.id=3
+listeners=MTLS://localhost:9114,OAUTH://localhost:9115,INTERNAL://localhost:9118,CONTROLLER://localhost:9113
+advertised.listeners=MTLS://localhost:9114,OAUTH://localhost:9115,INTERNAL://localhost:9118
+log.dirs=/var/tmp/kafka/data/broker-3
+```
+
+`controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:9113` and everything under
+*highlights* above are identical in all three files.
 
 ### Start Apache Kafka (KRaft)
 
@@ -882,6 +1059,52 @@ writes as `oauth2.svr.client.id` and `oauth2.svr.client.secret`.
 All three auth providers active simultaneously. Each client-facing listener uses a
 different mechanism; FSK's `auth.providers` list in the secure YAML activates all of
 them.
+
+### Kafka server.properties highlights
+
+```properties
+inter.broker.listener.name=INTERNAL
+listener.security.protocol.map=CONTROLLER:SSL,SASL_AUTH:SASL_SSL,MTLS:SSL,OAUTH:SASL_SSL,INTERNAL:SSL
+
+listener.name.sasl_auth.sasl.enabled.mechanisms=PLAIN
+listener.name.sasl_auth.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
+  username="admin" password="admin-secret" user_admin="admin-secret";
+
+listener.name.mtls.ssl.client.auth=required
+listener.name.mtls.ssl.truststore.type=JKS
+listener.name.mtls.ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
+listener.name.mtls.ssl.truststore.password=truststorePassword123
+
+listener.name.oauth.sasl.enabled.mechanisms=OAUTHBEARER
+listener.name.oauth.oauthbearer.sasl.server.callback.handler.class=io.strimzi.kafka.oauth.server.JaasServerOauthValidatorCallbackHandler
+```
+
+### What changes in each broker file
+
+Three client listeners and one internal one — five ports per broker, all moved together:
+
+```properties
+# server-1.properties
+node.id=1
+listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,OAUTH://localhost:9095,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
+advertised.listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,OAUTH://localhost:9095,INTERNAL://localhost:9098
+log.dirs=/var/tmp/kafka/data/broker-1
+
+# server-2.properties
+node.id=2
+listeners=SASL_AUTH://localhost:9102,MTLS://localhost:9104,OAUTH://localhost:9105,INTERNAL://localhost:9108,CONTROLLER://localhost:9103
+advertised.listeners=SASL_AUTH://localhost:9102,MTLS://localhost:9104,OAUTH://localhost:9105,INTERNAL://localhost:9108
+log.dirs=/var/tmp/kafka/data/broker-2
+
+# server-3.properties
+node.id=3
+listeners=SASL_AUTH://localhost:9112,MTLS://localhost:9114,OAUTH://localhost:9115,INTERNAL://localhost:9118,CONTROLLER://localhost:9113
+advertised.listeners=SASL_AUTH://localhost:9112,MTLS://localhost:9114,OAUTH://localhost:9115,INTERNAL://localhost:9118
+log.dirs=/var/tmp/kafka/data/broker-3
+```
+
+`controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:9113` and the security
+lines above are identical in all three files.
 
 ### Start Apache Kafka (KRaft)
 
