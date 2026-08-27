@@ -132,7 +132,6 @@ Ten `insurance.*` topics with 3 partitions each, 1000 messages per topic.
 rm -rf ./kof-output
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --migration-config \
   --core-servers "SRV1=localhost:5600" \
   kafka-examples/single-node/server.properties
@@ -253,7 +252,6 @@ script identical across layouts. Partitions still spread across all three broker
 rm -rf ./kof-output
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --migration-config \
   --core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602" \
   kafka-examples/three-node/server-1.properties \
@@ -392,7 +390,6 @@ bash demo/populate-kafka.sh --bootstrap-server localhost:9092 --messages 1000
 rm -rf ./kof-output
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --migration-config \
   --core-servers "SRV1=localhost:5600" \
   kafka-examples/zk-single-node/server.properties
@@ -507,7 +504,6 @@ bash demo/populate-kafka.sh --bootstrap-server localhost:9092 --messages 1000
 rm -rf ./kof-output
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --migration-config \
   --core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602" \
   kafka-examples/zk-three-node/server-1.properties \
@@ -594,7 +590,6 @@ throughout.
 rm -rf ./kof-output
 tibftlimportconfig \
   --output-dir ./kof-output \
-  --realm-name my-realm \
   --migration-config \
   /path/to/broker-1/server.properties \
   /path/to/broker-2/server.properties \

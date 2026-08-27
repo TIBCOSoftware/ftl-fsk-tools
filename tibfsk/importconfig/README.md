@@ -65,7 +65,7 @@ tibftlimportconfig -h all        # every flag, grouped
 
 | Group | `-h <group>` covers |
 |---|---|
-| `core` | output location, realm name, data dir, server addresses, transport |
+| `core` | output location, data dir, server addresses, transport |
 | `brokers` | read the config from running Apache Kafka brokers instead of properties files |
 | `tls` | server and client certificates, private keys, trust files |
 | `oauth` | token/JWKS endpoints, claims, audience, server and UI client credentials |
@@ -81,7 +81,6 @@ The sections below list the same flags as the corresponding `-h <group>` topic.
 | Flag | Default | Description |
 |---|---|---|
 | `-output-dir` | `./kof-output` | Directory where output files are written |
-| `-realm-name` | `_default_realm` | Realm name in `realm.json`; leave it at the default, since the realm server names every deployed realm `_default_realm` |
 | `-data-dir` | `/var/tmp/kof/data` | FSK data directory path on pserver hosts |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are randomly generated in range 5600–5699 |
 | `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br>`dtcp` pins every transport to dynamic TCP |

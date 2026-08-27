@@ -943,7 +943,6 @@ active at once, so a client that authenticates by any one of them is accepted.
 | Flag | Default | Purpose |
 |---|---|---|
 | `--output-dir` | `./kof-output` | Directory for all generated files |
-| `--realm-name` | `_default_realm` | Realm name in `realm.json`. Leave it at the default — the realm server names every deployed realm `_default_realm`, so any other value is discarded when the realm is loaded |
 | `--data-dir` | `/var/tmp/kof/data` | FSK data directory on pserver hosts |
 | `--core-servers` | _(auto)_ | Pin pserver names and ports: `SRV1=host:5600,...` |
 | `--from-brokers` | _(none)_ | Fetch the config from running brokers instead of files: `host:port,...` |
@@ -967,7 +966,7 @@ tibftlimportconfig -h all        # every flag, grouped
 
 | Group | Covers |
 |---|---|
-| `core` | output location, realm name, data dir, server addresses, transport |
+| `core` | output location, data dir, server addresses, transport |
 | `brokers` | read the config from running Kafka brokers instead of properties files |
 | `tls` | server and client certificates, private keys, trust files |
 | `oauth` | token/JWKS endpoints, claims, audience, server and UI client credentials |

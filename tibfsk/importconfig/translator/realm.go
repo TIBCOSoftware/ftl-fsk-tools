@@ -7,9 +7,13 @@ import (
 	"path/filepath"
 )
 
+// realmName is the only name a deployed realm can have: the realm server renames
+// whatever it loads to "_default_realm", so there is nothing to configure here.
+const realmName = "_default_realm"
+
 // WriteRealmJSON generates realm.json with one kof.cluster per group of 3 pservers.
 // transportType sets the transport_type field for all pserver connections ("auto" or "dtcp").
-func WriteRealmJSON(cfg *BrokerConfig, outputDir, realmName string, numPservers int, drOpts DROpts, transportType string, copts ClusterOpts) error {
+func WriteRealmJSON(cfg *BrokerConfig, outputDir string, numPservers int, drOpts DROpts, transportType string, copts ClusterOpts) error {
 	path := filepath.Join(outputDir, "realm.json")
 	f, err := os.Create(path)
 	if err != nil {
@@ -17,18 +21,13 @@ func WriteRealmJSON(cfg *BrokerConfig, outputDir, realmName string, numPservers 
 	}
 	defer f.Close()
 
-	realm := buildRealm(cfg, realmName, numPservers, drOpts, transportType, copts)
+	realm := buildRealm(cfg, numPservers, drOpts, transportType, copts)
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", " ")
 	return enc.Encode(realm)
 }
 
-func buildRealm(cfg *BrokerConfig, realmName string, numPservers int, drOpts DROpts, transportType string, copts ClusterOpts) map[string]any {
-	name := realmName
-	if name == "" {
-		name = "_default_realm"
-	}
-
+func buildRealm(cfg *BrokerConfig, numPservers int, drOpts DROpts, transportType string, copts ClusterOpts) map[string]any {
 	numClusters := (numPservers + 2) / 3
 	if numClusters < 1 {
 		numClusters = 1
@@ -39,7 +38,7 @@ func buildRealm(cfg *BrokerConfig, realmName string, numPservers int, drOpts DRO
 	}
 
 	return map[string]any{
-		"name":                 name,
+		"name":                 realmName,
 		"id":                   1,
 		"version":              1,
 		"realm_server_version": "7.3.0",

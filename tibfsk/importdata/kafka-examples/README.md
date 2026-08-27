@@ -84,7 +84,7 @@ them on 3.9 would make the broker reject the config.
 ## Feeding them to tibftlimportconfig
 
 ```bash
-tibftlimportconfig --output-dir ./kof-output --realm-name my-realm --migration-config \
+tibftlimportconfig --output-dir ./kof-output --migration-config \
   kafka-examples/three-node/server-1.properties \
   kafka-examples/three-node/server-2.properties \
   kafka-examples/three-node/server-3.properties

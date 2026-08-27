@@ -25,10 +25,9 @@ var flagGroups = []flagGroup{
 	{
 		name:  "core",
 		title: "Core flags",
-		blurb: "output location, realm name, data dir, server addresses, transport, persistence",
+		blurb: "output location, data dir, server addresses, transport, persistence",
 		flags: []string{
 			"output-dir",
-			"realm-name",
 			"data-dir",
 			"core-servers",
 			"transport-type",
@@ -120,7 +119,6 @@ var flagGroups = []flagGroup{
 // reading any group.
 var commonFlags = []string{
 	"output-dir",
-	"realm-name",
 	"data-dir",
 	"core-servers",
 	"auto",

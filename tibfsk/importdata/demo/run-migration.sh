@@ -28,7 +28,7 @@ CONFIG="$KOF_OUTPUT_DIR/kafka-to-kof.properties"
 if [[ ! -f "$CONFIG" ]]; then
   echo "ERROR: $CONFIG not found."
   echo "Run tibftlimportconfig against demo/kraft/server-*.properties to generate kof-output/:"
-  echo "  tibftlimportconfig --output-dir ./kof-output --realm-name insurance-demo \\"
+  echo "  tibftlimportconfig --output-dir ./kof-output \\"
   echo "    demo/kraft/server-1.properties demo/kraft/server-2.properties demo/kraft/server-3.properties"
   exit 1
 fi

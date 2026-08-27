@@ -31,7 +31,6 @@ import (
 func main() {
 	// Core flags
 	outputDir := flag.String("output-dir", "./kof-output", "output directory for generated files")
-	realmName := flag.String("realm-name", "_default_realm", "realm name written into realm.json")
 	dataDir := flag.String("data-dir", "/var/tmp/kof/data", "FSK data directory path on pserver hosts")
 	ftlLogLevel := flag.String("ftl-loglevel", translator.DefaultFTLLogLevel,
 		"loglevel for the generated FTL servers, written into each pserver in the "+
@@ -361,7 +360,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if err := translator.WriteRealmJSON(cfgs[0], *outputDir, *realmName, numPservers, drOpts, *transportType, clusterOpts); err != nil {
+	if err := translator.WriteRealmJSON(cfgs[0], *outputDir, numPservers, drOpts, *transportType, clusterOpts); err != nil {
 		fmt.Fprintln(os.Stderr, "error writing realm.json:", err)
 		os.Exit(1)
 	}
