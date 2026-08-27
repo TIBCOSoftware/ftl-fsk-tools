@@ -14,7 +14,7 @@ listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093
 inter.broker.listener.name=PLAINTEXT
 controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-log.dirs=/var/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/data/broker-1
 `
 
 // writeCluster generates a primary cluster YAML for numPservers pservers using the

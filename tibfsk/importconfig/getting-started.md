@@ -98,7 +98,7 @@ advertised.listeners=CLIENT://localhost:9092
 controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT
 
-log.dirs=/var/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/data/broker-1
 num.partitions=1
 offsets.topic.replication.factor=1
 transaction.state.log.replication.factor=1
@@ -220,7 +220,7 @@ listener.name.broker.plain.sasl.jaas.config=org.apache.kafka.common.security.pla
   username="admin" password="admin-secret" \
   user_admin="admin-secret" user_producer="producer-secret" user_consumer="consumer-secret";
 
-log.dirs=/var/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/data/broker-1
 num.partitions=1
 offsets.topic.replication.factor=1
 transaction.state.log.replication.factor=1
@@ -334,7 +334,7 @@ listener.name.oauth.oauthbearer.sasl.jaas.config=org.apache.kafka.common.securit
 listener.name.oauth.oauthbearer.sasl.server.callback.handler.class=io.strimzi.kafka.oauth.server.JaasServerOauthValidatorCallbackHandler
 listener.name.oauth.oauthbearer.sasl.login.callback.handler.class=io.strimzi.kafka.oauth.client.JaasClientOauthLoginCallbackHandler
 
-log.dirs=/var/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/data/broker-1
 num.partitions=1
 offsets.topic.replication.factor=1
 transaction.state.log.replication.factor=1
@@ -414,7 +414,7 @@ advertised.listeners=CLIENT://localhost:9092
 controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT
 
-log.dirs=/var/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/data/broker-1
 num.partitions=3
 offsets.topic.replication.factor=3
 transaction.state.log.replication.factor=3
@@ -439,7 +439,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/log/kafka/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -528,7 +528,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/log/kafka/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -604,7 +604,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/log/kafka/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -697,7 +697,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/log/kafka/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -780,7 +780,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/log/kafka/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -836,7 +836,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/log/kafka/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -896,7 +896,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/log/kafka/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
