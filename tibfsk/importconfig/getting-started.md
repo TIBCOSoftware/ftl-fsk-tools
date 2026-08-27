@@ -32,6 +32,36 @@ connection itself is plaintext and unauthenticated — see
 Each scenario below builds on the previous one. Start with the simplest setup and
 advance as your environment requires.
 
+## Before you start
+
+Every step runs end to end: bring up the Apache Kafka brokers the `server.properties` describes,
+convert the configuration, then start the FSK servers on the result. Three things hold for all ten.
+
+**`KAFKA_HOME`.** The Kafka commands assume a Kafka 4.x installation:
+
+```bash
+export KAFKA_HOME=/opt/kafka
+```
+
+**Stop Kafka before starting FSK.** The tool translates the client-facing listeners faithfully, so
+the FSK pservers bind the *same* ports the brokers were just using — 9092 in the single-node steps,
+9092/9102/9112 across the three brokers below, plus 9094 or 9095 wherever a second client listener
+is configured. On one host the two cannot run at once:
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+```
+
+Running the brokers first is not required to convert a file — it proves the `server.properties` is
+a valid Kafka configuration before you translate it. (`--from-brokers` is the exception: there the
+cluster must be up, because that is where the configuration is read from.)
+
+**Start `tibftlserver` from the directory you ran `tibftlimportconfig` in.** The generated YAML
+records `initial.realm.config` and `kof.broker.properties` exactly as they were passed —
+`kof-output/realm.json` for `--output-dir ./kof-output` — so those paths resolve against the working
+directory, not against the YAML's own location. `cd kof-output` first and the server will not find
+its realm. Pass an absolute `--output-dir` if you would rather not care.
+
 ---
 
 ## Step 1 — Single-node plaintext (development)
@@ -63,6 +93,29 @@ Name your client-facing listener `CLIENT` (not `PLAINTEXT`). The tool strips the
 `CONTROLLER` listener automatically — FTL carries controller traffic natively.
 :::
 
+### Start Apache Kafka (KRaft)
+
+Format the storage directory once, then start the broker. KRaft needs a cluster ID; generate one
+and keep it — reformatting with a different ID discards the log directory's contents.
+
+```bash
+KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+
+"$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+  -t "$KAFKA_CLUSTER_ID" -c server-1.properties
+
+"$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
+```
+
+Confirm it is up:
+
+```bash
+"$KAFKA_HOME/bin/kafka-topics.sh" --bootstrap-server localhost:9092 --list
+```
+
+`--ignore-formatted` makes the format step a no-op on an already-formatted directory, so the
+sequence is safe to re-run.
+
 ### Run the tool
 
 ```bash
@@ -86,6 +139,25 @@ All kof.broker.*.properties files are processed successfully.
 The `unsupported.properties` file lists any settings that have no FSK equivalent
 (such as the `CONTROLLER` listener entry). Review it for reference — those settings
 do not affect FSK behavior.
+
+### Start the FSK servers
+
+Stop Kafka first — the pserver is about to bind port 9092:
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+```
+
+A single broker converts to a standalone server rather than a cluster, so there is one process to
+start, named for the single entry under `servers:`:
+
+```bash
+tibftlserver -c kof-output/tibftlserver_standalone.yaml -n SRV1
+```
+
+No realm upload step: the YAML points `initial.realm.config` at the generated `realm.json`, so the
+server seeds the realm itself on first startup. Kafka clients can now connect to `localhost:9092`
+as before.
 
 **→ Continue to [Step 2](#step-2--single-node-sasl-plain-over-tls) to add authentication,
 or jump to [Step 4](#step-4--3-node-plaintext-cluster) to scale to a 3-node cluster.**
@@ -157,6 +229,23 @@ openssl pkcs12 -in /etc/kafka/certs/kafka.truststore.p12 -nodes -nokeys \
 Alternatively, run with `--auto` and the tool performs the conversion for you
 (requires `keytool` and `openssl` on `PATH`).
 
+### Start Apache Kafka (KRaft)
+
+Same sequence as Step 1. The broker reads the JKS keystores named in its `server.properties`, so
+those must exist before it will start:
+
+```bash
+KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+
+"$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+  -t "$KAFKA_CLUSTER_ID" -c server-1.properties
+
+"$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
+```
+
+A plain `kafka-topics.sh --list` will not reach a SASL_SSL listener; verify with a client
+properties file carrying the truststore and JAAS settings, or just check the broker log.
+
 ### Run the tool
 
 ```bash
@@ -172,6 +261,18 @@ tibftlimportconfig \
 The `--auth-users-file` points to an FTL users file that maps usernames extracted
 from the inline JAAS config. The tool writes a `tibftlserver-cluster-secure.yaml` alongside
 the main cluster YAML when TLS or auth flags are supplied.
+
+### Start the FSK servers
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+
+tibftlserver -c kof-output/tibftlserver_standalone-secure.yaml -n SRV1
+```
+
+Start from the `-secure` YAML, not the plain one: it is the file that carries the TLS certificate
+paths and the `auth.providers` list. The plain YAML is written too, and is the one to use if you
+want the same topology without security.
 
 **→ Continue to [Step 3](#step-3--single-node-oauth2) to replace SASL/PLAIN with OAuth2,
 or jump to [Step 5](#step-5--3-node-sasl-plain-cluster) for a 3-node SASL cluster.**
@@ -215,6 +316,25 @@ transaction.state.log.replication.factor=1
 transaction.state.log.min.isr=1
 ```
 
+### Start Apache Kafka (KRaft)
+
+The OAUTHBEARER listener needs the Strimzi OAuth callback handler jar on the broker's classpath,
+in addition to the keystores:
+
+```bash
+export CLASSPATH="/opt/strimzi-oauth/*"
+
+KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+
+"$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+  -t "$KAFKA_CLUSTER_ID" -c server-1.properties
+
+"$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
+```
+
+FSK has its own OAuth2 provider and needs no such jar — the handler class is a Kafka-side detail
+that the tool reads and maps, as described below.
+
 ### Run the tool
 
 ```bash
@@ -234,6 +354,18 @@ The tool detects the `OAUTHBEARER` mechanism and maps the custom callback handle
 class to the `oauth` backend automatically. If the handler class is unrecognized, a
 `RESOLVE-REQUIRED` block in `kof.broker.1.properties` asks you to choose a backend
 (`oauth`, `file`, or `inline`).
+
+### Start the FSK servers
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+
+tibftlserver -c kof-output/tibftlserver_standalone-secure.yaml -n SRV1
+```
+
+The secure YAML carries the `oauth2.*` globals and the per-server validation key, so the server
+reaches the authorization server on its own at startup — check the log for the JWKS fetch if
+tokens are rejected.
 
 **→ Continue to [Step 6](#step-6--3-node-mutual-tls-mtls) for mTLS, or
 [Step 7](#step-7--3-node-sasl-plain--oauth2-dual-listener) for a dual SASL+OAuth2 setup.**
@@ -267,6 +399,31 @@ transaction.state.log.min.isr=2
 Brokers 2 and 3 use `node.id=2`/`3`, unique ports (`9102`/`9092`, `9112`/`9092`), and
 their own `log.dirs`.
 
+### Start Apache Kafka (KRaft)
+
+All three brokers must be formatted with the **same** cluster ID — that is what makes them one
+cluster rather than three. Generate it once, outside the loop:
+
+```bash
+KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+    -t "$KAFKA_CLUSTER_ID" -c "server-$n.properties"
+done
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+done
+```
+
+The quorum forms once a majority of controllers are up. Confirm:
+
+```bash
+"$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
+  --bootstrap-server localhost:9092,localhost:9102,localhost:9112 | grep id:
+```
+
 ### Run the tool
 
 ```bash
@@ -295,6 +452,27 @@ The generated `tibftlserver-cluster.yaml` contains three pserver entries (`SRV1`
 `SRV3`) with randomly assigned FTL ports in the 5600–5799 range. To pin specific
 ports use `--core-servers SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`.
 
+### Start the FSK servers
+
+Stop the brokers first — the three pservers take over ports 9092, 9102 and 9112:
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+```
+
+One `tibftlserver` per entry under `servers:`, each in its own shell (the header comment of the
+generated YAML lists these same three commands):
+
+```bash
+tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV2
+tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV3
+```
+
+All three share one YAML and one `realm.json`; `-n` is what selects which entry a process runs.
+Each carries the same `initial.realm.config`, so whichever starts first seeds the realm and the
+other two join it. The cluster is available once two of the three are up.
+
 **→ Continue to [Step 5](#step-5--3-node-sasl-plain-cluster) to secure the cluster.**
 
 ---
@@ -304,6 +482,27 @@ ports use `--core-servers SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`.
 Add SASL/PLAIN + TLS to a 3-node cluster. Each broker's properties file carries the
 same listener and security configuration; per-broker differences are in `node.id`,
 ports, and `log.dirs` only.
+
+### Start Apache Kafka (KRaft)
+
+Same three-broker sequence as Step 4 — one cluster ID shared by all three:
+
+```bash
+KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+    -t "$KAFKA_CLUSTER_ID" -c "server-$n.properties"
+done
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+done
+```
+
+The keystores and truststore named in the properties files must exist before the brokers will
+start. The listeners are SASL_SSL, so the plain `kafka-topics.sh --list` check does not apply here;
+check the broker logs under `$KAFKA_HOME/logs` instead.
 
 ### Run the tool
 
@@ -322,6 +521,20 @@ tibftlimportconfig \
 The tool reads the inline JAAS `user_X` entries from each broker's properties and
 writes them to `ftl-users.txt` (FTL server-to-server auth) and `kafka-users.txt`
 (Kafka client principals), both in `--output-dir`.
+
+### Start the FSK servers
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV2
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
+```
+
+Three shells, one per server. The `-secure` YAML is the one that carries the certificate paths and
+`auth.providers`; the two generated users files are referenced from it by the paths they had at
+generation time, so keep them where the tool wrote them.
 
 **→ Continue to [Step 6](#step-6--3-node-mutual-tls-mtls) to add client certificate
 authentication.**
@@ -347,6 +560,25 @@ listener.name.mtls.ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
 listener.name.mtls.ssl.truststore.password=truststorePassword123
 ```
 
+### Start Apache Kafka (KRaft)
+
+```bash
+KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+    -t "$KAFKA_CLUSTER_ID" -c "server-$n.properties"
+done
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+done
+```
+
+Both the keystore and the client-CA truststore must be in place — with
+`ssl.client.auth=required` the MTLS listener rejects every connection that arrives without a
+certificate it can verify, including your own verification attempts.
+
 ### Run the tool
 
 ```bash
@@ -366,6 +598,21 @@ tibftlimportconfig \
 `--tls-server-trust` sets `tls.server.trust.file` (the CA that signs client
 certificates). `--tls-client-cert` and `--tls-client-key` are used for
 server-to-server connections.
+
+### Start the FSK servers
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV2
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
+```
+
+The pservers bind each broker's MTLS port (9094 for broker 1) rather than 9092 — there is no
+plaintext listener in this configuration to translate. The servers present
+`--tls-client-cert` to each other, so that certificate has to be one the CA in
+`--tls-server-trust` signed, or the cluster will not form.
 
 **→ Continue to [Step 7](#step-7--3-node-sasl-plain--oauth2-dual-listener) for a
 dual-protocol setup, or [Step 8](#step-8--3-node-sasl-plain--mtls) to combine SASL
@@ -394,6 +641,28 @@ listener.name.oauth.sasl.enabled.mechanisms=OAUTHBEARER
 listener.name.oauth.oauthbearer.sasl.server.callback.handler.class=io.strimzi.kafka.oauth.server.JaasServerOauthValidatorCallbackHandler
 ```
 
+### Start Apache Kafka (KRaft)
+
+The OAUTHBEARER callback handler is a third-party class, so it has to be on the broker's classpath
+before the brokers start:
+
+```bash
+export CLASSPATH="/opt/strimzi-oauth/*"
+
+KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+    -t "$KAFKA_CLUSTER_ID" -c "server-$n.properties"
+done
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+done
+```
+
+FSK needs no equivalent jar — token validation is built in and driven by `--oauth-jwks-url`.
+
 ### Run the tool
 
 ```bash
@@ -414,6 +683,20 @@ tibftlimportconfig \
 
 The secure YAML sets `auth.providers: file:/etc/ftl/users.txt,oauth2` so both
 authentication paths are active simultaneously.
+
+### Start the FSK servers
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV2
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
+```
+
+Each pserver serves both client ports, 9092 and 9095, from one process — the dual listener carries
+over from the broker configuration. The servers reach the token endpoint at startup, so a failure
+to fetch the JWKS shows up in the startup log rather than at first client connect.
 
 **→ Continue to [Step 8](#step-8--3-node-sasl-plain--mtls) to combine SASL and mTLS.**
 
@@ -441,6 +724,21 @@ listener.name.mtls.ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
 listener.name.mtls.ssl.truststore.password=truststorePassword123
 ```
 
+### Start Apache Kafka (KRaft)
+
+```bash
+KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+    -t "$KAFKA_CLUSTER_ID" -c "server-$n.properties"
+done
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+done
+```
+
 ### Run the tool
 
 ```bash
@@ -458,12 +756,44 @@ tibftlimportconfig \
   server-3.properties
 ```
 
+### Start the FSK servers
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV2
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
+```
+
+`auth.providers` lists `file:` and `mtls` together, so a client authenticates with either a
+username/password or a certificate, depending on which port it connects to — 9092 or 9094.
+
 ---
 
 ## Step 9 — 3-node mTLS + OAuth2
 
 The most secure multi-protocol configuration: mTLS for certificate-bearing clients,
 OAUTHBEARER for token-bearing clients.
+
+### Start Apache Kafka (KRaft)
+
+The OAUTHBEARER listener needs the callback handler jars, as in Step 7:
+
+```bash
+export CLASSPATH="/opt/strimzi-oauth/*"
+
+KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+    -t "$KAFKA_CLUSTER_ID" -c "server-$n.properties"
+done
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+done
+```
 
 ### Run the tool
 
@@ -485,6 +815,21 @@ tibftlimportconfig \
   server-3.properties
 ```
 
+### Start the FSK servers
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV2
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
+```
+
+There is no `--auth-users-file` here, so the servers do not carry an internal username and
+password. They authenticate to each other as OAuth2 clients instead, fetching a token from
+`--oauth-token-url` with `--oauth-client-id` and `--oauth-client-secret` — which the secure YAML
+writes as `oauth2.svr.client.id` and `oauth2.svr.client.secret`.
+
 ---
 
 ## Step 10 — 3-node SASL/PLAIN + mTLS + OAuth2
@@ -492,6 +837,23 @@ tibftlimportconfig \
 All three auth providers active simultaneously. Each client-facing listener uses a
 different mechanism; FSK's `auth.providers` list in the secure YAML activates all of
 them.
+
+### Start Apache Kafka (KRaft)
+
+```bash
+export CLASSPATH="/opt/strimzi-oauth/*"
+
+KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+    -t "$KAFKA_CLUSTER_ID" -c "server-$n.properties"
+done
+
+for n in 1 2 3; do
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+done
+```
 
 ### Run the tool
 
@@ -513,6 +875,21 @@ tibftlimportconfig \
   server-2.properties \
   server-3.properties
 ```
+
+### Start the FSK servers
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh"
+
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV2
+tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
+```
+
+Check the `auth.providers` line at the top of the secure YAML before starting: it should read
+`file:/etc/ftl/users.txt,mtls,oauth2` (plus a second `file:` entry for the generated
+`kafka-users.txt` when the broker properties carried inline JAAS users). All three providers are
+active at once, so a client that authenticates by any one of them is accepted.
 
 ---
 

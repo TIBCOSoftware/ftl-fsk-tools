@@ -191,16 +191,18 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 
 	fmt.Fprintln(f, "servers:")
 	for i := 0; i < primaryCount; i++ {
-		fmt.Fprintf(f, "  SRV%d:\n", i+1)
+		name := fmt.Sprintf("SRV%d", i+1)
+		fmt.Fprintf(f, "  %s:\n", name)
 		label := ""
 		if drOpts.Enabled() {
 			label = "PRIMARY_SERVER"
 		}
 		writeRealmBlock(f, dataDir, realmPath, label, copts, realmCreds...)
 
-		needsServerBlock := hasTLSOpts(opts) || ac.OAuth2
-		if needsServerBlock {
-			fmt.Fprintln(f, "  - ftlserver.properties:")
+		// The block is always written for the logging settings; the credentials and the
+		// TLS/OAuth properties inside it stay conditional on what this configuration uses.
+		fmt.Fprintln(f, "  - ftlserver.properties:")
+		if hasTLSOpts(opts) || ac.OAuth2 {
 			if !ac.OAuth2 {
 				serverUser := opts.ServerUser
 				if serverUser == "" {
@@ -218,6 +220,7 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 				writeOAuthServerProperties(f, opts)
 			}
 		}
+		writeServerLogging(f, name, dataDir)
 
 		fmt.Fprintln(f, "  - persistence:")
 		fmt.Fprintf(f, "      name: pserver%d\n", i+1)

@@ -13,7 +13,12 @@ globals:
 servers:
   PSRV7:
   - ftl:
-      server: localhost:5728
+      server: localhost:5731
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/tmp/kof/data/PSRV7.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: pserver7
       data: /var/tmp/kof/data/pserver7
@@ -22,7 +27,12 @@ servers:
 
   PSRV8:
   - ftl:
-      server: localhost:5760
+      server: localhost:5774
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/tmp/kof/data/PSRV8.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: pserver8
       data: /var/tmp/kof/data/pserver8
@@ -31,7 +41,12 @@ servers:
 
   PSRV9:
   - ftl:
-      server: localhost:5704
+      server: localhost:5745
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/tmp/kof/data/PSRV9.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: pserver9
       data: /var/tmp/kof/data/pserver9

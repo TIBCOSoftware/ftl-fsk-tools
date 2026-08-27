@@ -588,6 +588,11 @@ servers:
   - realm:
       data: /var/tmp/kof/data
       initial.realm.config: realm.json
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV1.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1
@@ -596,6 +601,19 @@ servers:
 ```
 
 This applies to every cluster YAML the tool writes — primary, secure, and DR.
+
+**Server logging.** Every server carries an `ftlserver.properties` block with the process-wide
+logging settings. `loglevel` is set to `info` and reaches each service in the process that does not
+name a level of its own — the pserver above does, and keeps
+`connections:info;kof:info;durables:info;store:info`; the realm service does not, so it follows the
+server.
+
+The other three lines are commented out because `tibftlserver` logs to stdout by default. To log to
+a file instead, uncomment all three: `max.log.size` and `max.logs` are ignored while `logfile` is
+unset, and `tibftlserver` rejects a `logfile` given without them. The suggested path is
+`<data-dir>/<server-name>.log`, so it matches the `-n` argument that starts the server.
+
+Auxiliary and DR servers get the same block; DR uses `-dr-data-dir` for the suggested path.
 
 **Schema daemon (`-tibschemad`).** With the flag set, every server that carries a realm block also
 gets a schema pserver and a `- tibschemad:` entry. No extra `tibftlserver` processes and no extra
@@ -608,6 +626,11 @@ servers:
   - realm:
       data: /var/tmp/kof/data
       initial.realm.config: realm.json
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV1.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1
@@ -645,7 +668,7 @@ tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV3
 
 ### `tibftlserver-cluster-secure.yaml`
 
-Adds `ftlserver.properties` blocks (TLS, auth) to each realm server. Auth mode is determined by the Apache Kafka listener types:
+Extends each realm server's `ftlserver.properties` block with TLS and auth settings, above the logging settings every cluster YAML already carries. Auth mode is determined by the Apache Kafka listener types:
 
 | Apache Kafka auth | FTL secure YAML mode |
 |---|---|

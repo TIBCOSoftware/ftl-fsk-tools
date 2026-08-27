@@ -20,6 +20,10 @@ servers:
       user: internal
       password: internal-pw
       tls.server.cert: /etc/ftl/certs/server.pem
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV1.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1

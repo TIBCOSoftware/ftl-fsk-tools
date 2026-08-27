@@ -14,6 +14,11 @@ servers:
       label: DR_SERVER
       data: /var/kof/dr
       initial.realm.config: output-dr/realm.json
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/kof/dr/DRSRV1.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: drpserver1
       data: /var/kof/dr/drpserver1
@@ -25,6 +30,11 @@ servers:
       label: DR_SERVER
       data: /var/kof/dr
       initial.realm.config: output-dr/realm.json
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/kof/dr/DRSRV2.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: drpserver2
       data: /var/kof/dr/drpserver2
@@ -36,6 +46,11 @@ servers:
       label: DR_SERVER
       data: /var/kof/dr
       initial.realm.config: output-dr/realm.json
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/kof/dr/DRSRV3.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: drpserver3
       data: /var/kof/dr/drpserver3

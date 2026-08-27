@@ -13,6 +13,11 @@ servers:
   - realm:
       data: /var/tmp/kof/data
       initial.realm.config: output/realm.json
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV1.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1

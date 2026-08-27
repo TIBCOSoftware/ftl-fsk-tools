@@ -80,6 +80,24 @@ func writeTibschemadBlock(f *os.File, n, size int) {
 	fmt.Fprintf(f, "      cluster.size: %d\n", size)
 }
 
+// writeServerLogging appends the server-wide logging settings to the
+// "- ftlserver.properties:" block currently being written. name is the servers: key,
+// so the suggested log file matches the "tibftlserver -n <name>" that starts it;
+// dataDir is --data-dir.
+//
+// loglevel here reaches every service in the process that does not set one of its own.
+// The pserver sets its own (see the callers) and keeps it; the realm service does not.
+//
+// logfile is commented out because tibftlserver logs to stdout by default. max.log.size
+// and max.logs are ignored while logfile is unset, and tibftlserver rejects a logfile
+// given without them, so the three are commented and uncommented together.
+func writeServerLogging(f *os.File, name, dataDir string) {
+	fmt.Fprintln(f, "      loglevel: info")
+	fmt.Fprintf(f, "      #logfile: %s/%s.log\n", dataDir, name)
+	fmt.Fprintln(f, "      #max.log.size: 10240000")
+	fmt.Fprintln(f, "      #max.logs: 10")
+}
+
 // writeRealmBlock writes a server's "- realm:" entry. Every generated YAML carries
 // the realm settings per server rather than in a shared services section, so there
 // is no services block in any file this tool writes.
@@ -212,19 +230,21 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 
 	fmt.Fprintln(f, "servers:")
 	for i := 0; i < numPservers; i++ {
-		fmt.Fprintf(f, "  %s:\n", primaryServerName(cores, i))
+		name := primaryServerName(cores, i)
+		fmt.Fprintf(f, "  %s:\n", name)
 		label := ""
 		if drOpts.Enabled() {
 			label = "PRIMARY_SERVER"
 		}
 		writeRealmBlock(f, dataDir, realmPath, label, copts)
+		fmt.Fprintln(f, "  - ftlserver.properties:")
 		// Each server's login (ftl-internal role) for connecting to the other FTL servers, when
 		// the FTL servers require authentication.
 		if authUsersFile != "" {
-			fmt.Fprintln(f, "  - ftlserver.properties:")
 			fmt.Fprintf(f, "      user: %s\n", FTLInternalUser)
 			fmt.Fprintf(f, "      password: %s\n", FTLInternalPassword)
 		}
+		writeServerLogging(f, name, dataDir)
 		fmt.Fprintln(f, "  - persistence:")
 		fmt.Fprintf(f, "      name: pserver%d\n", i+1)
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
@@ -268,9 +288,12 @@ func writeAuxYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []s
 
 	fmt.Fprintln(f, "servers:")
 	for i := start; i < end; i++ {
-		fmt.Fprintf(f, "  PSRV%d:\n", i+1)
+		name := fmt.Sprintf("PSRV%d", i+1)
+		fmt.Fprintf(f, "  %s:\n", name)
 		fmt.Fprintln(f, "  - ftl:")
 		fmt.Fprintf(f, "      server: %s:%d\n", host, ports.PserverPorts[i])
+		fmt.Fprintln(f, "  - ftlserver.properties:")
+		writeServerLogging(f, name, dataDir)
 		fmt.Fprintln(f, "  - persistence:")
 		fmt.Fprintf(f, "      name: pserver%d\n", i+1)
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
@@ -320,6 +343,8 @@ func writeDRYAML(path string, cfg *BrokerConfig, drDataDir string, propsPaths []
 		if isPrimary {
 			writeRealmBlock(f, drDataDir, realmPath, "DR_SERVER", copts)
 		}
+		fmt.Fprintln(f, "  - ftlserver.properties:")
+		writeServerLogging(f, drSrv.Name, drDataDir)
 		fmt.Fprintln(f, "  - persistence:")
 		fmt.Fprintf(f, "      name: drpserver%d\n", drPserverNum)
 		fmt.Fprintf(f, "      data: %s/drpserver%d\n", drDataDir, drPserverNum)

@@ -33,6 +33,10 @@ servers:
       oauth2.validation.key: file:/etc/ftl/oauth.json
       oauth2.ui.client.id: ftl-ui
       oauth2.ui.client.secret: env:OAUTH_UI_CLIENT_SECRET
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV1.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1
@@ -49,6 +53,10 @@ servers:
       oauth2.validation.key: file:/etc/ftl/oauth.json
       oauth2.ui.client.id: ftl-ui
       oauth2.ui.client.secret: env:OAUTH_UI_CLIENT_SECRET
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV2.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: pserver2
       data: /var/tmp/kof/data/pserver2
@@ -65,6 +73,10 @@ servers:
       oauth2.validation.key: file:/etc/ftl/oauth.json
       oauth2.ui.client.id: ftl-ui
       oauth2.ui.client.secret: env:OAUTH_UI_CLIENT_SECRET
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV3.log
+      #max.log.size: 10240000
+      #max.logs: 10
   - persistence:
       name: pserver3
       data: /var/tmp/kof/data/pserver3
