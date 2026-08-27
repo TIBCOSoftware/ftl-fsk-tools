@@ -35,13 +35,29 @@ advance as your environment requires.
 ## Before you start
 
 Every step runs end to end: bring up the Apache Kafka brokers the `server.properties` describes,
-convert the configuration, then start the FSK servers on the result. Three things hold for all ten.
+convert the configuration, then start the FSK servers on the result. Four things hold for all ten.
 
 **`KAFKA_HOME`.** The Kafka commands assume a Kafka 4.x installation:
 
 ```bash
 export KAFKA_HOME=/opt/kafka
 ```
+
+**Every broker needs an `inter.broker.listener.name`.** Kafka defaults it to a listener called
+`PLAINTEXT`, and none of these configurations has one, so leaving it out stops the broker before it
+opens a port:
+
+```
+java.lang.IllegalArgumentException: requirement failed: inter.broker.listener.name must be
+a listener name defined in advertised.listeners.
+```
+
+Which listener to name matters to the translation. FSK carries inter-broker traffic over FTL, so
+the tool treats the named listener as internal and drops it from the generated broker properties —
+but only when another client listener remains. Where a step has a single client listener it points
+`inter.broker.listener.name` at that listener and the listener survives; where a step has two, it
+adds a separate `INTERNAL` listener for inter-broker traffic so that both client listeners come
+through. Either way the key itself is reported in `unsupported.properties`.
 
 **Stop Kafka before starting FSK.** The tool translates the client-facing listeners faithfully, so
 the FSK pservers bind the *same* ports the brokers were just using — 9092 in the single-node steps,
@@ -77,6 +93,7 @@ node.id=1
 controller.quorum.bootstrap.servers=localhost:9093
 
 listeners=CLIENT://localhost:9092,CONTROLLER://localhost:9093
+inter.broker.listener.name=CLIENT
 advertised.listeners=CLIENT://localhost:9092
 controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT
@@ -101,7 +118,7 @@ and keep it — reformatting with a different ID discards the log directory's co
 ```bash
 KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
 
-"$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+"$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted --standalone \
   -t "$KAFKA_CLUSTER_ID" -c server-1.properties
 
 "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
@@ -114,7 +131,10 @@ Confirm it is up:
 ```
 
 `--ignore-formatted` makes the format step a no-op on an already-formatted directory, so the
-sequence is safe to re-run.
+sequence is safe to re-run. `--standalone` is what declares this node the sole member of the
+controller quorum; without it, `kafka-storage.sh` refuses to format a config that names
+`controller.quorum.bootstrap.servers` but no voters, and the broker then dies on startup with
+*No readable meta.properties files found*.
 
 ### Run the tool
 
@@ -180,6 +200,7 @@ node.id=1
 controller.quorum.bootstrap.servers=localhost:9093
 
 listeners=BROKER://localhost:9092,CONTROLLER://localhost:9093
+inter.broker.listener.name=BROKER
 advertised.listeners=BROKER://localhost:9092
 controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:SSL,BROKER:SASL_SSL
@@ -193,7 +214,8 @@ ssl.truststore.type=JKS
 ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
 ssl.truststore.password=truststorePassword123
 
-# SASL/PLAIN on the BROKER listener
+# SASL/PLAIN on the BROKER listener, used for client and inter-broker traffic alike
+sasl.mechanism.inter.broker.protocol=PLAIN
 listener.name.broker.sasl.enabled.mechanisms=PLAIN
 listener.name.broker.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
   username="admin" password="admin-secret" \
@@ -237,7 +259,7 @@ those must exist before it will start:
 ```bash
 KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
 
-"$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+"$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted --standalone \
   -t "$KAFKA_CLUSTER_ID" -c server-1.properties
 
 "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
@@ -293,6 +315,7 @@ node.id=1
 controller.quorum.bootstrap.servers=localhost:9093
 
 listeners=OAUTH://localhost:9092,CONTROLLER://localhost:9093
+inter.broker.listener.name=OAUTH
 advertised.listeners=OAUTH://localhost:9092
 controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:SSL,OAUTH:SASL_SSL
@@ -305,9 +328,13 @@ ssl.truststore.type=JKS
 ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
 ssl.truststore.password=truststorePassword123
 
+sasl.mechanism.inter.broker.protocol=OAUTHBEARER
 listener.name.oauth.sasl.enabled.mechanisms=OAUTHBEARER
-listener.name.oauth.oauthbearer.sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;
+listener.name.oauth.oauthbearer.sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
+  oauth.token.endpoint.uri="https://auth.example.com/oauth/token" \
+  oauth.client.id="kafka-broker-1" oauth.client.secret="broker-client-secret";
 listener.name.oauth.oauthbearer.sasl.server.callback.handler.class=io.strimzi.kafka.oauth.server.JaasServerOauthValidatorCallbackHandler
+listener.name.oauth.oauthbearer.sasl.login.callback.handler.class=io.strimzi.kafka.oauth.client.JaasClientOauthLoginCallbackHandler
 
 log.dirs=/var/kafka/data/broker-1
 num.partitions=1
@@ -326,7 +353,7 @@ export CLASSPATH="/opt/strimzi-oauth/*"
 
 KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
 
-"$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted \
+"$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted --standalone \
   -t "$KAFKA_CLUSTER_ID" -c server-1.properties
 
 "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
@@ -382,9 +409,10 @@ the tool derives the pserver count from the file count.
 ```properties
 process.roles=broker,controller
 node.id=1
-controller.quorum.bootstrap.servers=localhost:9093,localhost:9103,localhost:9113
+controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:9113
 
 listeners=CLIENT://localhost:9092,CONTROLLER://localhost:9093
+inter.broker.listener.name=CLIENT
 advertised.listeners=CLIENT://localhost:9092
 controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT
@@ -396,8 +424,9 @@ transaction.state.log.replication.factor=3
 transaction.state.log.min.isr=2
 ```
 
-Brokers 2 and 3 use `node.id=2`/`3`, unique ports (`9102`/`9092`, `9112`/`9092`), and
-their own `log.dirs`.
+Brokers 2 and 3 use `node.id=2`/`3`, their own `log.dirs`, and the ports the voter list already
+names: `CLIENT` on 9102/9112 and `CONTROLLER` on 9103/9113. `controller.quorum.voters` is identical
+in all three files.
 
 ### Start Apache Kafka (KRaft)
 
@@ -413,9 +442,16 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+  LOG_DIR="/var/log/kafka/broker-$n" \
+    "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
+
+No `--standalone` here: the static `controller.quorum.voters` list supplies the initial voter set,
+which is what that flag stands in for on a single node. (Configure the quorum with
+`controller.quorum.bootstrap.servers` instead and each node has to be formatted with
+`--initial-controllers` or `--no-initial-controllers`.) `LOG_DIR` keeps the three brokers from
+writing over each other's `server.log`, which they otherwise all place under `$KAFKA_HOME/logs`.
 
 The quorum forms once a majority of controllers are up. Confirm:
 
@@ -496,7 +532,8 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+  LOG_DIR="/var/log/kafka/broker-$n" \
+    "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
 
@@ -551,6 +588,7 @@ Client certificates replace username/password. The Kafka `SSL` listener with
 
 ```properties
 listeners=MTLS://localhost:9094,CONTROLLER://localhost:9093
+inter.broker.listener.name=MTLS
 listener.security.protocol.map=CONTROLLER:SSL,MTLS:SSL
 
 # Require client certificates on the MTLS listener
@@ -571,7 +609,8 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+  LOG_DIR="/var/log/kafka/broker-$n" \
+    "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
 
@@ -628,8 +667,9 @@ clients use OAUTHBEARER. FSK runs both auth providers concurrently.
 ### Kafka server.properties highlights
 
 ```properties
-listeners=SASL_AUTH://localhost:9092,OAUTH://localhost:9095,CONTROLLER://localhost:9093
-listener.security.protocol.map=CONTROLLER:SSL,SASL_AUTH:SASL_SSL,OAUTH:SASL_SSL
+listeners=SASL_AUTH://localhost:9092,OAUTH://localhost:9095,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
+inter.broker.listener.name=INTERNAL
+listener.security.protocol.map=CONTROLLER:SSL,SASL_AUTH:SASL_SSL,OAUTH:SASL_SSL,INTERNAL:SSL
 
 # SASL/PLAIN on SASL_AUTH listener
 listener.name.sasl_auth.sasl.enabled.mechanisms=PLAIN
@@ -640,6 +680,12 @@ listener.name.sasl_auth.plain.sasl.jaas.config=org.apache.kafka.common.security.
 listener.name.oauth.sasl.enabled.mechanisms=OAUTHBEARER
 listener.name.oauth.oauthbearer.sasl.server.callback.handler.class=io.strimzi.kafka.oauth.server.JaasServerOauthValidatorCallbackHandler
 ```
+
+`INTERNAL` exists only to carry inter-broker traffic, on an SSL listener of its own. Naming one of
+the two client listeners there would work for Kafka, but the tool would then read that listener as
+internal and leave it out of the generated broker properties — and a step about serving SASL/PLAIN
+and OAUTHBEARER side by side would end up with one client port. `INTERNAL` is dropped instead,
+which is what you want, and both client listeners come through.
 
 ### Start Apache Kafka (KRaft)
 
@@ -657,7 +703,8 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+  LOG_DIR="/var/log/kafka/broker-$n" \
+    "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
 
@@ -711,8 +758,9 @@ mTLS listener.
 ### Kafka server.properties highlights
 
 ```properties
-listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,CONTROLLER://localhost:9093
-listener.security.protocol.map=CONTROLLER:SSL,SASL_AUTH:SASL_SSL,MTLS:SSL
+listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
+inter.broker.listener.name=INTERNAL
+listener.security.protocol.map=CONTROLLER:SSL,SASL_AUTH:SASL_SSL,MTLS:SSL,INTERNAL:SSL
 
 listener.name.sasl_auth.sasl.enabled.mechanisms=PLAIN
 listener.name.sasl_auth.plain.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
@@ -723,6 +771,10 @@ listener.name.mtls.ssl.truststore.type=JKS
 listener.name.mtls.ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
 listener.name.mtls.ssl.truststore.password=truststorePassword123
 ```
+
+As in Step 7, inter-broker traffic gets its own `INTERNAL` listener so that both client listeners
+survive the translation. `INTERNAL` is plain SSL — the brokers already trust each other's
+certificates, so there is no reason to make them authenticate over SASL as well.
 
 ### Start Apache Kafka (KRaft)
 
@@ -735,7 +787,8 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+  LOG_DIR="/var/log/kafka/broker-$n" \
+    "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
 
@@ -791,7 +844,8 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+  LOG_DIR="/var/log/kafka/broker-$n" \
+    "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
 
@@ -851,7 +905,8 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
+  LOG_DIR="/var/log/kafka/broker-$n" \
+    "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
 
