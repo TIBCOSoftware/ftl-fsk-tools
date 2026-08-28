@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Start a local Kafka 4.x KRaft cluster from the example configs in this directory.
 #
 # Usage:

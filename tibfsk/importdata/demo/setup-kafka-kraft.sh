@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Start a 3-broker Kafka cluster in KRaft mode for the insurance migration demo.
 # Brokers listen on localhost:9092, localhost:9093, localhost:9094.
 #

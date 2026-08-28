@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Start a local Kafka cluster in ZooKeeper mode from the example configs here.
 #
 # REQUIRES KAFKA 3.9 OR EARLIER. Kafka 4.x removed ZooKeeper support, so

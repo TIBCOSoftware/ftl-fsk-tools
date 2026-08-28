@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Create the 10 insurance demo topics on Kafka.
 # Each topic is created with 3 partitions and replication-factor 1.
 #

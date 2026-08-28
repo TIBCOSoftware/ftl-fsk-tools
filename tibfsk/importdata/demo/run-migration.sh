@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # End-to-end migration runner: dry-run first, then live migration.
 #
 # Usage:

@@ -1,4 +1,8 @@
 #!/bin/bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 
 # Run the Apache Kafka -> FSK replication utility, compiling it first if needed.
 #

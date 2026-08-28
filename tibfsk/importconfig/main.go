@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Cloud Software Group, Inc.
+ * All Rights Reserved.
+ */
+
 // tibftlimportconfig translates one or more Kafka broker server.properties files into
 // the FTL artifacts needed to run a FSK-enabled pserver cluster:
 //

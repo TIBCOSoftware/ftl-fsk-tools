@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Cloud Software Group, Inc.
+ * All Rights Reserved.
+ */
+
 package com.tibco.ftl.fsk;
 
 import org.apache.kafka.clients.admin.AdminClient;

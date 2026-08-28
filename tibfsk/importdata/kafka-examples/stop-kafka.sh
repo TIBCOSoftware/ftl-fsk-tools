@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Stop the example Kafka brokers started by start-kafka.sh.
 #
 # Usage:

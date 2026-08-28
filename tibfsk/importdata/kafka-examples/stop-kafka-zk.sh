@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Stop the ZooKeeper-mode example cluster started by start-kafka-zk.sh.
 # Brokers are killed before ZooKeeper, in reverse start order.
 #

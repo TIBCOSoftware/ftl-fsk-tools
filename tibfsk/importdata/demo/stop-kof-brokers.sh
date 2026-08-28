@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Stop FSK pservers started by demo/start-kof-brokers.sh.
 
 set -euo pipefail

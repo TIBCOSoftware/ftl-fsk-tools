@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Compile InsuranceDataProducer.java and populate Kafka with insurance demo data.
 # Sends N messages to each of the 10 insurance topics (default: 100 000 per topic = 1 000 000 total).
 #

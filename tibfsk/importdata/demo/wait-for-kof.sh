@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Block until the FSK persistence cluster has formed a quorum and every one of
 # its pservers has joined, so a migration never starts against a half-started
 # cluster. Use this instead of guessing with sleep.

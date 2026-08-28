@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Cloud Software Group, Inc.
+ * All Rights Reserved.
+ */
+
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;

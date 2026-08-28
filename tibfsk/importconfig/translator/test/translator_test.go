@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Cloud Software Group, Inc.
+ * All Rights Reserved.
+ */
+
 // Package test is a separated, black-box test package for the translator. It
 // exercises only the exported API (ParseBrokerConfig, WriteKOFBrokerProperties,
 // WriteSupportList) against fixture files in testdata/, and checks three things:

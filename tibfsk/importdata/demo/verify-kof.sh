@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Verify a migration by inspecting the target FSK cluster: list its topics,
 # report the record count of each one, and print a few records from a sample
 # topic. Point it at the source Kafka cluster instead to compare the two.

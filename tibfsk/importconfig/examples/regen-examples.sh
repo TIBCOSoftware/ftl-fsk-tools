@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Regenerate all tibftlimportconfig example outputs using relative paths.
 # (Examples 19 and 20 need live brokers and are documented, not regenerated.)
 set -euo pipefail

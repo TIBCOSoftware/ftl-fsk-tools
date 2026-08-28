@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Cloud Software Group, Inc.
+ * All Rights Reserved.
+ */
+
 package translator
 
 // ResolveKind classifies one unresolved setting so the report can explain it.

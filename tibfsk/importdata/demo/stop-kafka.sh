@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Copyright (c) 2026 Cloud Software Group, Inc.
+# All Rights Reserved.
+#
 # Stop demo Kafka brokers started by setup-kafka-kraft.sh.
 
 set -euo pipefail

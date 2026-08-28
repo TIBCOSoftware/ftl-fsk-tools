@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Cloud Software Group, Inc.
+ * All Rights Reserved.
+ */
+
 package main
 
 // Two-tier help. "tibftlimportconfig -h" prints the handful of flags most runs need plus an
