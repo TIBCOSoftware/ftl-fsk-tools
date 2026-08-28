@@ -475,6 +475,8 @@ which is what that flag stands in for on a single node. (Configure the quorum wi
 `controller.quorum.bootstrap.servers` instead and each node has to be formatted with
 `--initial-controllers` or `--no-initial-controllers`.) `LOG_DIR` keeps the three brokers from
 writing over each other's `server.log`, which they otherwise all place under `$KAFKA_HOME/logs`.
+`-daemon` is a plain `nohup ... &` with no PID file; each broker's stdout and stderr land in
+`$LOG_DIR/kafkaServer.out`, which is the first place to look when one of them does not come up.
 
 The quorum forms once a majority of controllers are up. Confirm:
 
@@ -517,6 +519,19 @@ Stop the brokers first — the three pservers take over ports 9092, 9102 and 911
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
 ```
+
+One call stops all three. Kafka writes no PID files: `kafka-server-stop.sh` runs
+`ps ax | grep ' kafka.Kafka '` and sends `SIGTERM` to every match, which is every broker JVM on the
+host — including any belonging to a cluster you did not start here. It prints `No kafka server to
+stop` and exits 1 when it finds none. To take down a single broker, name it:
+
+```bash
+"$KAFKA_HOME/bin/kafka-server-stop.sh" --node-id=2
+```
+
+That form reads `node.id` out of each running broker's configuration file, and it finds that file
+by the path the broker was started with — so run it from the directory you ran
+`kafka-server-start.sh` in, or the relative `server-2.properties` will not resolve.
 
 One `tibftlserver` per entry under `servers:`, each in its own shell (the header comment of the
 generated YAML lists these same three commands):
