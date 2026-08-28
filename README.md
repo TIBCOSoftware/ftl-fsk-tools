@@ -20,15 +20,16 @@ The repository checks in a built copy of each tool, so a clone runs with no Go t
 
 | Artifact | Built from | Used by |
 |----------|------------|---------|
-| `tibfsk/importconfig/bin/tibftlimportconfig` | the Go sources | run it directly |
+| `tibfsk/importconfig/bin/tibftlimportconfig` | the Go sources, for **linux/amd64** | run it directly |
 | `tibfsk/importdata/classes/` | `tibfsk/importdata/src/main/java` | `run-apachekafka-to-fsk.sh` |
 | `tibfsk/importdata/demo/classes/` | `tibfsk/importdata/demo/InsuranceDataProducer.java` | `demo/populate-kafka.sh` |
 
 Both scripts prefer `classes/` and fall back to compiling into `build/` only when it is missing.
 Set `FSK_FORCE_REBUILD=1` to compile from source anyway after editing the Java.
 
-The binary is built for one platform — the checked-in one is **macOS x86_64**. Build from source
-(below) for any other target.
+The binary is **linux/amd64**, statically linked with `CGO_ENABLED=0`. It is cross-compiled, so it
+does not run on the machine that built it; build from source (below) for any other platform, or
+pass `GOOS`/`GOARCH` to the script. The class files are platform-independent.
 
 To refresh the artifacts after changing a source file:
 
@@ -38,9 +39,9 @@ export KAFKA_HOME=/path/to/kafka      # or set KAFKA_CLASSPATH directly
 ```
 
 The Java is compiled with `--release 11` whatever JDK does the compiling, so the class files load
-on the Java 11 listed below. `GO`, `JAVAC`, `JAVA_RELEASE` and `KAFKA_CLASSPATH` override the
-defaults. Nothing refreshes these automatically — `sync-to-fsk-tools.sh` copies sources only, so
-re-run the script and commit the result whenever the sources move.
+on the Java 11 listed below. `GO`, `GOOS`, `GOARCH`, `JAVAC`, `JAVA_RELEASE` and `KAFKA_CLASSPATH`
+override the defaults. Nothing refreshes these automatically — `sync-to-fsk-tools.sh` copies
+sources only, so re-run the script and commit the result whenever the sources move.
 
 CMake ignores the checked-in artifacts and builds from source into its own binary directory.
 

@@ -5,7 +5,7 @@
 #
 # Rebuild the artifacts this repository checks in:
 #
-#   tibfsk/importconfig/bin/tibftlimportconfig   Go executable, host platform
+#   tibfsk/importconfig/bin/tibftlimportconfig   Go executable, linux/amd64
 #   tibfsk/importdata/classes/                   tibftlfskimportdata class files
 #   tibfsk/importdata/demo/classes/              InsuranceDataProducer class files
 #
@@ -21,6 +21,7 @@
 #
 # Overridable:
 #   GO               Go 1.25+ executable                (default: go on PATH)
+#   GOOS GOARCH      target platform for the binary     (default: linux amd64)
 #   JAVAC            javac executable                   (default: JDK 25 from Homebrew)
 #   JAVA_RELEASE     --release passed to javac          (default: 11, the documented minimum)
 #   KAFKA_CLASSPATH  kafka-clients.jar:slf4j-api.jar    (default: derived from KAFKA_HOME)
@@ -31,6 +32,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 GO="${GO:-go}"
+# linux/amd64 is the only platform the tool is shipped for, so the binary is cross-compiled
+# and does not run on the machine that builds it. CGO is off: nothing here needs it, and
+# leaving it on would demand a linux cross-toolchain.
+export GOOS="${GOOS:-linux}"
+export GOARCH="${GOARCH:-amd64}"
+export CGO_ENABLED="${CGO_ENABLED:-0}"
+
 JAVAC="${JAVAC:-/usr/local/opt/openjdk/bin/javac}"
 JAVA_RELEASE="${JAVA_RELEASE:-11}"
 
@@ -40,10 +48,10 @@ IMPORTDATA="$ROOT/tibfsk/importdata"
 # ── tibftlimportconfig ────────────────────────────────────────────────────────
 command -v "$GO" >/dev/null 2>&1 || { echo "ERROR: no Go executable ($GO). Set \$GO." >&2; exit 1; }
 
-echo "==> Building tibftlimportconfig with $("$GO" version)"
+echo "==> Building tibftlimportconfig for $GOOS/$GOARCH with $("$GO" version)"
 mkdir -p "$IMPORTCONFIG/bin"
 (cd "$IMPORTCONFIG" && "$GO" build -trimpath -o bin/tibftlimportconfig .)
-echo "    $(cd "$ROOT" && ls -l tibfsk/importconfig/bin/tibftlimportconfig | awk '{print $5, $NF}')"
+file "$IMPORTCONFIG/bin/tibftlimportconfig" | sed 's/^/    /'
 
 # ── tibftlfskimportdata ───────────────────────────────────────────────────────
 # javac needs the Kafka client API on the classpath; the jars are not bundled here.
