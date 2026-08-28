@@ -3,8 +3,14 @@
 # Copyright (c) 2026 Cloud Software Group, Inc.
 # All Rights Reserved.
 #
-# Compile InsuranceDataProducer.java and populate Kafka with insurance demo data.
+# Populate Kafka with insurance demo data, compiling InsuranceDataProducer.java first if needed.
 # Sends N messages to each of the 10 insurance topics (default: 100 000 per topic = 1 000 000 total).
+#
+# Classes are looked for in two places, in order, the same way run-apachekafka-to-fsk.sh
+# does it:
+#   demo/classes/  -- prebuilt and shipped with the package
+#   demo/build/    -- compiled here, on demand, from InsuranceDataProducer.java
+# Set FSK_FORCE_REBUILD=1 to recompile after editing the source.
 #
 # Prerequisites:
 #   - Kafka running (demo/setup-kafka-kraft.sh)
@@ -19,6 +25,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
+CLASSES_DIR="$SCRIPT_DIR/classes"
 BOOTSTRAP="localhost:9092"
 MESSAGES=100000
 
@@ -37,12 +44,18 @@ if [[ -z "${KAFKA_CLASSPATH:-}" ]]; then
   exit 1
 fi
 
-echo "==> Compiling InsuranceDataProducer.java"
-mkdir -p "$BUILD_DIR"
-javac -d "$BUILD_DIR" -cp "$KAFKA_CLASSPATH" "$SCRIPT_DIR/InsuranceDataProducer.java"
+if [[ -z "${FSK_FORCE_REBUILD:-}" && -f "$CLASSES_DIR/InsuranceDataProducer.class" ]]; then
+  echo "==> Using prebuilt classes in $CLASSES_DIR"
+  CLASS_DIR="$CLASSES_DIR"
+else
+  echo "==> Compiling InsuranceDataProducer.java"
+  mkdir -p "$BUILD_DIR"
+  javac -d "$BUILD_DIR" -cp "$KAFKA_CLASSPATH" "$SCRIPT_DIR/InsuranceDataProducer.java"
+  CLASS_DIR="$BUILD_DIR"
+fi
 
 echo "==> Sending $MESSAGES messages per topic to $BOOTSTRAP"
 echo ""
-java -cp "$BUILD_DIR:$KAFKA_CLASSPATH" InsuranceDataProducer \
+java -cp "$CLASS_DIR:$KAFKA_CLASSPATH" InsuranceDataProducer \
   --bootstrap-server "$BOOTSTRAP" \
   --messages-per-topic "$MESSAGES"
