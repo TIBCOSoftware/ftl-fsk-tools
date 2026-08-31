@@ -399,6 +399,11 @@ The `zookeeper.*` keys have no FSK equivalent — FSK has no ZooKeeper. They are
 `kof-output/unsupported.properties` and dropped from the generated broker config. That is expected
 and does not affect the migration: the replicator talks to the source brokers, not to ZooKeeper.
 
+ZooKeeper mode spells the broker's identity `broker.id`, which KRaft later renamed to `node.id`.
+FSK reads `node.id`, so `tibftlimportconfig` renames it and records that in the `# Node ID:` header
+of `kof-output/kof.broker.1.properties`. Without a `node.id` the pserver refuses to start with
+`kof.broker.properties: node.id is required and must be a non-negative integer`.
+
 ### 4. Move the FSK broker off port 9092
 
 ```bash
@@ -510,6 +515,10 @@ tibftlimportconfig \
   kafka-examples/zk-three-node/server-2.properties \
   kafka-examples/zk-three-node/server-3.properties
 ```
+
+As in Path 3, the `zookeeper.*` keys go to `kof-output/unsupported.properties`, and each broker's
+ZooKeeper-era `broker.id` is renamed to the `node.id` that FSK reads — one per generated
+`kof.broker.N.properties`, noted in its `# Node ID:` header.
 
 ### 4. Move the FSK brokers off 9092–9094
 

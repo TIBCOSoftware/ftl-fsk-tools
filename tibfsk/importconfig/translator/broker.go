@@ -34,9 +34,28 @@ type RemovedListener struct {
 	NamedBy string // the key that marked it internal (inter.broker.listener.name / controller.listener.names)
 }
 
+// NodeIDOrigin records where the node.id written into kof.broker.N.properties came
+// from, so the generated file can say so.
+type NodeIDOrigin string
+
+const (
+	// NodeIDFromSource: the input already named node.id.
+	NodeIDFromSource NodeIDOrigin = ""
+	// NodeIDFromBrokerID: renamed from the ZooKeeper-era broker.id.
+	NodeIDFromBrokerID NodeIDOrigin = "broker.id"
+	// NodeIDAssigned: the input carried no usable id, so the tool picked one.
+	NodeIDAssigned NodeIDOrigin = "assigned"
+)
+
+const (
+	nodeIDKey   = "node.id"
+	brokerIDKey = "broker.id"
+)
+
 // BrokerConfig holds all information parsed from one server.properties file.
 type BrokerConfig struct {
 	NodeID       int
+	NodeIDOrigin NodeIDOrigin
 	ProcessRoles string
 	Listeners    []ListenerDef
 	IsSecure     bool
@@ -70,7 +89,10 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 		SettingLines: lines,
 	}
 
-	if v, ok := raw["node.id"]; ok {
+	if renameBrokerID(raw, orderedKeys, lines) {
+		cfg.NodeIDOrigin = NodeIDFromBrokerID
+	}
+	if v, ok := raw[nodeIDKey]; ok {
 		cfg.NodeID, _ = strconv.Atoi(v)
 	} else {
 		cfg.NodeID = 1
@@ -212,6 +234,98 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// renameBrokerID moves a ZooKeeper-era broker.id onto node.id, in place, and
+// reports whether it did.
+//
+// A ZooKeeper-mode broker (Kafka 3.9 and earlier) names its identity broker.id;
+// KRaft renamed the key to node.id, and node.id is the only spelling the FSK
+// pserver accepts -- without it tibftlserver refuses to start with
+// "kof.broker.properties: node.id is required and must be a non-negative integer".
+// Renaming rather than adding keeps the key in its original position, so the
+// generated file still mirrors the source ordering, and stops broker.id from being
+// reported as unsupported when its value was in fact used.
+//
+// A file that names both keys is left alone: node.id is already the authoritative
+// one, and the stray broker.id goes to unsupported.properties like any other
+// unrecognized key.
+func renameBrokerID(raw map[string]string, orderedKeys []string, lines map[string]int) bool {
+	if _, ok := raw[nodeIDKey]; ok {
+		return false
+	}
+	v, ok := raw[brokerIDKey]
+	if !ok {
+		return false
+	}
+	raw[nodeIDKey] = v
+	delete(raw, brokerIDKey)
+	for i, k := range orderedKeys {
+		if k == brokerIDKey {
+			orderedKeys[i] = nodeIDKey
+			break
+		}
+	}
+	if ln, ok := lines[brokerIDKey]; ok {
+		lines[nodeIDKey] = ln
+		delete(lines, brokerIDKey)
+	}
+	return true
+}
+
+// EnsureNodeIDs guarantees every broker in the set carries a usable node.id, and
+// that the ids stay distinct. Call it once, on the whole set, before any output is
+// written.
+//
+// The FSK pserver rejects a broker properties file with no node.id, and rejects a
+// negative one. Kafka allows both: a KRaft server.properties may omit the key when
+// the id is passed to `kafka-storage format` instead, and a ZooKeeper one may set
+// broker.id=-1 to ask the broker to generate its own. Either way the generated file
+// would not boot, so each such broker is given the lowest positive id no other
+// broker in the set already claims.
+func EnsureNodeIDs(cfgs []*BrokerConfig) {
+	taken := map[int]bool{}
+	for _, cfg := range cfgs {
+		if id, ok := usableNodeID(cfg); ok {
+			taken[id] = true
+		}
+	}
+	next := 1
+	for _, cfg := range cfgs {
+		if id, ok := usableNodeID(cfg); ok {
+			cfg.NodeID = id
+			continue
+		}
+		for taken[next] {
+			next++
+		}
+		taken[next] = true
+		cfg.setNodeID(next)
+	}
+}
+
+// usableNodeID returns the config's node.id when it is present and non-negative.
+func usableNodeID(cfg *BrokerConfig) (int, bool) {
+	v, ok := cfg.Settings[nodeIDKey]
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || id < 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+// setNodeID writes an id the tool chose into the generated properties. A node.id
+// the source never had leads the remaining properties, where it is easy to spot.
+func (cfg *BrokerConfig) setNodeID(id int) {
+	cfg.NodeID = id
+	cfg.NodeIDOrigin = NodeIDAssigned
+	if _, ok := cfg.Settings[nodeIDKey]; !ok {
+		cfg.SettingKeys = append([]string{nodeIDKey}, cfg.SettingKeys...)
+	}
+	cfg.Settings[nodeIDKey] = strconv.Itoa(id)
 }
 
 // dropInternalListeners removes entries whose listener name (the token before

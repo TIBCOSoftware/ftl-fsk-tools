@@ -39,6 +39,24 @@ func renderProps(t *testing.T, src string) (string, []string) {
 	return string(b), unsupported
 }
 
+// renderCfg renders an already-parsed config, for the cases that have to mutate it
+// (EnsureNodeIDs) between parsing and writing.
+func renderCfg(t *testing.T, cfg *BrokerConfig) string {
+	t.Helper()
+	out := filepath.Join(t.TempDir(), "kof.broker.properties")
+	of, err := os.Create(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeKOFProps(of, cfg)
+	of.Close()
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 // parseSrc writes src to a temp server.properties and parses it.
 func parseSrc(t *testing.T, src string) *BrokerConfig {
 	t.Helper()

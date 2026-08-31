@@ -88,16 +88,25 @@ func FetchBrokerConfig(addr string, timeoutMs int) (*BrokerConfig, error) {
 		raw[e.Name] = e.Value
 	}
 
-	// Ensure node.id is present.
-	if _, ok := raw["node.id"]; !ok {
-		raw["node.id"] = strconv.Itoa(int(nodeID))
-		orderedKeys = append(orderedKeys, "node.id")
+	// A ZooKeeper-mode broker reports its identity as broker.id; FSK reads node.id.
+	origin := NodeIDFromSource
+	if renameBrokerID(raw, orderedKeys, nil) {
+		origin = NodeIDFromBrokerID
+	}
+
+	// Ensure node.id is present. Cluster metadata already told us this broker's id,
+	// which beats anything EnsureNodeIDs could invent later.
+	if _, ok := raw[nodeIDKey]; !ok {
+		raw[nodeIDKey] = strconv.Itoa(int(nodeID))
+		orderedKeys = append(orderedKeys, nodeIDKey)
 	}
 
 	// Sort keys for deterministic output (Admin API returns in arbitrary order).
 	sort.Strings(orderedKeys)
 
-	return brokerConfigFromRaw(raw, orderedKeys, addr), nil
+	brokerCfg := brokerConfigFromRaw(raw, orderedKeys, addr)
+	brokerCfg.NodeIDOrigin = origin
+	return brokerCfg, nil
 }
 
 // brokerConfigFromRaw builds a BrokerConfig from a pre-parsed key/value map.
@@ -110,7 +119,7 @@ func brokerConfigFromRaw(raw map[string]string, orderedKeys []string, sourceLabe
 		SettingLines: map[string]int{},
 	}
 
-	if v, ok := raw["node.id"]; ok {
+	if v, ok := raw[nodeIDKey]; ok {
 		cfg.NodeID, _ = strconv.Atoi(v)
 	} else {
 		cfg.NodeID = 1

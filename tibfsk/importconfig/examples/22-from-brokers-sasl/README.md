@@ -1,4 +1,4 @@
-# Example 20 — Fetch config from live SASL-secured brokers
+# Example 22 — Fetch config from live SASL-secured brokers
 
 This example shows how to convert a SASL-secured Kafka cluster to FSK artifacts
 by fetching broker configuration directly from live brokers via the Admin API.

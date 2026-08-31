@@ -262,14 +262,73 @@ tibftlimportconfig \
 
 ---
 
-### 02 — Single node, SASL_SSL PLAIN
+### 02 — 3-broker, PLAINTEXT
+
+**Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT listeners, no security.
+
+Generated reference output: [`examples/02-3broker-plaintext/output/`](examples/02-3broker-plaintext/output/)
+
+```sh
+cd examples/02-3broker-plaintext
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602 \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties
+```
+
+**Output:** `tibftlserver-cluster.yaml`, `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+
+---
+
+### 03 — Single node, ZooKeeper mode, PLAINTEXT
+
+**Apache Kafka config:** 1 node in ZooKeeper mode (Apache Kafka 3.9 or earlier — 4.x removed ZooKeeper), single PLAINTEXT listener, no security.
+
+Two things distinguish a ZooKeeper-mode input from the KRaft examples above:
+
+- The broker identifies itself with `broker.id`, the key KRaft later renamed to `node.id`. FSK reads `node.id` only, so the tool renames it in place and notes the rename in the `# Node ID:` header of the generated `kof.broker.N.properties`. Without this, the pserver refuses to start with `kof.broker.properties: node.id is required and must be a non-negative integer`.
+- The `zookeeper.*` keys go to `unsupported.properties`. FSK has no ZooKeeper; the cluster membership and metadata ZooKeeper holds for Apache Kafka are FTL-native.
+
+Generated reference output: [`examples/03-zk-single-node-plaintext/output/`](examples/03-zk-single-node-plaintext/output/)
+
+```sh
+cd examples/03-zk-single-node-plaintext
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5664 \
+  --output-dir output \
+  server-1.properties
+```
+
+**Output:** `tibftlserver_standalone.yaml` (1 SRV + 1 pserver), `realm.json`, `kof.broker.1.properties` (`node.id=0`, from `broker.id=0`), `unsupported.properties`
+
+---
+
+### 04 — 3-broker, ZooKeeper mode, PLAINTEXT
+
+**Apache Kafka config:** 3 nodes in ZooKeeper mode sharing one ZooKeeper ensemble, PLAINTEXT listeners, no security. Same `broker.id` → `node.id` rename as example 03, applied per broker.
+
+Generated reference output: [`examples/04-zk-3broker-plaintext/output/`](examples/04-zk-3broker-plaintext/output/)
+
+```sh
+cd examples/04-zk-3broker-plaintext
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5610,SRV2=localhost:5611,SRV3=localhost:5612 \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties
+```
+
+**Output:** `tibftlserver-cluster.yaml`, `realm.json`, `kof.broker.{1,2,3}.properties` (`node.id=1/2/3`, from `broker.id`), `unsupported.properties`
+
+---
+
+### 05 — Single node, SASL_SSL PLAIN
 
 **Apache Kafka config:** 1 node, KRaft, SASL_SSL PLAIN on broker listener, SSL on controller.
 
-Generated reference output: [`examples/02-single-node-sasl/output/`](examples/02-single-node-sasl/output/)
+Generated reference output: [`examples/05-single-node-sasl/output/`](examples/05-single-node-sasl/output/)
 
 ```sh
-cd examples/02-single-node-sasl
+cd examples/05-single-node-sasl
 tibftlimportconfig \
   --core-servers SRV1=localhost:5689 \
   --tls-cert /etc/ftl/certs/server.pem \
@@ -282,14 +341,14 @@ tibftlimportconfig \
 
 ---
 
-### 03 — Single node, OAuth2
+### 06 — Single node, OAuth2
 
 **Apache Kafka config:** 1 node, KRaft, SASL_SSL OAUTHBEARER on broker listener, SSL on controller.
 
-Generated reference output: [`examples/03-single-node-oauth/output/`](examples/03-single-node-oauth/output/)
+Generated reference output: [`examples/06-single-node-oauth/output/`](examples/06-single-node-oauth/output/)
 
 ```sh
-cd examples/03-single-node-oauth
+cd examples/06-single-node-oauth
 tibftlimportconfig \
   --core-servers SRV1=localhost:5663 \
   --oauth-token-url https://auth.example.com/oauth/token \
@@ -307,32 +366,14 @@ tibftlimportconfig \
 
 ---
 
-### 04 — 3-broker, PLAINTEXT
-
-**Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT listeners, no security.
-
-Generated reference output: [`examples/04-3broker-plaintext/output/`](examples/04-3broker-plaintext/output/)
-
-```sh
-cd examples/04-3broker-plaintext
-tibftlimportconfig \
-  --core-servers SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602 \
-  --output-dir output \
-  server-1.properties server-2.properties server-3.properties
-```
-
-**Output:** `tibftlserver-cluster.yaml`, `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
-
----
-
-### 05 — 3-broker, SASL_SSL PLAIN
+### 07 — 3-broker, SASL_SSL PLAIN
 
 **Apache Kafka config:** 3 nodes, KRaft, SASL_SSL PLAIN on broker listener, SSL on controller listener.
 
-Generated reference output: [`examples/05-3broker-sasl/output/`](examples/05-3broker-sasl/output/)
+Generated reference output: [`examples/07-3broker-sasl/output/`](examples/07-3broker-sasl/output/)
 
 ```sh
-cd examples/05-3broker-sasl
+cd examples/07-3broker-sasl
 tibftlimportconfig \
   --core-servers SRV1=localhost:5695,SRV2=localhost:5641,SRV3=localhost:5693 \
   --tls-cert /etc/ftl/certs/server.pem \
@@ -344,14 +385,14 @@ tibftlimportconfig \
 
 ---
 
-### 06 — 3-broker, TLS-only (no SASL)
+### 08 — 3-broker, TLS-only (no SASL)
 
 **Apache Kafka config:** 3 nodes, KRaft, SSL listener with `ssl.client.auth=none` — wire encryption only, no authentication mechanism.
 
-Generated reference output: [`examples/06-3broker-tls-only/output/`](examples/06-3broker-tls-only/output/)
+Generated reference output: [`examples/08-3broker-tls-only/output/`](examples/08-3broker-tls-only/output/)
 
 ```sh
-cd examples/06-3broker-tls-only
+cd examples/08-3broker-tls-only
 tibftlimportconfig \
   --core-servers SRV1=localhost:5680,SRV2=localhost:5626,SRV3=localhost:5616 \
   --tls-cert /etc/ftl/certs/server.pem \
@@ -363,14 +404,14 @@ tibftlimportconfig \
 
 ---
 
-### 07 — 3-broker, multi-SASL (PLAIN + OAuth2 + mTLS)
+### 09 — 3-broker, multi-SASL (PLAIN + OAuth2 + mTLS)
 
 **Apache Kafka config:** 3 nodes, KRaft, four listeners: BASIC_AUTH (SASL_SSL PLAIN), OAUTH (SASL_SSL OAUTHBEARER), MTLS (SSL mutual TLS), CONTROLLER (SSL).
 
-Generated reference output: [`examples/07-3broker-multi-sasl/output/`](examples/07-3broker-multi-sasl/output/)
+Generated reference output: [`examples/09-3broker-multi-sasl/output/`](examples/09-3broker-multi-sasl/output/)
 
 ```sh
-cd examples/07-3broker-multi-sasl
+cd examples/09-3broker-multi-sasl
 tibftlimportconfig \
   --core-servers SRV1=localhost:5686,SRV2=localhost:5696,SRV3=localhost:5622 \
   --oauth-token-url https://auth.example.com/oauth/token \
@@ -388,14 +429,14 @@ tibftlimportconfig \
 
 ---
 
-### 08 — 3-broker, multi-listener (PLAIN + OAuth2 + per-listener mTLS)
+### 10 — 3-broker, multi-listener (PLAIN + OAuth2 + per-listener mTLS)
 
 **Apache Kafka config:** 3 nodes, KRaft, four listeners: BASIC_AUTH (SASL_SSL PLAIN), OAUTH (SASL_SSL OAUTHBEARER), MTLS (SSL, `listener.name.mtls.ssl.client.auth=required`), CONTROLLER (SSL).
 
-Generated reference output: [`examples/08-3broker-multi-listener/output/`](examples/08-3broker-multi-listener/output/)
+Generated reference output: [`examples/10-3broker-multi-listener/output/`](examples/10-3broker-multi-listener/output/)
 
 ```sh
-cd examples/08-3broker-multi-listener
+cd examples/10-3broker-multi-listener
 tibftlimportconfig \
   --core-servers SRV1=localhost:5695,SRV2=localhost:5654,SRV3=localhost:5616 \
   --oauth-token-url https://auth.example.com/oauth/token \
@@ -413,16 +454,16 @@ tibftlimportconfig \
 
 ---
 
-### 09 — 9-broker scale-out (3 shards)
+### 11 — 9-broker scale-out (3 shards)
 
 **Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller, nodes 4–9 are broker-only; SASL_SSL PLAIN + OAuth2 + mTLS listeners. The 9 input files map to 9 pservers across 3 FSK shards (`kof.cluster.0` / `.1` / `.2`).
 
-The inputs declare secured Apache Kafka listeners, but **no FTL security flags are passed on the command line on purpose**: this example is about the sharding split, so the output stays minimal. That is why there is no `tibftlserver-cluster-secure.yaml` here — only an `ftl-users.txt` derived from the SASL PLAIN users in the inputs. [Example 10](#10--9-broker-full-security-stack-3-shards) is the same nine inputs *with* the security flags supplied, and that is where the secure YAML appears.
+The inputs declare secured Apache Kafka listeners, but **no FTL security flags are passed on the command line on purpose**: this example is about the sharding split, so the output stays minimal. That is why there is no `tibftlserver-cluster-secure.yaml` here — only an `ftl-users.txt` derived from the SASL PLAIN users in the inputs. [Example 12](#12--9-broker-full-security-stack-3-shards) is the same nine inputs *with* the security flags supplied, and that is where the secure YAML appears.
 
-Generated reference output: [`examples/09-9broker-scale/output/`](examples/09-9broker-scale/output/)
+Generated reference output: [`examples/11-9broker-scale/output/`](examples/11-9broker-scale/output/)
 
 ```sh
-cd examples/09-9broker-scale
+cd examples/11-9broker-scale
 tibftlimportconfig \
   --core-servers SRV1=localhost:5619,SRV2=localhost:5698,SRV3=localhost:5635 \
   --output-dir output \
@@ -435,14 +476,14 @@ tibftlimportconfig \
 
 ---
 
-### 10 — 9-broker, full security stack (3 shards)
+### 12 — 9-broker, full security stack (3 shards)
 
-**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–9 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). The 9 input files map to 9 pservers across 3 FSK shards. Same inputs as example 09, with the FTL security flags supplied.
+**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–9 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). The 9 input files map to 9 pservers across 3 FSK shards. Same inputs as example 11, with the FTL security flags supplied.
 
-Generated reference output: [`examples/10-9broker-secure/output/`](examples/10-9broker-secure/output/)
+Generated reference output: [`examples/12-9broker-secure/output/`](examples/12-9broker-secure/output/)
 
 ```sh
-cd examples/10-9broker-secure
+cd examples/12-9broker-secure
 tibftlimportconfig \
   --core-servers SRV1=localhost:5601,SRV2=localhost:5602,SRV3=localhost:5603 \
   --tls-cert /etc/ftl/certs/server.pem \
@@ -469,14 +510,14 @@ tibftlimportconfig \
 
 ---
 
-### 11 — 3-broker, PLAINTEXT + DR
+### 13 — 3-broker, PLAINTEXT + DR
 
 **Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT. Primary servers named `primary1/2/3`; DR servers named `drserver1/2/3`. Mirrors the layout of the FTL `dr-simple` sample cluster configuration.
 
-Generated reference output: [`examples/11-3broker-dr/output/`](examples/11-3broker-dr/output/)
+Generated reference output: [`examples/13-3broker-dr/output/`](examples/13-3broker-dr/output/)
 
 ```sh
-cd examples/11-3broker-dr
+cd examples/13-3broker-dr
 tibftlimportconfig \
   --core-servers primary1=primary-host-1:8585,primary2=primary-host-2:8686,primary3=primary-host-3:8787 \
   --dr-servers drserver1=localhost:9585,drserver2=localhost:9686,drserver3=localhost:9787 \
@@ -533,10 +574,10 @@ Add `-dr-servers` (and optionally `-dr-data-dir`) to any of the commands above t
 
 ### Simple 3-broker + DR
 
-Generated reference output: [`examples/04-3broker-plaintext/output-dr/`](examples/04-3broker-plaintext/output-dr/)
+Generated reference output: [`examples/02-3broker-plaintext/output-dr/`](examples/02-3broker-plaintext/output-dr/)
 
 ```sh
-cd examples/04-3broker-plaintext
+cd examples/02-3broker-plaintext
 tibftlimportconfig \
   --core-servers SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602 \
   --dr-servers DRSRV1=dr-host-1:5800,DRSRV2=dr-host-2:5801,DRSRV3=dr-host-3:5802 \
@@ -545,7 +586,7 @@ tibftlimportconfig \
   server-1.properties server-2.properties server-3.properties
 ```
 
-Same inputs and same `-core-servers` as example 04, so `diff output output-dr` shows exactly what `-dr-servers` adds.
+Same inputs and same `-core-servers` as example 02, so `diff output output-dr` shows exactly what `-dr-servers` adds.
 
 **Output:**
 ```
@@ -558,7 +599,7 @@ unsupported.properties
 
 ### Secure 9-broker + DR (3 shards)
 
-Combine the example 10 flags above with `-dr-servers` to generate DR-enabled output for a 9-pserver, 3-shard deployment. Produces six cluster YAML files (primary + DR, each across three files) and a `realm.json` with `dr_enabled: true` on all three clusters.
+Combine the example 12 flags above with `-dr-servers` to generate DR-enabled output for a 9-pserver, 3-shard deployment. Produces six cluster YAML files (primary + DR, each across three files) and a `realm.json` with `dr_enabled: true` on all three clusters.
 
 ---
 
@@ -714,9 +755,21 @@ In DR mode, each cluster has `dr_enabled: true` and two pserver sets: `_setA` (p
 
 One file per pserver (N is 1-based). Contains only properties that pass the FSK broker properties whitelist: listener/security keys in the section 1 allowlist, plus general broker/topic/tuning keys. Listener keys appear first, followed by remaining properties in their original order.
 
+Every file carries a `node.id`, because the pserver refuses to start without one
+(`kof.broker.properties: node.id is required and must be a non-negative integer`). The tool
+guarantees it, and the `# Node ID:` header says where the value came from:
+
+| Input | `# Node ID:` header | Notes |
+|---|---|---|
+| `node.id=N` (KRaft) | `# Node ID: N` | used as-is |
+| `broker.id=N` (ZooKeeper mode) | `# Node ID: N (from broker.id; FSK reads the KRaft spelling node.id)` | renamed in place, keeping its position in the file; `broker.id` is *not* written to `unsupported.properties`, since its value was used |
+| neither, or a negative id such as `broker.id=-1` | `# Node ID: N (assigned by the tool; the source named no usable node.id)` | the tool assigns the lowest id not already taken by another input file |
+
+If both `node.id` and `broker.id` are present, `node.id` wins and `broker.id` is dropped as unsupported.
+
 ### `unsupported.properties`
 
-Written when any input properties are not in the FSK whitelist. Contains KRaft cluster-control keys (`process.roles`, `controller.*`, etc.) and security-domain keys not on the section 1 allowlist (passwords, JAAS configs, handler classes, etc.). Kept for reference — the FSK pserver does not load this file.
+Written when any input properties are not in the FSK whitelist. Contains KRaft cluster-control keys (`process.roles`, `controller.*`, etc.), ZooKeeper-mode keys (`zookeeper.*` — FSK holds cluster membership and metadata in FTL rather than ZooKeeper), and security-domain keys not on the section 1 allowlist (passwords, JAAS configs, handler classes, etc.). Kept for reference — the FSK pserver does not load this file.
 
 ---
 
@@ -725,40 +778,42 @@ Written when any input properties are not in the FSK whitelist. Contains KRaft c
 | Directory | Nodes | Auth | pservers |
 |---|---|---|---|
 | `examples/01-single-node-plaintext/` | 1 (broker+controller) | PLAINTEXT | 1 |
-| `examples/02-single-node-sasl/` | 1 (broker+controller) | SASL_SSL PLAIN | 1 |
-| `examples/03-single-node-oauth/` | 1 (broker+controller) | SASL_SSL OAUTHBEARER | 1 |
-| `examples/04-3broker-plaintext/` | 3 (broker+controller) | PLAINTEXT | 3 |
-| `examples/05-3broker-sasl/` | 3 (broker+controller) | SASL_SSL PLAIN | 3 |
-| `examples/06-3broker-tls-only/` | 3 (broker+controller) | SSL only (no SASL) | 3 |
-| `examples/07-3broker-multi-sasl/` | 3 (broker+controller) | PLAIN + OAuth2 + mTLS | 3 |
-| `examples/08-3broker-multi-listener/` | 3 (broker+controller) | PLAIN + OAuth2 + mTLS (per-listener client auth) | 3 |
-| `examples/09-9broker-scale/` | 9 (nodes 1–3 controller) | SASL_SSL PLAIN + OAuth2 + mTLS (no FTL security flags passed) | 9 (3 shards) |
-| `examples/10-9broker-secure/` | 9 (nodes 1–3 controller) | PLAIN + OAuth2 + mTLS (full stack) | 9 (3 shards) |
-| `examples/11-3broker-dr/` | 3 (broker+controller) | PLAINTEXT + DR | 3 |
-| `examples/12-3broker-sasl-basic/` | 3 (broker+controller) | SASL_SSL PLAIN (single listener) | 3 |
-| `examples/13-3broker-mtls/` | 3 (broker+controller) | SSL mTLS only (`ssl.client.auth=required`) | 3 |
-| `examples/14-3broker-oauth2/` | 3 (broker+controller) | SASL_SSL OAUTHBEARER (single listener) | 3 |
-| `examples/15-3broker-sasl+mtls/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS | 3 |
-| `examples/16-3broker-sasl+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SASL_SSL OAUTHBEARER | 3 |
-| `examples/17-3broker-mtls+oauth2/` | 3 (broker+controller) | SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
-| `examples/18-3broker-sasl+mtls+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
-| `examples/19-from-brokers-plaintext/` | N/A (live brokers) | PLAINTEXT — fetch from live brokers | 3 |
-| `examples/20-from-brokers-sasl/` | N/A (live brokers) | SASL — fetch from live brokers | 3 |
-| `examples/21-single-node-tibschemad/` | 1 (broker+controller) | PLAINTEXT + `-tibschemad` | 1 |
-| `examples/22-3broker-tibschemad/` | 3 (broker+controller) | PLAINTEXT + `-tibschemad` | 3 |
+| `examples/02-3broker-plaintext/` | 3 (broker+controller) | PLAINTEXT | 3 |
+| `examples/03-zk-single-node-plaintext/` | 1 (ZooKeeper mode) | PLAINTEXT | 1 |
+| `examples/04-zk-3broker-plaintext/` | 3 (ZooKeeper mode) | PLAINTEXT | 3 |
+| `examples/05-single-node-sasl/` | 1 (broker+controller) | SASL_SSL PLAIN | 1 |
+| `examples/06-single-node-oauth/` | 1 (broker+controller) | SASL_SSL OAUTHBEARER | 1 |
+| `examples/07-3broker-sasl/` | 3 (broker+controller) | SASL_SSL PLAIN | 3 |
+| `examples/08-3broker-tls-only/` | 3 (broker+controller) | SSL only (no SASL) | 3 |
+| `examples/09-3broker-multi-sasl/` | 3 (broker+controller) | PLAIN + OAuth2 + mTLS | 3 |
+| `examples/10-3broker-multi-listener/` | 3 (broker+controller) | PLAIN + OAuth2 + mTLS (per-listener client auth) | 3 |
+| `examples/11-9broker-scale/` | 9 (nodes 1–3 controller) | SASL_SSL PLAIN + OAuth2 + mTLS (no FTL security flags passed) | 9 (3 shards) |
+| `examples/12-9broker-secure/` | 9 (nodes 1–3 controller) | PLAIN + OAuth2 + mTLS (full stack) | 9 (3 shards) |
+| `examples/13-3broker-dr/` | 3 (broker+controller) | PLAINTEXT + DR | 3 |
+| `examples/14-3broker-sasl-basic/` | 3 (broker+controller) | SASL_SSL PLAIN (single listener) | 3 |
+| `examples/15-3broker-mtls/` | 3 (broker+controller) | SSL mTLS only (`ssl.client.auth=required`) | 3 |
+| `examples/16-3broker-oauth2/` | 3 (broker+controller) | SASL_SSL OAUTHBEARER (single listener) | 3 |
+| `examples/17-3broker-sasl+mtls/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS | 3 |
+| `examples/18-3broker-sasl+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SASL_SSL OAUTHBEARER | 3 |
+| `examples/19-3broker-mtls+oauth2/` | 3 (broker+controller) | SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
+| `examples/20-3broker-sasl+mtls+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
+| `examples/21-from-brokers-plaintext/` | N/A (live brokers) | PLAINTEXT — fetch from live brokers | 3 |
+| `examples/22-from-brokers-sasl/` | N/A (live brokers) | SASL — fetch from live brokers | 3 |
+| `examples/23-single-node-tibschemad/` | 1 (broker+controller) | PLAINTEXT + `-tibschemad` | 1 |
+| `examples/24-3broker-tibschemad/` | 3 (broker+controller) | PLAINTEXT + `-tibschemad` | 3 |
 
-Examples 01–18, 21 and 22 each ship a checked-in `output/` directory, regenerated by
-`examples/regen-examples.sh`. Examples 19 and 20 cover the `-from-brokers` mode and hold a
+Examples 01–20, 23 and 24 each ship a checked-in `output/` directory, regenerated by
+`examples/regen-examples.sh`. Examples 21 and 22 cover the `-from-brokers` mode and hold a
 `README.md` only: their input is a running Apache Kafka cluster, so there is nothing reproducible to
 check in. Follow the commands in those READMEs against a live cluster of your own.
 
-Examples 21 and 22 take the same inputs as 01 and 04 and add only `-tibschemad`, so diffing
+Examples 23 and 24 take the same inputs as 01 and 02 and add only `-tibschemad`, so diffing
 their outputs shows exactly what the flag contributes — the standalone case at `cluster.size: 1`
 and the cluster case at `cluster.size: 3`:
 
 ```bash
 diff examples/01-single-node-plaintext/output/tibftlserver_standalone.yaml \
-     examples/21-single-node-tibschemad/output/tibftlserver_standalone.yaml
-diff examples/04-3broker-plaintext/output/tibftlserver-cluster.yaml \
-     examples/22-3broker-tibschemad/output/tibftlserver-cluster.yaml
+     examples/23-single-node-tibschemad/output/tibftlserver_standalone.yaml
+diff examples/02-3broker-plaintext/output/tibftlserver-cluster.yaml \
+     examples/24-3broker-tibschemad/output/tibftlserver-cluster.yaml
 ```

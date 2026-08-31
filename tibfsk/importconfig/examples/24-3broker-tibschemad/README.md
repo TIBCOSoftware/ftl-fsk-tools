@@ -1,7 +1,7 @@
-# Example 22 — Three brokers with the FTL schema daemon
+# Example 24 — Three brokers with the FTL schema daemon
 
 Three-broker plaintext Kafka converted with `-tibschemad`. The inputs are byte-for-byte the
-same `server-{1,2,3}.properties` as [example 04](../04-3broker-plaintext/), so the only
+same `server-{1,2,3}.properties` as [example 02](../02-3broker-plaintext/), so the only
 difference in the output is what the flag adds.
 
 ## Command
@@ -47,10 +47,10 @@ and a schema pserver; the flag adds no servers and no ports.
 
 ## Verifying
 
-Everything except the three schema daemon blocks is unchanged from example 04:
+Everything except the three schema daemon blocks is unchanged from example 02:
 
 ```bash
-diff -r ../04-3broker-plaintext/output output
+diff -r ../02-3broker-plaintext/output output
 ```
 
 `realm.json`, the three `kof.broker.N.properties` files and `unsupported.properties` are
@@ -70,5 +70,5 @@ tibftlserver -c output/tibftlserver-cluster.yaml -n SRV3
 - Auxiliary YAMLs (`tibftlserver-cluster-auxN.yaml`, produced above three pservers) get no
   schema daemon: their `PSRV*` servers have no `- realm:` entry, so there is nothing for it to
   attach to. DR YAMLs are likewise left alone in phase 1.
-- See [example 21](../21-single-node-tibschemad/) for the standalone form, where the same flag
+- See [example 23](../23-single-node-tibschemad/) for the standalone form, where the same flag
   produces `cluster.size: 1`.

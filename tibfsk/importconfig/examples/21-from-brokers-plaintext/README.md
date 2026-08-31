@@ -1,4 +1,4 @@
-# Example 19 — Fetch config from live plaintext brokers
+# Example 21 — Fetch config from live plaintext brokers
 
 This example shows how to convert a running plaintext Kafka cluster to FSK artifacts
 **without** a `server.properties` file, by fetching the effective broker configuration

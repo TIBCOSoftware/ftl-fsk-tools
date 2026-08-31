@@ -206,6 +206,10 @@ func main() {
 	}
 	numPservers := len(cfgs)
 
+	// Every pserver needs a distinct, non-negative node.id or it will not start.
+	// Whichever way the configs arrived, fill in the ones the source left out.
+	translator.EnsureNodeIDs(cfgs)
+
 	if err := os.MkdirAll(*outputDir, 0o755); err != nil {
 		fmt.Fprintln(os.Stderr, "error creating output directory:", err)
 		os.Exit(1)
