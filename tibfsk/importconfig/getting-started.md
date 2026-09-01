@@ -27,7 +27,7 @@ advance as your environment requires.
 ## Before you start
 
 Every step runs end to end: bring up the Apache Kafka brokers the `server.properties` describes,
-convert the configuration, then start the FSK servers on the result. Six things hold for all twelve.
+convert the configuration, then start the FSK servers on the result. Seven things hold for all twelve.
 
 **`tibftlimportconfig`.** Every `tibftlimportconfig` command below is the binary checked in at
 `bin/tibftlimportconfig` (linux/amd64) — no build step is needed. Put it on your `PATH`:
@@ -110,6 +110,54 @@ records `initial.realm.config` and `kof.broker.properties` exactly as they were 
 directory, not against the YAML's own location. `cd kof-output` first and the server will not find
 its realm. Pass an absolute `--output-dir` if you would rather not care.
 
+**Checking that something is up.** `kafka-topics.sh --list` prints nothing on a cluster with no
+topics, so a healthy broker and an absent one look identical apart from the error. Ask for
+something that always has a value:
+
+```bash
+"$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
+  --bootstrap-server localhost:9092 | grep 'id:'
+```
+
+```
+localhost:9092 (id: 1 rack: null isFenced: false) -> (
+```
+
+One line per broker that answered, so the same command is also the membership check in the 3-node
+steps. `kafka-cluster.sh cluster-id --bootstrap-server localhost:9092` is a shorter alternative
+when a plain yes will do. Both work unchanged against FSK once it is running — the pservers speak
+the Kafka protocol on the very ports the brokers had — which makes them the most direct proof that
+the conversion took over.
+
+For the FTL side, use `tibftladmin`. It talks to the realm service, not to the Kafka port, and
+that address is the `core.servers` entry of the generated YAML:
+
+```yaml
+globals:
+  core.servers:
+    SRV1: localhost:5663
+```
+
+Do not copy that port. Unless you pass `--core-servers`, the tool derives one per server in the
+5600–5699 range by hashing the cluster, so yours will differ — read it out of your own YAML:
+
+```bash
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
+
+tibftladmin --ftlserver "$FTLS" --available
+tibftladmin --ftlserver "$FTLS" --status
+```
+
+`--available` is the one-line health check — it prints `FTLserver is available` and exits 0.
+`--status` prints the server's `Mode:` and, under *Cluster Members*, one block per FTL server
+carrying its `Status:` and naming the `Leader:`; that is the check to use in the 3-node steps.
+`--server_status` is the same without the cluster section.
+
+Two things save trouble here. The generated realms carry no authentication, so no `-u` or `-pw`
+is needed even though `tibftladmin` always sends credentials. And none of this is affected by the
+SASL or TLS a step configures: that secures the pserver's Kafka port, while `tibftladmin` reaches
+the realm service over plain HTTP.
+
 ---
 
 ## Step 1 — Single-node plaintext (KRaft)
@@ -159,7 +207,12 @@ KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
 Confirm it is up:
 
 ```bash
-"$KAFKA_HOME/bin/kafka-topics.sh" --bootstrap-server localhost:9092 --list
+"$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
+  --bootstrap-server localhost:9092 | grep 'id:'
+```
+
+```
+localhost:9092 (id: 1 rack: null isFenced: false) -> (
 ```
 
 `--ignore-formatted` makes the format step a no-op on an already-formatted directory, so the
@@ -209,6 +262,24 @@ tibftlserver -c kof-output/tibftlserver_standalone.yaml -n SRV1
 No realm upload step: the YAML points `initial.realm.config` at the generated `realm.json`, so the
 server seeds the realm itself on first startup. Kafka clients can now connect to `localhost:9092`
 as before.
+
+Confirm both halves are up — the FTL server, then the Kafka port it now serves:
+
+```bash
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
+
+tibftladmin --ftlserver "$FTLS" --available
+"$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
+  --bootstrap-server localhost:9092 | grep 'id:'
+```
+
+```
+FTLserver is available
+localhost:9092 (id: 1 rack: null isFenced: false) -> (
+```
+
+That second line is the same command that checked the broker earlier, against the same port,
+now answered by FSK.
 
 **→ Continue to [Step 2](#step-2--3-node-plaintext-cluster-kraft) to scale the same configuration to three brokers,
 or [Step 3](#step-3--single-node-plaintext-zookeeper) if your brokers still run under ZooKeeper.**
@@ -365,6 +436,38 @@ All three share one YAML and one `realm.json`; `-n` is what selects which entry 
 Each carries the same `initial.realm.config`, so whichever starts first seeds the realm and the
 other two join it. The cluster is available once two of the three are up.
 
+`--status` is the check worth running here, because it reports the whole cluster from whichever
+member you ask:
+
+```bash
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster.yaml)"
+
+tibftladmin --ftlserver "$FTLS" --status
+```
+
+```
+-----------------------
+Cluster Members
+-----------------------
+Leader:                   SRV1
+
+----
+Name:                     SRV1
+Host:                     localhost
+Port:                     5600
+Status:                   online
+...
+```
+
+One block per FTL server, each with its own `Status:`, and a single `Leader:` above them — so a
+member that never joined shows up as a missing block rather than as silence. The Kafka side is
+the same three-broker check as before, now answered by the pservers:
+
+```bash
+"$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
+  --bootstrap-server localhost:9092,localhost:9102,localhost:9112 | grep 'id:'
+```
+
 **→ Continue to [Step 3](#step-3--single-node-plaintext-zookeeper) for the ZooKeeper equivalents of Steps 1 and 2,
 or skip to [Step 5](#step-5--single-node-sasl-plain-over-tls) to start adding security.**
 
@@ -441,8 +544,16 @@ EOF
 and collides with whatever else on the host wants it. Confirm the broker is up:
 
 ```bash
-"$KAFKA_HOME/bin/kafka-topics.sh" --bootstrap-server localhost:9092 --list
+"$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
+  --bootstrap-server localhost:9092 | grep 'id:'
 ```
+
+```
+localhost:9092 (id: 0 rack: null isFenced: false) -> (
+```
+
+The id is 0 here rather than 1: it is this broker's `broker.id`, and the ZooKeeper examples number
+from zero.
 
 ### Run the tool
 
