@@ -4,8 +4,18 @@ Tools for configuring and migrating to TIBCO FTL(R) Service for Kafka (FSK) pers
 
 | Tool | Language | Description |
 |------|----------|-------------|
-| [tibfsk/importconfig](tibfsk/importconfig/README.md) | Go | Translates Apache Kafka KRaft `server.properties` into FSK artifacts (`realm.json`, `tibftlserver-cluster.yaml`, etc.) |
+| [tibfsk/importconfig](tibfsk/importconfig/README.md) | Go | Translates Apache Kafka KRaft `server.properties` into FSK artifacts (`realm.json`, `tibftlserver-cluster.yaml`, etc.) — **start with [getting-started.md](tibfsk/importconfig/getting-started.md)** |
 | [tibfsk/importdata](tibfsk/importdata/README.md) | Java | Replicates records from a source Apache Kafka cluster to a target FSK cluster |
+
+**Coming from an existing Apache Kafka cluster?** Start with
+[tibfsk/importconfig/getting-started.md](tibfsk/importconfig/getting-started.md), which converts
+the `server.properties` you already run into a working FSK configuration across twelve worked
+steps, from a single plaintext broker up to a secured three-node cluster. It is the guide to read
+first; `importconfig/README.md` is the flag-by-flag reference for once you know what you are
+looking for, and `importdata` is a separate job — moving the *records* over after the
+configuration is in place. The same guide is browsable offline at
+[tibfsk/importconfig/doc/fsk-doc/index.html](tibfsk/importconfig/doc/fsk-doc/index.html); open it
+straight from disk, no web server needed.
 
 The migration tool also ships a runnable demo scenario — see
 [tibfsk/importdata/README.md](tibfsk/importdata/README.md) for the four
