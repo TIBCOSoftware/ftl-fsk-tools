@@ -1,17 +1,17 @@
 # tibftlimportconfig
 
-Translates an Apache Kafka KRaft broker `server.properties` file into the TIBCO FTL(R) Service for Kafka (FSK) artifacts needed to run an FSK-enabled pserver cluster:
+Translates an Apache Kafka KRaft broker `server.properties` file into the TIBCO FTL(R) Service for Kafka (FSK) artifacts needed to run an FSK-enabled FTL Server cluster:
 
 | Output file | Purpose |
 |---|---|
-| `tibftlserver-cluster.yaml` | FTL primary cluster config (realm servers + up to 3 pservers) |
+| `tibftlserver-cluster.yaml` | Cluster config for up to 3 FTL Servers (realm service + FSK persistence in each) |
 | `tibftlserver-cluster-secure.yaml` | Secure variant with TLS/auth blocks (generated when TLS/OAuth flags are provided) |
 | `tibftlserver-cluster-dr.yaml` | DR replica cluster config (generated when `-dr-servers` is provided) |
-| `realm.json` | FTL realm config with `kof.cluster.N` (N is 0-based), stores, and pserver definitions |
-| `kof.broker.N.properties` | Per-broker properties file (N is 1-based, one per pserver); only contains properties in the FSK whitelist |
+| `realm.json` | FTL realm config with `kof.cluster.N` (N is 0-based), stores, and FTL Server definitions |
+| `kof.broker.N.properties` | Per-broker properties file (N is 1-based, one per FTL Server); only contains properties in the FSK whitelist |
 | `unsupported.properties` | Properties from the input not in the FSK whitelist; written when any such properties exist |
 
-A single-broker conversion produces one pserver — a standalone server rather than a cluster — so
+A single-broker conversion produces one FTL Server — a standalone server rather than a cluster — so
 its YAMLs are named `tibftlserver_standalone.yaml`, `tibftlserver_standalone-secure.yaml` and
 `tibftlserver_standalone-dr.yaml`.
 
@@ -56,7 +56,7 @@ tibftlimportconfig [flags] <server.properties> [<server.properties> ...]
 ```
 
 Positional arguments are one or more `server.properties` files (1–9). Each broker becomes one
-pserver — the pserver count is derived from the number of input files, not from a flag.
+FTL Server — the FTL Server count is derived from the number of input files, not from a flag.
 
 ### Getting help
 
@@ -85,26 +85,26 @@ The sections below list the same flags as the corresponding `-h <group>` topic.
 | Flag | Default | Description |
 |---|---|---|
 | `-output-dir` | `./kof-output` | Directory where output files are written |
-| `-data-dir` | `/var/tmp/kof/data` | FSK data directory path on pserver hosts |
+| `-data-dir` | `/var/tmp/kof/data` | FSK data directory path on FTL Server hosts |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are derived from the cluster in range 5600–5699 — the same brokers always yield the same ports, so re-running the tool does not move them |
-| `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br>`dtcp` pins every transport to dynamic TCP |
+| `-transport-type` | `auto` | Transport type for all FTL Server connections in `realm.json`: `auto` or `dtcp`<br>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br>`dtcp` pins every transport to dynamic TCP |
 | `-disk-persistence` | `async` | `disk_persistence` for the generated `kof.cluster.N`: `async`, `sync` or `in-memory`<br>`async` writes reach disk in the background; `sync` flushes every write before acknowledging it; `in-memory` writes nothing to disk and turns off the cluster's `disk_index` and `disk_compact`, which require disk persistence<br>The data store stays `async` and the sync and meta stores `sync` whichever the cluster is — except under `in-memory`, where the stores are in-memory too (see [`realm.json`](#realmjson)) |
-| `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated pserver. This is the *output* FTL servers' logging, not this tool's. |
+| `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated FTL Server. This is the *output* FTL Servers' logging, not this tool's. |
 | `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `tibftlfskimportdata` data migration tool) |
-| `-tibschemad` | `false` | Add the FTL schema daemon to the generated cluster YAML: every server gains a `schemaN` persistence and a `- tibschemad:` entry with `auth.type: none` and `cluster.size` set to the number of realm servers. No extra servers and no extra ports — the schema pserver shares the `tibftlserver` process that already hosts the FSK pserver. |
+| `-tibschemad` | `false` | Add the FTL schema daemon to the generated cluster YAML: every server gains a `schemaN` persistence and a `- tibschemad:` entry with `auth.type: none` and `cluster.size` set to the number of realm servers. No extra servers and no extra ports — the schema persistence shares the `tibftlserver` process that already hosts the FSK persistence. |
 
 ### TLS and mTLS flags (`-h tls`)
 
-Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` listener and you want a `tibftlserver-cluster-secure.yaml` emitted. The `-tls-server-trust` / `-tls-client-*` flags are the ones required when an Apache Kafka mTLS listener (`ssl.client.auth=required`) is present and you want FTL server-to-server mutual TLS.
+Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` listener and you want a `tibftlserver-cluster-secure.yaml` emitted. The `-tls-server-trust` / `-tls-client-*` flags are the ones required when an Apache Kafka mTLS listener (`ssl.client.auth=required`) is present and you want FTL Server-to-server mutual TLS.
 
 | Flag | Description |
 |---|---|
 | `-tls-cert` | Server TLS certificate PEM file path |
 | `-tls-key` | Server TLS private key PEM file path |
 | `-tls-key-password` | TLS private key passphrase |
-| `-tls-ca` | CA/trust PEM file path (for connecting to other FTL servers) |
+| `-tls-ca` | CA/trust PEM file path (for connecting to other FTL Servers) |
 | `-tls-server-trust` | CA PEM used to verify inbound client certificates (`tls.server.trust.file`) |
-| `-tls-client-cert` | Client cert PEM presented to other FTL servers (`tls.client.cert`) |
+| `-tls-client-cert` | Client cert PEM presented to other FTL Servers (`tls.client.cert`) |
 | `-tls-client-key` | Client private key PEM for server-to-server connections (`tls.client.private.key`) |
 | `-tls-client-key-password` | Passphrase for `-tls-client-key` |
 
@@ -144,7 +144,7 @@ Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` lis
 | Flag | Default | Description |
 |---|---|---|
 | `-dr-servers` | _(none)_ | Comma-separated `DRSRV1=host:port,DRSRV2=host:port,...` DR server list.<br>Providing this flag enables DR mode for all generated files. |
-| `-dr-data-dir` | `<data-dir>/dr` | Data directory for DR pservers on DR hosts |
+| `-dr-data-dir` | `<data-dir>/dr` | Data directory for DR FTL Servers on DR hosts |
 
 ### Inspection and conversion flags (`-h info`)
 
@@ -158,7 +158,7 @@ Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` lis
 
 ## Multi-cluster split (9 input files → 3 shards)
 
-The number of shards is determined by the number of `server.properties` files passed on the command line. Every 3 input files → 1 FSK cluster (shard). The primary `tibftlserver-cluster.yaml` always holds the first 3 pservers with FTL realm servers. Every additional group of up to 3 pservers goes into `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, etc. Auxiliary files contain **no realm server entries** — pservers connect to the primary realm cluster via `globals.core.servers`.
+The number of shards is determined by the number of `server.properties` files passed on the command line. Every 3 input files → 1 FSK cluster (shard). The primary `tibftlserver-cluster.yaml` always holds the first 3 FTL Servers with FTL realm servers. Every additional group of up to 3 FTL Servers goes into `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, etc. Auxiliary files contain **no realm server entries** — FTL Servers connect to the primary realm cluster via `globals.core.servers`.
 
 ```
 9 input files → tibftlserver-cluster.yaml      (pserver1–3 + SRV1–3 realm servers)
@@ -174,8 +174,8 @@ The number of shards is determined by the number of `server.properties` files pa
 When `-dr-servers` is provided, DR mode is activated for all output files:
 
 - **`tibftlserver-cluster.yaml`** gains `globals.dr:` (pointing to DR servers), `auto.init.primary.on.first.startup: true`, and `label: PRIMARY_SERVER` on each realm block.
-- **`tibftlserver-cluster-dr.yaml`** is generated with DR servers as `core.servers`, a back-reference `globals.dr:` to the primary servers, and `label: DR_SERVER` on realm blocks. Pservers are named `drpserver1..N`.
-- **`realm.json`** clusters get `dr_enabled: true`, a second pserver set `_DRset` with DR replicas, and transport roles swapped (`dr_transport` populated, `inter_cluster_transport` empty for all pservers).
+- **`tibftlserver-cluster-dr.yaml`** is generated with DR servers as `core.servers`, a back-reference `globals.dr:` to the primary servers, and `label: DR_SERVER` on realm blocks. Their persistence entries are named `drpserver1..N`.
+- **`realm.json`** clusters get `dr_enabled: true`, a second persistence set `_DRset` with DR replicas, and transport roles swapped (`dr_transport` populated, `inter_cluster_transport` empty for all FTL Servers).
 
 With 9 input files, DR aux files are also produced:
 
@@ -194,7 +194,7 @@ With 9 input files, DR aux files are also produced:
 
 ## Examples
 
-Each example is a directory under `examples/` holding one `server-N.properties` per Apache Kafka broker plus a checked-in `output/`. **One input file becomes one pserver**, so pass every broker's properties file — the tool has no flag for the pserver count.
+Each example is a directory under `examples/` holding one `server-N.properties` per Apache Kafka broker plus a checked-in `output/`. **One input file becomes one FTL Server**, so pass every broker's properties file — the tool has no flag for the FTL Server count.
 
 Each command below is written to be run from inside its own example directory, with `--output-dir output`, which is how the checked-in `output/` was produced. Run it that way and you reproduce the checked-in files (the generated YAML embeds the output directory as a relative path, so a different `--output-dir` changes the result). `examples/regen-examples.sh` runs exactly these commands for every example at once.
 
@@ -214,7 +214,7 @@ tibftlimportconfig \
   server-1.properties
 ```
 
-**Output:** `tibftlserver_standalone.yaml` (1 SRV + 1 pserver), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
+**Output:** `tibftlserver_standalone.yaml` (1 SRV + 1 FTL Server), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
 
 ---
 
@@ -242,7 +242,7 @@ tibftlimportconfig \
 
 Two things distinguish a ZooKeeper-mode input from the KRaft examples above:
 
-- The broker identifies itself with `broker.id`, the key KRaft later renamed to `node.id`. FSK reads `node.id` only, so the tool renames it in place and notes the rename in the `# Node ID:` header of the generated `kof.broker.N.properties`. Without this, the pserver refuses to start with `kof.broker.properties: node.id is required and must be a non-negative integer`.
+- The broker identifies itself with `broker.id`, the key KRaft later renamed to `node.id`. FSK reads `node.id` only, so the tool renames it in place and notes the rename in the `# Node ID:` header of the generated `kof.broker.N.properties`. Without this, the FTL Server refuses to start with `kof.broker.properties: node.id is required and must be a non-negative integer`.
 - The `zookeeper.*` keys go to `unsupported.properties`. FSK has no ZooKeeper; the cluster membership and metadata ZooKeeper holds for Apache Kafka are FTL-native.
 
 Generated reference output: [`examples/03-zk-single-node-plaintext/output/`](examples/03-zk-single-node-plaintext/output/)
@@ -255,7 +255,7 @@ tibftlimportconfig \
   server-1.properties
 ```
 
-**Output:** `tibftlserver_standalone.yaml` (1 SRV + 1 pserver), `realm.json`, `kof.broker.1.properties` (`node.id=0`, from `broker.id=0`), `unsupported.properties`
+**Output:** `tibftlserver_standalone.yaml` (1 SRV + 1 FTL Server), `realm.json`, `kof.broker.1.properties` (`node.id=0`, from `broker.id=0`), `unsupported.properties`
 
 ---
 
@@ -412,7 +412,7 @@ tibftlimportconfig \
 
 ### 11 — 9-broker scale-out (3 shards)
 
-**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller, nodes 4–9 are broker-only; SASL_SSL PLAIN + OAuth2 + mTLS listeners. The 9 input files map to 9 pservers across 3 FSK shards (`kof.cluster.0` / `.1` / `.2`).
+**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller, nodes 4–9 are broker-only; SASL_SSL PLAIN + OAuth2 + mTLS listeners. The 9 input files map to 9 FTL Servers across 3 FSK shards (`kof.cluster.0` / `.1` / `.2`).
 
 The inputs declare secured Apache Kafka listeners, but **no FTL security flags are passed on the command line on purpose**: this example is about the sharding split, so the output stays minimal. That is why there is no `tibftlserver-cluster-secure.yaml` here — only an `ftl-users.txt` derived from the SASL PLAIN users in the inputs. [Example 12](#12--9-broker-full-security-stack-3-shards) is the same nine inputs *with* the security flags supplied, and that is where the secure YAML appears.
 
@@ -434,7 +434,7 @@ tibftlimportconfig \
 
 ### 12 — 9-broker, full security stack (3 shards)
 
-**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–9 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). The 9 input files map to 9 pservers across 3 FSK shards. Same inputs as example 11, with the FTL security flags supplied.
+**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–9 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). The 9 input files map to 9 FTL Servers across 3 FSK shards. Same inputs as example 11, with the FTL security flags supplied.
 
 Generated reference output: [`examples/12-9broker-secure/output/`](examples/12-9broker-secure/output/)
 
@@ -548,14 +548,14 @@ Same inputs and same `-core-servers` as example 02, so `diff output output-dr` s
 ```
 tibftlserver-cluster.yaml              (primary: globals.dr + PRIMARY_SERVER labels on realm blocks)
 tibftlserver-cluster-dr.yaml           (DR replica: DRSRV1–3 as core.servers, DR_SERVER labels, drpserver1–3)
-realm.json                    (dr_enabled: true; _setA primary + _DRset DR pserver sets)
+realm.json                    (dr_enabled: true; _setA primary + _DRset DR persistence sets)
 kof.broker.{1,2,3}.properties
 unsupported.properties
 ```
 
 ### Secure 9-broker + DR (3 shards)
 
-Combine the example 12 flags above with `-dr-servers` to generate DR-enabled output for a 9-pserver, 3-shard deployment. Produces six cluster YAML files (primary + DR, each across three files) and a `realm.json` with `dr_enabled: true` on all three clusters.
+Combine the example 12 flags above with `-dr-servers` to generate DR-enabled output for a 9-server, 3-shard deployment. Produces six cluster YAML files (primary + DR, each across three files) and a `realm.json` with `dr_enabled: true` on all three clusters.
 
 ---
 
@@ -563,7 +563,7 @@ Combine the example 12 flags above with `-dr-servers` to generate DR-enabled out
 
 ### `tibftlserver-cluster.yaml`
 
-Primary cluster with realm servers (SRV1–SRV3) and first 3 pservers. Realm server names and ports
+Primary cluster with realm servers (SRV1–SRV3) and first 3 FTL Servers. Realm server names and ports
 both come from `-core-servers`; if that flag is omitted the names default to `SRV1–SRV3` and the
 ports are derived from the cluster in 5600–5699. The `-n` argument is the `servers:` key, which is always the
 core-server name:
@@ -600,7 +600,7 @@ This applies to every cluster YAML the tool writes — primary, secure, and DR.
 
 **Server logging.** Every server carries an `ftlserver.properties` block with the process-wide
 logging settings. `loglevel` is set to `info` and reaches each service in the process that does not
-name a level of its own — the pserver above does, and keeps
+name a level of its own — the persistence service above does, and keeps
 `connections:info;kof:info;durables:info;store:info`; the realm service does not, so it follows the
 server.
 
@@ -612,8 +612,8 @@ unset, and `tibftlserver` rejects a `logfile` given without them. The suggested 
 Auxiliary and DR servers get the same block; DR uses `-dr-data-dir` for the suggested path.
 
 **Schema daemon (`-tibschemad`).** With the flag set, every server that carries a realm block also
-gets a schema pserver and a `- tibschemad:` entry. No extra `tibftlserver` processes and no extra
-ports — the schema pserver rides the process that already hosts the FSK pserver, so a 3-broker
+gets a second persistence service and a `- tibschemad:` entry. No extra `tibftlserver` processes and
+no extra ports — the schema persistence rides the process that already hosts the FSK one, so a 3-broker
 conversion is still three servers:
 
 ```yaml
@@ -641,12 +641,12 @@ servers:
 
 `cluster.size` is the number of realm servers in the file — 1 for a standalone server, 3 for a
 cluster. The block is written to the primary and secure YAMLs. Auxiliary files never get it, since
-their pservers have no realm entry to attach a schema daemon to, and DR files are not covered yet.
+their servers have no realm entry to attach a schema daemon to, and DR files are not covered yet.
 `auth.type` is always `none` for now; OAuth options for `tibschemad` are a later addition.
 
 ### `tibftlserver-cluster-auxN.yaml`
 
-Auxiliary pserver groups. Each file references the same `globals.core.servers` as the primary. No realm entries at all — these pservers join the primary realm cluster.
+Auxiliary FTL Server groups. Each file references the same `globals.core.servers` as the primary. No realm entries at all — these FTL Servers join the primary realm cluster.
 
 ```sh
 tibftlserver -c tibftlserver-cluster-aux1.yaml -n PSRV4
@@ -679,7 +679,7 @@ onto each per-server `- realm:` entry, since there is no shared `services:` bloc
 
 ### `realm.json`
 
-Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores per cluster (`kof.data.store.N`, `kof.sync.store.N`, `kof.meta.store.N`), and pservers distributed across clusters.
+Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores per cluster (`kof.data.store.N`, `kof.sync.store.N`, `kof.meta.store.N`), and FTL Servers distributed across clusters.
 
 Each cluster is generated with `disk_persistence: async`; `-disk-persistence` selects `sync` or
 `in-memory` instead. Every store then overrides the cluster explicitly:
@@ -705,13 +705,13 @@ is already running:
 tibrealmadmin --server localhost:5600 --realm _default_realm upload-realm realm.json
 ```
 
-In DR mode, each cluster has `dr_enabled: true` and two pserver sets: `_setA` (primary) and `_DRset` (DR replicas).
+In DR mode, each cluster has `dr_enabled: true` and two persistence sets: `_setA` (primary) and `_DRset` (DR replicas).
 
 ### `kof.broker.N.properties`
 
-One file per pserver (N is 1-based). Contains only properties that pass the FSK broker properties whitelist: listener/security keys in the section 1 allowlist, plus general broker/topic/tuning keys. Listener keys appear first, followed by remaining properties in their original order.
+One file per FTL Server (N is 1-based). Contains only properties that pass the FSK broker properties whitelist: listener/security keys in the section 1 allowlist, plus general broker/topic/tuning keys. Listener keys appear first, followed by remaining properties in their original order.
 
-Every file carries a `node.id`, because the pserver refuses to start without one
+Every file carries a `node.id`, because the FTL Server refuses to start without one
 (`kof.broker.properties: node.id is required and must be a non-negative integer`). The tool
 guarantees it, and the `# Node ID:` header says where the value came from:
 
@@ -725,13 +725,13 @@ If both `node.id` and `broker.id` are present, `node.id` wins and `broker.id` is
 
 ### `unsupported.properties`
 
-Written when any input properties are not in the FSK whitelist. Contains KRaft cluster-control keys (`process.roles`, `controller.*`, etc.), ZooKeeper-mode keys (`zookeeper.*` — FSK holds cluster membership and metadata in FTL rather than ZooKeeper), and security-domain keys not on the section 1 allowlist (passwords, JAAS configs, handler classes, etc.). Kept for reference — the FSK pserver does not load this file.
+Written when any input properties are not in the FSK whitelist. Contains KRaft cluster-control keys (`process.roles`, `controller.*`, etc.), ZooKeeper-mode keys (`zookeeper.*` — FSK holds cluster membership and metadata in FTL rather than ZooKeeper), and security-domain keys not on the section 1 allowlist (passwords, JAAS configs, handler classes, etc.). Kept for reference — the FTL Server does not load this file.
 
 ---
 
 ## Example configs
 
-| Directory | Nodes | Auth | pservers |
+| Directory | Nodes | Auth | FTL Servers |
 |---|---|---|---|
 | `examples/01-single-node-plaintext/` | 1 (broker+controller) | PLAINTEXT | 1 |
 | `examples/02-3broker-plaintext/` | 3 (broker+controller) | PLAINTEXT | 3 |

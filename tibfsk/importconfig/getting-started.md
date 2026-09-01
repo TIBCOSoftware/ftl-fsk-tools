@@ -7,18 +7,18 @@ sidebar_label: Getting Started
 # Getting Started with `tibftlimportconfig`
 
 `tibftlimportconfig` converts Kafka broker `server.properties` files into the FTL artifacts
-needed to run a FSK-enabled pserver cluster. Pass one properties file per broker; the
+needed to run a FSK-enabled FTL Server cluster. Pass one properties file per broker; the
 tool generates:
 
 | File | Purpose |
 |---|---|
-| `tibftlserver-cluster.yaml` | FTL pserver cluster configuration |
+| `tibftlserver-cluster.yaml` | FTL Server cluster configuration |
 | `realm.json` | FTL realm with `kof.cluster` definition |
-| `kof.broker.N.properties` | Per-pserver broker properties (1-based) |
+| `kof.broker.N.properties` | Broker properties, one per FTL Server (1-based) |
 | `unsupported.properties` | Settings with no FSK equivalent (reference only) |
 | `tibftlserver-cluster-secure.yaml` | TLS/auth overlay (when security flags are provided) |
 
-A single-broker conversion produces one pserver — a standalone server rather than a cluster — so
+A single-broker conversion produces one FTL Server — a standalone server rather than a cluster — so
 its YAMLs are named `tibftlserver_standalone.yaml` and `tibftlserver_standalone-secure.yaml`.
 
 Each scenario below builds on the previous one. Start with the simplest setup and
@@ -27,7 +27,7 @@ advance as your environment requires.
 ## Before you start
 
 Every step runs end to end: bring up the Apache Kafka brokers the `server.properties` describes,
-convert the configuration, then start the FSK servers on the result. Eight things hold for all twelve.
+convert the configuration, then start the FTL Servers on the result. Eight things hold for all twelve.
 
 **`tibftlimportconfig`.** Every `tibftlimportconfig` command below is the binary checked in at
 `bin/tibftlimportconfig` (linux/amd64) — no build step is needed. Put it on your `PATH`:
@@ -92,7 +92,7 @@ adds a separate `INTERNAL` listener for inter-broker traffic so that both client
 through. Either way the key itself is reported in `unsupported.properties`.
 
 **Stop Kafka before starting FSK.** The tool translates the client-facing listeners faithfully, so
-the FSK pservers bind the *same* ports the brokers were just using — 9092 in the single-node steps,
+the FTL Servers bind the *same* ports the brokers were just using — 9092 in the single-node steps,
 9092/9102/9112 across the three brokers below, plus 9094/9104/9114 or 9095/9105/9115 wherever a
 second client listener is configured. Every 3-node step follows that convention: broker *n* takes
 each of broker 1's ports plus `10 × (n − 1)`. On one host the two cannot run at once:
@@ -104,10 +104,10 @@ each of broker 1's ports plus `10 × (n − 1)`. On one host the two cannot run 
 Running the brokers first is not required to convert a file — it proves the `server.properties` is
 a valid Kafka configuration before you translate it.
 
-**And stop FSK before the next step.** The same collision runs the other way: the steps reuse the
-same ports, so a server left over from Step 1 is what makes Step 2 fail to bind. Nothing carries
-from one step to the next, so each ends with a *Shut down* section — `tibftladmin -x` for the
-single-node steps, `-xc` for the clusters.
+**And stop the FTL Servers before the next step.** The same collision runs the other way: the steps
+reuse the same ports, so a server left over from Step 1 is what makes Step 2 fail to bind. Nothing
+carries from one step to the next, so each ends with a *Shut down the FTL Server(s)* section —
+`tibftladmin -x` for the single-node steps, `-xc` for the clusters.
 
 **Start `tibftlserver` from the directory you ran `tibftlimportconfig` in.** The generated YAML
 records `initial.realm.config` and `kof.broker.properties` exactly as they were passed —
@@ -130,7 +130,7 @@ localhost:9092 (id: 1 rack: null isFenced: false) -> (
 
 One line per broker that answered, so the same command is also the membership check in the 3-node
 steps. `kafka-cluster.sh cluster-id --bootstrap-server localhost:9092` is a shorter alternative
-when a plain yes will do. Both work unchanged against FSK once it is running — the pservers speak
+when a plain yes will do. Both work unchanged against FSK once it is running — the FTL Servers speak
 the Kafka protocol on the very ports the brokers had — which makes them the most direct proof that
 the conversion took over.
 
@@ -154,16 +154,16 @@ tibftladmin --ftlserver "$FTLS" --status
 ```
 
 `--available` is the one-line health check — it prints `FTLserver is available` and exits 0.
-`--status` prints the server's `Mode:` and, under *Cluster Members*, one block per FTL server
+`--status` prints the server's `Mode:` and, under *Cluster Members*, one block per FTL Server
 carrying its `Status:` and naming the `Leader:`; that is the check to use in the 3-node steps.
 `--server_status` is the same without the cluster section.
 
 How you reach the realm service depends on the step, because the tool's policy is that securing a
-Kafka listener secures the FTL servers too. Steps 1–4 configure no security, so the realm service
+Kafka listener secures the FTL Servers too. Steps 1–4 configure no security, so the realm service
 is plain `http://` and takes no credentials — that is the form shown above. Steps 5–12 pass
 `--tls-cert`, which puts TLS on the realm service as well, so those need `https://` and either
 `--tls.trust.file <ca.pem>` or `-te` to trust the certificate. They also authenticate the caller,
-by whichever mechanism the step gave the FTL servers:
+by whichever mechanism the step gave the FTL Servers:
 
 | Step | Realm authenticates you by | `tibftladmin` flags |
 |---|---|---|
@@ -177,7 +177,7 @@ authenticates and is then refused with *403 Forbidden*, so the user you administ
 the `ftl-admin` role. And when you pass `--auth-users-file`, that file is entirely yours to get
 right — the tool only writes its own `ftl-users.txt` (`admin: ftl-admin-pw, ftl-admin` and
 `internal: internal-pw, ftl-internal`) when you do *not* pass one. A users file with no roles at
-all stops the FTL server from starting, with *Authentication is required, but this server has no
+all stops the FTL Server from starting, with *Authentication is required, but this server has no
 way to authenticate itself to other servers*.
 
 ---
@@ -266,9 +266,9 @@ The `unsupported.properties` file lists any settings that have no FSK equivalent
 (such as the `CONTROLLER` listener entry). Review it for reference — those settings
 do not affect FSK behavior.
 
-### Start the FSK servers
+### Start the FTL Server
 
-Stop Kafka first — the pserver is about to bind port 9092:
+Stop Kafka first — the FTL Server is about to bind port 9092:
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -285,7 +285,7 @@ No realm upload step: the YAML points `initial.realm.config` at the generated `r
 server seeds the realm itself on first startup. Kafka clients can now connect to `localhost:9092`
 as before.
 
-Confirm both halves are up — the FTL server, then the Kafka port it now serves:
+Confirm both halves are up — the FTL Server, then the Kafka port it now serves:
 
 ```bash
 FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
@@ -303,9 +303,9 @@ localhost:9092 (id: 1 rack: null isFenced: false) -> (
 That second line is the same command that checked the broker earlier, against the same port,
 now answered by FSK.
 
-### Shut down
+### Shut down the FTL Server
 
-Nothing carries over to the next step, so stop the server: it is holding both the realm port and the Kafka port the next step wants.
+Nothing carries over to the next step, so stop the FTL Server: it is holding both the realm port and the Kafka port the next step wants.
 
 ```bash
 FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
@@ -313,7 +313,7 @@ FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standal
 tibftladmin --ftlserver "$FTLS" -x
 ```
 
-`-x` (`--shutdown`) stops the server process.
+`-x` (`--shutdown`) stops the FTL Server process.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -325,7 +325,7 @@ or [Step 3](#step-3--single-node-plaintext-zookeeper) if your brokers still run 
 ## Step 2 — 3-node plaintext cluster (KRaft)
 
 Scale out to a 3-broker KRaft cluster. Pass one `server.properties` file per broker;
-the tool derives the pserver count from the file count.
+the tool derives the FTL Server count from the file count.
 
 ### Kafka server.properties (broker 1 of 3)
 
@@ -433,14 +433,14 @@ Writing file: ./kof-output/realm.json
 All kof.broker.*.properties files are processed successfully.
 ```
 
-The generated `tibftlserver-cluster.yaml` contains three pserver entries (`SRV1`, `SRV2`,
+The generated `tibftlserver-cluster.yaml` contains three FTL Server entries (`SRV1`, `SRV2`,
 `SRV3`) with FTL ports derived from the cluster in the 5600–5799 range — the same brokers
 always yield the same ports, so re-running the tool does not move them. To pin specific
 ports use `--core-servers SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`.
 
-### Start the FSK servers
+### Start the FTL Servers
 
-Stop the brokers first — the three pservers take over ports 9092, 9102 and 9112:
+Stop the brokers first — the three FTL Servers take over ports 9092, 9102 and 9112:
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -495,18 +495,18 @@ Status:                   online
 ...
 ```
 
-One block per FTL server, each with its own `Status:`, and a single `Leader:` above them — so a
+One block per FTL Server, each with its own `Status:`, and a single `Leader:` above them — so a
 member that never joined shows up as a missing block rather than as silence. The Kafka side is
-the same three-broker check as before, now answered by the pservers:
+the same three-broker check as before, now answered by the FTL Servers:
 
 ```bash
 "$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
   --bootstrap-server localhost:9092,localhost:9102,localhost:9112 | grep 'id:'
 ```
 
-### Shut down
+### Shut down the FTL Servers
 
-Nothing carries over to the next step, so stop the server: it is holding both the realm port and the Kafka port the next step wants.
+Nothing carries over to the next step, so stop the FTL Servers: between them they hold the realm port and all three Kafka ports the next step wants.
 
 ```bash
 FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster.yaml)"
@@ -514,7 +514,7 @@ FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster
 tibftladmin --ftlserver "$FTLS" -xc
 ```
 
-`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+`-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -568,7 +568,7 @@ transaction.state.log.min.isr=1
 No `process.roles` and no `CONTROLLER` listener: the controller is elected through ZooKeeper.
 `PLAINTEXT` is the only listener and also carries inter-broker traffic, which is the one case
 where the tool keeps a listener that `inter.broker.listener.name` names — stripping it would
-leave the pserver nothing to bind. It is also why Step 1's advice to call the client listener
+leave the FTL Server nothing to bind. It is also why Step 1's advice to call the client listener
 `CLIENT` rather than `PLAINTEXT` does not apply here; a ZooKeeper-mode broker conventionally
 has exactly this listener.
 
@@ -644,7 +644,7 @@ zookeeper.connect=localhost:2181
 zookeeper.connection.timeout.ms=18000
 ```
 
-### Start the FSK servers
+### Start the FTL Server
 
 Stop the broker, then ZooKeeper, then start the standalone server:
 
@@ -659,9 +659,9 @@ That order matters only for the log: a broker whose ZooKeeper session drops whil
 running writes a stream of connection failures on the way down. Nothing takes ZooKeeper's place
 on the FSK side — the realm server the YAML starts holds the cluster metadata itself.
 
-### Shut down
+### Shut down the FTL Server
 
-Nothing carries over to the next step, so stop the server: it is holding both the realm port and the Kafka port the next step wants.
+Nothing carries over to the next step, so stop the FTL Server: it is holding both the realm port and the Kafka port the next step wants.
 
 ```bash
 FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
@@ -669,7 +669,7 @@ FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standal
 tibftladmin --ftlserver "$FTLS" -x
 ```
 
-`-x` (`--shutdown`) stops the server process.
+`-x` (`--shutdown`) stops the FTL Server process.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -785,13 +785,13 @@ Writing file: ./kof-output/realm.json
 All kof.broker.*.properties files are processed successfully.
 ```
 
-Three pservers, exactly as in Step 2. Each broker's `broker.id` becomes the `node.id` of the
+Three FTL Servers, exactly as in Step 2. Each broker's `broker.id` becomes the `node.id` of the
 matching `kof.broker.N.properties`, and the `zookeeper.*` keys are collected once in
 `unsupported.properties` rather than repeated per broker.
 
-### Start the FSK servers
+### Start the FTL Servers
 
-Stop the brokers and ZooKeeper — the three pservers are about to take over 9092, 9102 and 9112:
+Stop the brokers and ZooKeeper — the three FTL Servers are about to take over 9092, 9102 and 9112:
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -811,9 +811,9 @@ tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV3
 All three share one YAML and one `realm.json`; whichever starts first seeds the realm and the
 other two join it. The cluster is available once two of the three are up.
 
-### Shut down
+### Shut down the FTL Servers
 
-Nothing carries over to the next step, so stop the server: it is holding both the realm port and the Kafka port the next step wants.
+Nothing carries over to the next step, so stop the FTL Servers: between them they hold the realm port and all three Kafka ports the next step wants.
 
 ```bash
 FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster.yaml)"
@@ -821,7 +821,7 @@ FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster
 tibftladmin --ftlserver "$FTLS" -xc
 ```
 
-`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+`-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -932,7 +932,7 @@ The `--auth-users-file` points to an FTL users file that maps usernames extracte
 from the inline JAAS config. The tool writes a `tibftlserver-cluster-secure.yaml` alongside
 the main cluster YAML when TLS or auth flags are supplied.
 
-### Start the FSK servers
+### Start the FTL Server
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -944,9 +944,9 @@ Start from the `-secure` YAML, not the plain one: it is the file that carries th
 paths and the `auth.providers` list. The plain YAML is written too, and is the one to use if you
 want the same topology without security.
 
-### Shut down
+### Shut down the FTL Server
 
-Stop the server before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+Stop the FTL Server before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone-secure.yaml)"
@@ -954,7 +954,7 @@ FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standa
 tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -x
 ```
 
-`-x` (`--shutdown`) stops the server process.
+`-x` (`--shutdown`) stops the FTL Server process.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -1045,7 +1045,7 @@ class to the `oauth` backend automatically. If the handler class is unrecognized
 `RESOLVE-REQUIRED` block in `kof.broker.1.properties` asks you to choose a backend
 (`oauth`, `file`, or `inline`).
 
-### Start the FSK servers
+### Start the FTL Server
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -1057,9 +1057,9 @@ The secure YAML carries the `oauth2.*` globals and the per-server validation key
 reaches the authorization server on its own at startup — check the log for the JWKS fetch if
 tokens are rejected.
 
-### Shut down
+### Shut down the FTL Server
 
-Stop the server before the next step. This step gave the FTL servers no users file, so the realm service authenticates callers by OAuth2 token rather than by password.
+Stop the FTL Server before the next step. This step gave the FTL Server no users file, so the realm service authenticates callers by OAuth2 token rather than by password.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone-secure.yaml)"
@@ -1067,7 +1067,7 @@ FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standa
 tibftladmin --ftlserver "$FTLS" -te --oauth2.token <token> -x
 ```
 
-`-x` (`--shutdown`) stops the server process.
+`-x` (`--shutdown`) stops the FTL Server process.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -1151,10 +1151,10 @@ tibftlimportconfig \
 ```
 
 The tool reads the inline JAAS `user_X` entries from each broker's properties and
-writes them to `ftl-users.txt` (FTL server-to-server auth) and `kafka-users.txt`
+writes them to `ftl-users.txt` (FTL Server-to-server auth) and `kafka-users.txt`
 (Kafka client principals), both in `--output-dir`.
 
-### Start the FSK servers
+### Start the FTL Servers
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -1168,9 +1168,9 @@ Three shells, one per server. The `-secure` YAML is the one that carries the cer
 `auth.providers`; the two generated users files are referenced from it by the paths they had at
 generation time, so keep them where the tool wrote them.
 
-### Shut down
+### Shut down the FTL Servers
 
-Stop the server before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+Stop the FTL Servers before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
@@ -1178,7 +1178,7 @@ FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluste
 tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
 ```
 
-`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+`-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -1272,7 +1272,7 @@ tibftlimportconfig \
 certificates). `--tls-client-cert` and `--tls-client-key` are used for
 server-to-server connections.
 
-### Start the FSK servers
+### Start the FTL Servers
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -1282,14 +1282,14 @@ tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV2
 tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
 ```
 
-The pservers bind each broker's MTLS port (9094 for broker 1) rather than 9092 — there is no
+The FTL Servers bind each broker's MTLS port (9094 for broker 1) rather than 9092 — there is no
 plaintext listener in this configuration to translate. The servers present
 `--tls-client-cert` to each other, so that certificate has to be one the CA in
 `--tls-server-trust` signed, or the cluster will not form.
 
-### Shut down
+### Shut down the FTL Servers
 
-Stop the server before the next step. This step gave the FTL servers no users file, so the realm service authenticates callers by client certificate.
+Stop the FTL Servers before the next step. This step gave the FTL Servers no users file, so the realm service authenticates callers by client certificate.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
@@ -1299,7 +1299,7 @@ tibftladmin --ftlserver "$FTLS" -te \
   --tls.client.private.key /etc/kafka/certs/client.key -xc
 ```
 
-`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+`-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -1410,7 +1410,7 @@ tibftlimportconfig \
 The secure YAML sets `auth.providers: file:/etc/ftl/users.txt,oauth2` so both
 authentication paths are active simultaneously.
 
-### Start the FSK servers
+### Start the FTL Servers
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -1420,13 +1420,13 @@ tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV2
 tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
 ```
 
-Each pserver serves both client ports, 9092 and 9095, from one process — the dual listener carries
+Each FTL Server serves both client ports, 9092 and 9095, from one process — the dual listener carries
 over from the broker configuration. The servers reach the token endpoint at startup, so a failure
 to fetch the JWKS shows up in the startup log rather than at first client connect.
 
-### Shut down
+### Shut down the FTL Servers
 
-Stop the server before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+Stop the FTL Servers before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
@@ -1434,7 +1434,7 @@ FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluste
 tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
 ```
 
-`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+`-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -1527,7 +1527,7 @@ tibftlimportconfig \
   server-3.properties
 ```
 
-### Start the FSK servers
+### Start the FTL Servers
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -1540,9 +1540,9 @@ tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
 `auth.providers` lists `file:` and `mtls` together, so a client authenticates with either a
 username/password or a certificate, depending on which port it connects to — 9092 or 9094.
 
-### Shut down
+### Shut down the FTL Servers
 
-Stop the server before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+Stop the FTL Servers before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
@@ -1550,7 +1550,7 @@ FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluste
 tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
 ```
 
-`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+`-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -1646,7 +1646,7 @@ tibftlimportconfig \
   server-3.properties
 ```
 
-### Start the FSK servers
+### Start the FTL Servers
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -1661,9 +1661,9 @@ password. They authenticate to each other as OAuth2 clients instead, fetching a 
 `--oauth-token-url` with `--oauth-client-id` and `--oauth-client-secret` — which the secure YAML
 writes as `oauth2.svr.client.id` and `oauth2.svr.client.secret`.
 
-### Shut down
+### Shut down the FTL Servers
 
-Stop the server before the next step. This step gave the FTL servers no users file, so the realm service authenticates callers by OAuth2 token rather than by password.
+Stop the FTL Servers before the next step. This step gave the FTL Servers no users file, so the realm service authenticates callers by OAuth2 token rather than by password.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
@@ -1671,7 +1671,7 @@ FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluste
 tibftladmin --ftlserver "$FTLS" -te --oauth2.token <token> -xc
 ```
 
-`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+`-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -1769,7 +1769,7 @@ tibftlimportconfig \
   server-3.properties
 ```
 
-### Start the FSK servers
+### Start the FTL Servers
 
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
@@ -1784,7 +1784,7 @@ Check the `auth.providers` line at the top of the secure YAML before starting: i
 `kafka-users.txt` when the broker properties carried inline JAAS users). All three providers are
 active at once, so a client that authenticates by any one of them is accepted.
 
-### Shut down
+### Shut down the FTL Servers
 
 The last step, so nothing follows this cluster — but leaving it running keeps three Kafka ports
 and a realm port occupied. The `-secure` YAML puts TLS and authentication on the realm service,
@@ -1797,7 +1797,7 @@ FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluste
 tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
 ```
 
-`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+`-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
@@ -1810,8 +1810,8 @@ The command is asynchronous: it returns as soon as the server accepts the reques
 | Flag | Default | Purpose |
 |---|---|---|
 | `--output-dir` | `./kof-output` | Directory for all generated files |
-| `--data-dir` | `/var/tmp/kof/data` | FSK data directory on pserver hosts |
-| `--core-servers` | _(auto)_ | Pin pserver names and ports: `SRV1=host:5600,...` |
+| `--data-dir` | `/var/tmp/kof/data` | FSK data directory on FTL Server hosts |
+| `--core-servers` | _(auto)_ | Pin FTL Server names and ports: `SRV1=host:5600,...` |
 | `--transport-type` | `auto` | FTL transport: `auto` (realm server resolves each connection — dynamic TCP within a cluster, static TCP between clusters and to DR) or `dtcp` (dynamic TCP everywhere) |
 | `--auto` | off | Convert JKS/PKCS12 keystores to PEM automatically |
 | `--migration-config` | off | Also write `kafka-to-kof.properties` for the migration tool |
