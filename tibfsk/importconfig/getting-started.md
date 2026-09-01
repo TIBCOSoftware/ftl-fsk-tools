@@ -164,8 +164,10 @@ How you reach the realm service depends on the scenario, because the tool's poli
 Kafka listener secures the FTL Servers too. Scenarios 1–4 configure no security, so the realm service
 is plain `http://` and takes no credentials — that is the form shown above. Scenarios 5–12 pass
 `--tls-cert`, which puts TLS on the realm service as well, so those need `https://` and either
-`--tls.trust.file <ca.pem>` or `-te` to trust the certificate. They also authenticate the caller,
-by whichever mechanism the scenario gave the FTL Servers:
+`--tls.trust.file <ca.pem>` or `-te` to trust the certificate. They also pass `--tls-ca`, without
+which the FTL Server cannot verify the certificate it presents to its own internal client and
+exits about twenty seconds after startup — see Scenario 5, Step 4. And they authenticate the
+caller, by whichever mechanism the scenario gave the FTL Servers:
 
 | Scenario | Realm authenticates you by | `tibftladmin` flags |
 |---|---|---|
@@ -960,6 +962,7 @@ tibftlimportconfig \
   --output-dir ./kof-output \
   --tls-cert /etc/kafka/certs/server.keystore.pem \
   --tls-key  /etc/kafka/certs/server.keystore.pem \
+  --tls-ca   /etc/kafka/certs/kafka.truststore.pem \
   --auth-users-file /etc/ftl/users.txt \
   server-1.properties
 ```
@@ -967,6 +970,13 @@ tibftlimportconfig \
 The `--auth-users-file` points to an FTL users file that maps usernames extracted
 from the inline JAAS config. The tool writes a `tibftlserver-cluster-secure.yaml` alongside
 the main cluster YAML when TLS or auth flags are supplied.
+
+`--tls-ca` writes `tls.client.trust.file`, the trust anchor the FTL Server's own internal
+client uses to verify the certificate the server presents to it. Omit it and the server
+starts, runs for about twenty seconds and then dies with
+`Certificate verification failed … (18:self-signed certificate)` followed by
+`tibmux exited … exit status 99` — so it is required, not optional, whenever `--tls-cert`
+is used.
 
 ### Step 5 — Start the FTL Server
 
@@ -1075,6 +1085,7 @@ tibftlimportconfig \
   --output-dir ./kof-output \
   --tls-cert /etc/kafka/certs/server.pem \
   --tls-key  /etc/kafka/certs/server.key \
+  --tls-ca   /etc/kafka/certs/ca.pem \
   --oauth-token-url    https://auth.example.com/oauth/token \
   --oauth-jwks-url     https://auth.example.com/.well-known/jwks.json \
   --oauth-client-id    kof-server \
@@ -1194,6 +1205,7 @@ tibftlimportconfig \
   --output-dir ./kof-output \
   --tls-cert /etc/kafka/certs/server.pem \
   --tls-key  /etc/kafka/certs/server.key \
+  --tls-ca   /etc/kafka/certs/ca.pem \
   --auth-users-file /etc/ftl/users.txt \
   server-1.properties \
   server-2.properties \
@@ -1318,6 +1330,7 @@ tibftlimportconfig \
   --output-dir ./kof-output \
   --tls-cert         /etc/kafka/certs/server.pem \
   --tls-key          /etc/kafka/certs/server.key \
+  --tls-ca           /etc/kafka/certs/ca.pem \
   --tls-server-trust /etc/kafka/certs/ca.pem \
   --tls-client-cert  /etc/kafka/certs/client.pem \
   --tls-client-key   /etc/kafka/certs/client.key \
@@ -1329,6 +1342,13 @@ tibftlimportconfig \
 `--tls-server-trust` sets `tls.server.trust.file` (the CA that signs client
 certificates). `--tls-client-cert` and `--tls-client-key` are used for
 server-to-server connections.
+
+The two trust files are different things: `--tls-server-trust`
+(`tls.server.trust.file`) is the CA that signs *inbound* client certificates, while
+`--tls-ca` (`tls.client.trust.file`) is what the server's own client verifies the
+certificates it *connects to* against — see Scenario 5, Step 4. One CA signs everything
+in this example PKI, so both flags name the same `ca.pem`; with separate CAs they would
+not.
 
 ### Step 5 — Start the FTL Servers
 
@@ -1463,6 +1483,7 @@ tibftlimportconfig \
   --output-dir ./kof-output \
   --tls-cert           /etc/kafka/certs/server.pem \
   --tls-key            /etc/kafka/certs/server.key \
+  --tls-ca             /etc/kafka/certs/ca.pem \
   --auth-users-file    /etc/ftl/users.txt \
   --oauth-token-url    https://auth.example.com/oauth/token \
   --oauth-jwks-url     https://auth.example.com/.well-known/jwks.json \
@@ -1592,6 +1613,7 @@ tibftlimportconfig \
   --output-dir ./kof-output \
   --tls-cert         /etc/kafka/certs/server.pem \
   --tls-key          /etc/kafka/certs/server.key \
+  --tls-ca           /etc/kafka/certs/ca.pem \
   --tls-server-trust /etc/kafka/certs/ca.pem \
   --tls-client-cert  /etc/kafka/certs/client.pem \
   --tls-client-key   /etc/kafka/certs/client.key \
@@ -1716,6 +1738,7 @@ tibftlimportconfig \
   --output-dir ./kof-output \
   --tls-cert           /etc/kafka/certs/server.pem \
   --tls-key            /etc/kafka/certs/server.key \
+  --tls-ca             /etc/kafka/certs/ca.pem \
   --tls-server-trust   /etc/kafka/certs/ca.pem \
   --tls-client-cert    /etc/kafka/certs/client.pem \
   --tls-client-key     /etc/kafka/certs/client.key \
@@ -1846,6 +1869,7 @@ tibftlimportconfig \
   --output-dir ./kof-output \
   --tls-cert           /etc/kafka/certs/server.pem \
   --tls-key            /etc/kafka/certs/server.key \
+  --tls-ca             /etc/kafka/certs/ca.pem \
   --tls-server-trust   /etc/kafka/certs/ca.pem \
   --tls-client-cert    /etc/kafka/certs/client.pem \
   --tls-client-key     /etc/kafka/certs/client.key \
