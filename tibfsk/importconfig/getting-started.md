@@ -27,7 +27,7 @@ advance as your environment requires.
 ## Before you start
 
 Every step runs end to end: bring up the Apache Kafka brokers the `server.properties` describes,
-convert the configuration, then start the FSK servers on the result. Seven things hold for all twelve.
+convert the configuration, then start the FSK servers on the result. Eight things hold for all twelve.
 
 **`tibftlimportconfig`.** Every `tibftlimportconfig` command below is the binary checked in at
 `bin/tibftlimportconfig` (linux/amd64) — no build step is needed. Put it on your `PATH`:
@@ -104,6 +104,11 @@ each of broker 1's ports plus `10 × (n − 1)`. On one host the two cannot run 
 Running the brokers first is not required to convert a file — it proves the `server.properties` is
 a valid Kafka configuration before you translate it.
 
+**And stop FSK before the next step.** The same collision runs the other way: the steps reuse the
+same ports, so a server left over from Step 1 is what makes Step 2 fail to bind. Nothing carries
+from one step to the next, so each ends with a *Shut down* section — `tibftladmin -x` for the
+single-node steps, `-xc` for the clusters.
+
 **Start `tibftlserver` from the directory you ran `tibftlimportconfig` in.** The generated YAML
 records `initial.realm.config` and `kof.broker.properties` exactly as they were passed —
 `kof-output/realm.json` for `--output-dir ./kof-output` — so those paths resolve against the working
@@ -153,10 +158,27 @@ tibftladmin --ftlserver "$FTLS" --status
 carrying its `Status:` and naming the `Leader:`; that is the check to use in the 3-node steps.
 `--server_status` is the same without the cluster section.
 
-Two things save trouble here. The generated realms carry no authentication, so no `-u` or `-pw`
-is needed even though `tibftladmin` always sends credentials. And none of this is affected by the
-SASL or TLS a step configures: that secures the pserver's Kafka port, while `tibftladmin` reaches
-the realm service over plain HTTP.
+How you reach the realm service depends on the step, because the tool's policy is that securing a
+Kafka listener secures the FTL servers too. Steps 1–4 configure no security, so the realm service
+is plain `http://` and takes no credentials — that is the form shown above. Steps 5–12 pass
+`--tls-cert`, which puts TLS on the realm service as well, so those need `https://` and either
+`--tls.trust.file <ca.pem>` or `-te` to trust the certificate. They also authenticate the caller,
+by whichever mechanism the step gave the FTL servers:
+
+| Step | Realm authenticates you by | `tibftladmin` flags |
+|---|---|---|
+| 1–4 | nothing | — |
+| 5, 7, 9, 10, 12 | password, from `--auth-users-file` | `-u <user> -pw <password>` |
+| 6, 11 | OAuth2 token | `--oauth2.token <token>` |
+| 8 | client certificate | `--tls.client.cert` + `--tls.client.private.key` |
+
+Two traps here. Authentication is not authorization: an account that exists but holds no role
+authenticates and is then refused with *403 Forbidden*, so the user you administer with must carry
+the `ftl-admin` role. And when you pass `--auth-users-file`, that file is entirely yours to get
+right — the tool only writes its own `ftl-users.txt` (`admin: ftl-admin-pw, ftl-admin` and
+`internal: internal-pw, ftl-internal`) when you do *not* pass one. A users file with no roles at
+all stops the FTL server from starting, with *Authentication is required, but this server has no
+way to authenticate itself to other servers*.
 
 ---
 
@@ -280,6 +302,20 @@ localhost:9092 (id: 1 rack: null isFenced: false) -> (
 
 That second line is the same command that checked the broker earlier, against the same port,
 now answered by FSK.
+
+### Shut down
+
+Nothing carries over to the next step, so stop the server: it is holding both the realm port and the Kafka port the next step wants.
+
+```bash
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -x
+```
+
+`-x` (`--shutdown`) stops the server process.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
 **→ Continue to [Step 2](#step-2--3-node-plaintext-cluster-kraft) to scale the same configuration to three brokers,
 or [Step 3](#step-3--single-node-plaintext-zookeeper) if your brokers still run under ZooKeeper.**
@@ -468,6 +504,20 @@ the same three-broker check as before, now answered by the pservers:
   --bootstrap-server localhost:9092,localhost:9102,localhost:9112 | grep 'id:'
 ```
 
+### Shut down
+
+Nothing carries over to the next step, so stop the server: it is holding both the realm port and the Kafka port the next step wants.
+
+```bash
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -xc
+```
+
+`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
 **→ Continue to [Step 3](#step-3--single-node-plaintext-zookeeper) for the ZooKeeper equivalents of Steps 1 and 2,
 or skip to [Step 5](#step-5--single-node-sasl-plain-over-tls) to start adding security.**
 
@@ -609,6 +659,20 @@ That order matters only for the log: a broker whose ZooKeeper session drops whil
 running writes a stream of connection failures on the way down. Nothing takes ZooKeeper's place
 on the FSK side — the realm server the YAML starts holds the cluster metadata itself.
 
+### Shut down
+
+Nothing carries over to the next step, so stop the server: it is holding both the realm port and the Kafka port the next step wants.
+
+```bash
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -x
+```
+
+`-x` (`--shutdown`) stops the server process.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
 **→ Continue to [Step 4](#step-4--3-node-plaintext-cluster-zookeeper) for the same configuration across three brokers.**
 
 ---
@@ -747,6 +811,20 @@ tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV3
 All three share one YAML and one `realm.json`; whichever starts first seeds the realm and the
 other two join it. The cluster is available once two of the three are up.
 
+### Shut down
+
+Nothing carries over to the next step, so stop the server: it is holding both the realm port and the Kafka port the next step wants.
+
+```bash
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -xc
+```
+
+`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
 **→ Continue to [Step 5](#step-5--single-node-sasl-plain-over-tls) to add authentication and TLS.**
 
 ---
@@ -866,6 +944,22 @@ Start from the `-secure` YAML, not the plain one: it is the file that carries th
 paths and the `auth.providers` list. The plain YAML is written too, and is the one to use if you
 want the same topology without security.
 
+### Shut down
+
+Stop the server before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+
+```bash
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone-secure.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -x
+```
+
+`-x` (`--shutdown`) stops the server process.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
+`admin` is whichever account your `--auth-users-file` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `-te` trusts any certificate the server presents — use `--tls.trust.file <ca.pem>` where that is too loose.
+
 **→ Continue to [Step 6](#step-6--single-node-oauth2) to replace SASL/PLAIN with OAuth2,
 or jump to [Step 7](#step-7--3-node-sasl-plain-cluster) for a 3-node SASL cluster.**
 
@@ -963,6 +1057,22 @@ The secure YAML carries the `oauth2.*` globals and the per-server validation key
 reaches the authorization server on its own at startup — check the log for the JWKS fetch if
 tokens are rejected.
 
+### Shut down
+
+Stop the server before the next step. This step gave the FTL servers no users file, so the realm service authenticates callers by OAuth2 token rather than by password.
+
+```bash
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone-secure.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -te --oauth2.token <token> -x
+```
+
+`-x` (`--shutdown`) stops the server process.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
+The token must come from the same issuer the step configured with `--oauth-token-url`, and the account behind it needs the `ftl-admin` role.
+
 **→ Continue to [Step 8](#step-8--3-node-mutual-tls-mtls) for mTLS, or
 [Step 9](#step-9--3-node-sasl-plain--oauth2-dual-listener) for a dual SASL+OAuth2 setup.**
 
@@ -1057,6 +1167,22 @@ tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
 Three shells, one per server. The `-secure` YAML is the one that carries the certificate paths and
 `auth.providers`; the two generated users files are referenced from it by the paths they had at
 generation time, so keep them where the tool wrote them.
+
+### Shut down
+
+Stop the server before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+
+```bash
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
+```
+
+`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
+`admin` is whichever account your `--auth-users-file` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `-te` trusts any certificate the server presents — use `--tls.trust.file <ca.pem>` where that is too loose.
 
 **→ Continue to [Step 8](#step-8--3-node-mutual-tls-mtls) to add client certificate
 authentication.**
@@ -1160,6 +1286,24 @@ The pservers bind each broker's MTLS port (9094 for broker 1) rather than 9092 �
 plaintext listener in this configuration to translate. The servers present
 `--tls-client-cert` to each other, so that certificate has to be one the CA in
 `--tls-server-trust` signed, or the cluster will not form.
+
+### Shut down
+
+Stop the server before the next step. This step gave the FTL servers no users file, so the realm service authenticates callers by client certificate.
+
+```bash
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -te \
+  --tls.client.cert /etc/kafka/certs/client.pem \
+  --tls.client.private.key /etc/kafka/certs/client.key -xc
+```
+
+`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
+The certificate is the one `--tls-client-cert` named when the config was generated; the realm service checks it against `tls.server.trust.file`.
 
 **→ Continue to [Step 9](#step-9--3-node-sasl-plain--oauth2-dual-listener) for a
 dual-protocol setup, or [Step 10](#step-10--3-node-sasl-plain--mtls) to combine SASL
@@ -1280,6 +1424,22 @@ Each pserver serves both client ports, 9092 and 9095, from one process — the d
 over from the broker configuration. The servers reach the token endpoint at startup, so a failure
 to fetch the JWKS shows up in the startup log rather than at first client connect.
 
+### Shut down
+
+Stop the server before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+
+```bash
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
+```
+
+`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
+`admin` is whichever account your `--auth-users-file` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `-te` trusts any certificate the server presents — use `--tls.trust.file <ca.pem>` where that is too loose.
+
 **→ Continue to [Step 10](#step-10--3-node-sasl-plain--mtls) to combine SASL and mTLS.**
 
 ---
@@ -1379,6 +1539,22 @@ tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
 
 `auth.providers` lists `file:` and `mtls` together, so a client authenticates with either a
 username/password or a certificate, depending on which port it connects to — 9092 or 9094.
+
+### Shut down
+
+Stop the server before the next step. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+
+```bash
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
+```
+
+`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
+`admin` is whichever account your `--auth-users-file` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `-te` trusts any certificate the server presents — use `--tls.trust.file <ca.pem>` where that is too loose.
 
 ---
 
@@ -1484,6 +1660,22 @@ There is no `--auth-users-file` here, so the servers do not carry an internal us
 password. They authenticate to each other as OAuth2 clients instead, fetching a token from
 `--oauth-token-url` with `--oauth-client-id` and `--oauth-client-secret` — which the secure YAML
 writes as `oauth2.svr.client.id` and `oauth2.svr.client.secret`.
+
+### Shut down
+
+Stop the server before the next step. This step gave the FTL servers no users file, so the realm service authenticates callers by OAuth2 token rather than by password.
+
+```bash
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -te --oauth2.token <token> -xc
+```
+
+`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
+The token must come from the same issuer the step configured with `--oauth-token-url`, and the account behind it needs the `ftl-admin` role.
 
 ---
 
@@ -1591,6 +1783,25 @@ Check the `auth.providers` line at the top of the secure YAML before starting: i
 `file:/etc/ftl/users.txt,mtls,oauth2` (plus a second `file:` entry for the generated
 `kafka-users.txt` when the broker properties carried inline JAAS users). All three providers are
 active at once, so a client that authenticates by any one of them is accepted.
+
+### Shut down
+
+The last step, so nothing follows this cluster — but leaving it running keeps three Kafka ports
+and a realm port occupied. The `-secure` YAML puts TLS and authentication on the realm service,
+so stopping it needs `https://`, a trust flag and an account holding the `ftl-admin` role — see
+*Before you start*.
+
+```bash
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
+
+tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
+```
+
+`-xc` (`--shutdown_cluster`) stops every FTL server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
+
+The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
+
+`admin` is whichever account your `--auth-users-file` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `-te` trusts any certificate the server presents — use `--tls.trust.file <ca.pem>` where that is too loose.
 
 ---
 
