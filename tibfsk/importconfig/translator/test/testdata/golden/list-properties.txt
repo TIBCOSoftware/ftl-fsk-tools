@@ -50,11 +50,11 @@ ssl.keystore.certificate.chain  [accept]
     The server certificate chain given inline as PEM. Honored.
 ssl.key.password  [accept]
     Passphrase for the server private key. Honored.
-ssl.keystore.type  [depends]
-    PEM is accepted directly. A Java keystore (JKS or PKCS12) is flagged
-    RESOLVE-REQUIRED, because FSK reads PEM and a Java keystore would silently
-    not work: convert the keystore to PEM (keytool/openssl) and set the type to
-    PEM.
+ssl.keystore.type  [translate]
+    PEM is accepted directly. A Java keystore (JKS or PKCS12) is rewritten to
+    PEM, along with ssl.keystore.location, and the generated file carries the
+    keytool/openssl commands that produce the .pem -- run those (or use --auto)
+    before starting tibftlserver.
 ssl.truststore.location  [accept]
     CA bundle used to verify inbound client certificates when the listener is
     mutual-TLS. Honored.
@@ -62,9 +62,10 @@ ssl.truststore.password  [accept]
     Password for the truststore. Honored.
 ssl.truststore.certificates  [accept]
     Trusted CA certificates given inline as PEM. Honored.
-ssl.truststore.type  [depends]
+ssl.truststore.type  [translate]
     Same as ssl.keystore.type: PEM is accepted; a Java truststore (JKS or
-    PKCS12) is flagged RESOLVE-REQUIRED and must be converted to PEM first.
+    PKCS12) is rewritten to PEM, with the conversion commands in the generated
+    file.
 ssl.client.auth  [accept]
     none/requested/required. 'required' makes the listener mutual-TLS (the
     client certificate is verified).
@@ -105,9 +106,11 @@ ssl.allow.san.changes  [not-applicable]
     not implement this policy.
 
 == SASL authentication ==
-sasl.enabled.mechanisms  [accept]
+sasl.enabled.mechanisms  [depends]
     The SASL mechanisms the listener offers. PLAIN and OAUTHBEARER are
-    supported; SCRAM and GSSAPI are not.
+    supported; SCRAM and GSSAPI are not, and naming one on a listener that
+    speaks SASL is flagged RESOLVE-REQUIRED. On a listener that does not speak
+    SASL the setting offers nothing, so it is commented out rather than flagged.
 sasl.jaas.config  [depends]
     Its meaning depends on the login module it names. PlainLoginModule: the
     inline user_<name>="<password>" entries are read as credentials.

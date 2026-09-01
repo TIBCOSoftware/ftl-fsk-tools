@@ -110,8 +110,9 @@ func TestUnsupportedScan(t *testing.T) {
 }
 
 func TestSummarize(t *testing.T) {
-	// handler class goes to unsupported.properties and is not included in Summarize.
-	// Only authorizer (whitelisted, unrecognized) and keystores (whitelisted, JKS) appear.
+	// The handler class goes to unsupported.properties, and the JKS keystores are
+	// rewritten to PEM, so neither is left to resolve. Only the authorizer
+	// (whitelisted, unrecognized) is something the operator has to answer for.
 	src := "node.id=1\nlisteners=SASL://0.0.0.0:9092\n" +
 		"listener.name.sasl.plain.sasl.server.callback.handler.class=com.acme.MagicAuth\n" +
 		"authorizer.class.name=com.acme.MyAuthorizer\n" +
@@ -120,8 +121,8 @@ func TestSummarize(t *testing.T) {
 		"ssl.truststore.type=JKS\n" +
 		"ssl.truststore.location=/c/kafka.truststore.jks\n"
 	s := Summarize(parseSrc(t, src))
-	if s.Total() != 3 {
-		t.Errorf("Total() = %d, want 3 (1 authorizer + 2 keystores; handler goes to unsupported)", s.Total())
+	if s.Total() != 1 {
+		t.Errorf("Total() = %d, want 1 (the authorizer; keystores convert, handler goes to unsupported)", s.Total())
 	}
 	counts := map[ResolveKind]int{}
 	for _, it := range s.Items {
@@ -129,16 +130,13 @@ func TestSummarize(t *testing.T) {
 		if it.Line == 0 {
 			t.Errorf("item %s has no source line", it.Key)
 		}
-		if it.Kind == KindKeystore && it.Note == "" {
-			t.Errorf("keystore item %s should carry its .location file", it.Key)
-		}
 	}
-	if counts[KindHandler] != 0 || counts[KindAuthorizer] != 1 || counts[KindKeystore] != 2 {
-		t.Errorf("kind counts wrong: %v (want handler=0, authorizer=1, keystore=2)", counts)
+	if counts[KindHandler] != 0 || counts[KindAuthorizer] != 1 || counts[KindKeystore] != 0 {
+		t.Errorf("kind counts wrong: %v (want handler=0, authorizer=1, keystore=0)", counts)
 	}
 
 	// A fully-resolved config has nothing to resolve.
-	clean := "node.id=1\nlisteners=PLAINTEXT://0.0.0.0:9092\nauthorizer.class.name=" + authorizerCanonical + "\n"
+	clean := "node.id=1\nlisteners=PLAINTEXT://0.0.0.0:9092\nauthorizer.class.name=" + AuthorizerCanonical + "\n"
 	if got := Summarize(parseSrc(t, clean)).Total(); got != 0 {
 		t.Errorf("clean config Total() = %d, want 0", got)
 	}
@@ -210,14 +208,14 @@ func TestUnrecognizedHandler_GoesToUnsupported(t *testing.T) {
 // Handler classes and oauth params go to unsupported and do not participate in idempotency.
 func TestIdempotent_CanonicalAuthorizer(t *testing.T) {
 	src := "node.id=1\nlisteners=SASL://0.0.0.0:9092\n" +
-		"authorizer.class.name=" + authorizerCanonical + "\n"
+		"authorizer.class.name=" + AuthorizerCanonical + "\n"
 	out1, _ := renderProps(t, src)
-	if !strings.Contains(out1, "authorizer.class.name="+authorizerCanonical+"\n") {
+	if !strings.Contains(out1, "authorizer.class.name="+AuthorizerCanonical+"\n") {
 		t.Errorf("canonical authorizer value not preserved:\n%s", out1)
 	}
 	// Re-run on the generated output: value still preserved.
 	out2, _ := renderProps(t, out1)
-	if !strings.Contains(out2, "authorizer.class.name="+authorizerCanonical+"\n") {
+	if !strings.Contains(out2, "authorizer.class.name="+AuthorizerCanonical+"\n") {
 		t.Errorf("re-run did not preserve canonical authorizer (not idempotent):\n%s", out2)
 	}
 }

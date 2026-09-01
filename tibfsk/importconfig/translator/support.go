@@ -89,19 +89,19 @@ var propSections = []struct {
 				"The server certificate chain given inline as PEM. Honored."},
 			{"ssl.key.password", DispAccept,
 				"Passphrase for the server private key. Honored."},
-			{"ssl.keystore.type", DispDepends,
-				"PEM is accepted directly. A Java keystore (JKS or PKCS12) is flagged RESOLVE-REQUIRED, " +
-					"because FSK reads PEM and a Java keystore would silently not work: convert the keystore " +
-					"to PEM (keytool/openssl) and set the type to PEM."},
+			{"ssl.keystore.type", DispTranslate,
+				"PEM is accepted directly. A Java keystore (JKS or PKCS12) is rewritten to PEM, along with " +
+					"ssl.keystore.location, and the generated file carries the keytool/openssl commands that " +
+					"produce the .pem -- run those (or use --auto) before starting tibftlserver."},
 			{"ssl.truststore.location", DispAccept,
 				"CA bundle used to verify inbound client certificates when the listener is mutual-TLS. Honored."},
 			{"ssl.truststore.password", DispAccept,
 				"Password for the truststore. Honored."},
 			{"ssl.truststore.certificates", DispAccept,
 				"Trusted CA certificates given inline as PEM. Honored."},
-			{"ssl.truststore.type", DispDepends,
-				"Same as ssl.keystore.type: PEM is accepted; a Java truststore (JKS or PKCS12) is flagged " +
-					"RESOLVE-REQUIRED and must be converted to PEM first."},
+			{"ssl.truststore.type", DispTranslate,
+				"Same as ssl.keystore.type: PEM is accepted; a Java truststore (JKS or PKCS12) is rewritten " +
+					"to PEM, with the conversion commands in the generated file."},
 			{"ssl.client.auth", DispAccept,
 				"none/requested/required. 'required' makes the listener mutual-TLS (the client certificate is verified)."},
 			{"ssl.enabled.protocols", DispAccept,
@@ -135,8 +135,11 @@ var propSections = []struct {
 	{
 		Name: "SASL authentication",
 		Props: []PropSupport{
-			{"sasl.enabled.mechanisms", DispAccept,
-				"The SASL mechanisms the listener offers. PLAIN and OAUTHBEARER are supported; SCRAM and GSSAPI are not."},
+			{"sasl.enabled.mechanisms", DispDepends,
+				"The SASL mechanisms the listener offers. PLAIN and OAUTHBEARER are supported; SCRAM and " +
+					"GSSAPI are not, and naming one on a listener that speaks SASL is flagged RESOLVE-REQUIRED. " +
+					"On a listener that does not speak SASL the setting offers nothing, so it is commented out " +
+					"rather than flagged."},
 			{"sasl.jaas.config", DispDepends,
 				"Its meaning depends on the login module it names. PlainLoginModule: the inline " +
 					"user_<name>=\"<password>\" entries are read as credentials. OAuthBearerLoginModule: " +

@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -50,12 +49,10 @@ func AutoResolve(cfg *BrokerConfig, log io.Writer) AutoReport {
 func autoResolve(cfg *BrokerConfig, log io.Writer, run commandRunner) AutoReport {
 	var r AutoReport
 
-	// Convert JKS/PKCS12 keystores to PEM where the files are present.
-	for _, k := range cfg.SettingKeys {
-		if !isKeystoreTypeKey(k) || !isJavaKeystore(cfg.Settings[k]) {
-			continue
-		}
-		switch convertOneKeystore(cfg, k, log, run) {
+	// NormalizeKeystores already rewrote the config to the PEM form and recorded
+	// what it rewrote; --auto is what actually produces the .pem files.
+	for i := range cfg.KeystoreConversions {
+		switch convertOneKeystore(cfg, &cfg.KeystoreConversions[i], log, run) {
 		case keystoreConverted:
 			r.KeystoresConverted++
 		case keystoreSkipped:
@@ -67,38 +64,29 @@ func autoResolve(cfg *BrokerConfig, log io.Writer, run commandRunner) AutoReport
 	return r
 }
 
-// convertOneKeystore converts a single keystore, mutating cfg on success. It returns
-// keystoreConverted, keystoreSkipped (cannot do it here -- file/binary absent), or
-// keystoreFailed (a command errored).
-func convertOneKeystore(cfg *BrokerConfig, typeKey string, log io.Writer, run commandRunner) string {
-	srcType := strings.ToUpper(strings.TrimSpace(cfg.Settings[typeKey]))
-	base := typeKey[:len(typeKey)-len(".type")]
-	locKey := base + ".location"
-	pwKey := base + ".password"
-	kind := "keystore"
-	if strings.Contains(strings.ToLower(typeKey), "truststore") {
-		kind = "truststore"
-	}
-	loc := cfg.Settings[locKey]
+// convertOneKeystore produces the .pem for a single recorded conversion, marking it
+// Done on success. It returns keystoreConverted, keystoreSkipped (cannot do it here
+// -- file/binary absent), or keystoreFailed (a command errored). The config already
+// names the .pem either way; only the file is at stake here.
+func convertOneKeystore(cfg *BrokerConfig, kc *KeystoreConversion, log io.Writer, run commandRunner) string {
+	srcType := kc.FromType
+	pwKey := keystoreBase(kc.TypeKey) + ".password"
+	kind := kc.Kind
+	loc := kc.FromLoc
 	pw := cfg.Settings[pwKey]
 
-	// Skips are silent: nothing was changed, and the resolve report already lists
-	// the keystore with "--auto couldn't here". Only real work (a conversion or a
-	// failure) is narrated.
-	if loc == "" {
-		return keystoreSkipped
-	}
+	// Skips are silent: nothing was produced, and the pending-keystore notice
+	// already tells the operator the .pem is still theirs to create. Only real work
+	// (a conversion or a failure) is narrated.
 	if _, err := os.Stat(loc); err != nil {
 		return keystoreSkipped
 	}
 	fmt.Fprintf(log, "auto: converting %s %s -> PEM\n", kind, loc)
 
-	stem := strings.TrimSuffix(loc, filepath.Ext(loc))
-	pem := stem + ".pem"
-	p12 := loc // PKCS12 input is read directly by openssl
+	pem := kc.ToLoc
+	p12 := kc.P12Loc
 
 	if srcType == "JKS" {
-		p12 = stem + ".p12"
 		args := []string{"-importkeystore", "-srckeystore", loc, "-srcstoretype", "JKS",
 			"-destkeystore", p12, "-deststoretype", "PKCS12"}
 		if pw != "" {
@@ -127,10 +115,10 @@ func convertOneKeystore(cfg *BrokerConfig, typeKey string, log io.Writer, run co
 	}
 	fmt.Fprintf(log, "  ok:  wrote %s\n", pem)
 
-	cfg.Settings[typeKey] = "PEM"
-	cfg.Settings[locKey] = pem
-	fmt.Fprintf(log, "  rewrote %s: %s -> PEM\n", typeKey, srcType)
-	fmt.Fprintf(log, "  rewrote %s: %s -> %s\n", locKey, loc, pem)
+	// The config already says PEM and already points at pem; the file now exists to
+	// back it, so this conversion no longer needs the operator.
+	kc.Done = true
+	fmt.Fprintf(log, "  %s=PEM now has its file; %s points at %s\n", kc.TypeKey, kc.LocKey, pem)
 	return keystoreConverted
 }
 

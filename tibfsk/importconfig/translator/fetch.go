@@ -82,6 +82,14 @@ func FetchBrokerConfig(addr string, timeoutMs int) (*BrokerConfig, error) {
 	raw := make(map[string]string, len(entries))
 	orderedKeys := make([]string, 0, len(entries))
 	for _, e := range entries {
+		// DescribeConfigs returns every key the broker knows about, set or not.
+		// Kafka's own defaults are not this operator's configuration, and copying
+		// them in makes the tool report factory values nobody chose --
+		// ssl.keystore.type=JKS on a broker with no TLS at all. Version 0 of the
+		// response leaves Source unset, so Default has to be checked too.
+		if e.Default || e.Source == sarama.SourceDefault {
+			continue
+		}
 		if _, exists := raw[e.Name]; !exists {
 			orderedKeys = append(orderedKeys, e.Name)
 		}
@@ -246,6 +254,9 @@ func brokerConfigFromRaw(raw map[string]string, orderedKeys []string, sourceLabe
 		cfg.Settings[k] = raw[k]
 		cfg.SettingKeys = append(cfg.SettingKeys, k)
 	}
+
+	// Same translation ParseBrokerConfig applies: JKS/PKCS12 -> PEM.
+	NormalizeKeystores(cfg)
 
 	return cfg
 }

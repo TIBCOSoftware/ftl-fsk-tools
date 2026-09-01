@@ -21,14 +21,6 @@ tool generates:
 A single-broker conversion produces one pserver — a standalone server rather than a cluster — so
 its YAMLs are named `tibftlserver_standalone.yaml` and `tibftlserver_standalone-secure.yaml`.
 
-:::tip No properties file handy?
-If the Kafka cluster is already running, `--from-brokers host:port,...` reads each broker's
-effective configuration over the Kafka Admin API instead of from a file, then follows exactly the
-same translation path. It is mutually exclusive with the positional arguments, and the Admin
-connection itself is plaintext and unauthenticated — see
-[Fetching from live brokers](./README.md#fetching-from-live-brokers).
-:::
-
 Each scenario below builds on the previous one. Start with the simplest setup and
 advance as your environment requires.
 
@@ -70,8 +62,7 @@ each of broker 1's ports plus `10 × (n − 1)`. On one host the two cannot run 
 ```
 
 Running the brokers first is not required to convert a file — it proves the `server.properties` is
-a valid Kafka configuration before you translate it. (`--from-brokers` is the exception: there the
-cluster must be up, because that is where the configuration is read from.)
+a valid Kafka configuration before you translate it.
 
 **Start `tibftlserver` from the directory you ran `tibftlimportconfig` in.** The generated YAML
 records `initial.realm.config` and `kof.broker.properties` exactly as they were passed —
@@ -189,8 +180,10 @@ or jump to [Step 4](#step-4--3-node-plaintext-cluster) to scale to a 3-node clus
 Adds username/password authentication and TLS encryption. This is the most common
 starting point for non-production secured environments.
 
-Kafka uses JKS/PKCS12 keystores; FSK reads PEM. The tool flags any keystore it finds
-as `RESOLVE-REQUIRED` and provides the exact conversion commands.
+Kafka uses JKS/PKCS12 keystores; FSK reads PEM. The tool rewrites `ssl.keystore.type` to
+`PEM` and repoints `ssl.keystore.location` at the `.pem` path, then prints the exact
+commands that create that file — creating it is a real conversion, not a rename, and it
+is the one step the tool leaves to you.
 
 ### Kafka server.properties
 
@@ -205,7 +198,7 @@ advertised.listeners=BROKER://localhost:9092
 controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:SSL,BROKER:SASL_SSL
 
-# TLS — JKS keystores (the tool will provide conversion commands)
+# TLS — JKS keystores (the tool rewrites these to PEM and gives you the commands)
 ssl.keystore.type=JKS
 ssl.keystore.location=/etc/kafka/certs/server.keystore.jks
 ssl.keystore.password=keystorePassword123
@@ -230,7 +223,9 @@ transaction.state.log.min.isr=1
 
 ### Convert keystores to PEM
 
-The tool emits `RESOLVE-REQUIRED` blocks with the exact commands. For JKS:
+The generated `kof.broker.1.properties` already names the `.pem` files; these are the
+commands, printed in the file above each setting and again as a `NOTE` at the end of the
+run, that actually create them. For JKS:
 
 ```bash
 # Convert keystore
@@ -1183,7 +1178,6 @@ active at once, so a client that authenticates by any one of them is accepted.
 | `--output-dir` | `./kof-output` | Directory for all generated files |
 | `--data-dir` | `/var/tmp/kof/data` | FSK data directory on pserver hosts |
 | `--core-servers` | _(auto)_ | Pin pserver names and ports: `SRV1=host:5600,...` |
-| `--from-brokers` | _(none)_ | Fetch the config from running brokers instead of files: `host:port,...` |
 | `--transport-type` | `auto` | FTL transport: `auto` (realm server resolves each connection — dynamic TCP within a cluster, static TCP between clusters and to DR) or `dtcp` (dynamic TCP everywhere) |
 | `--auto` | off | Convert JKS/PKCS12 keystores to PEM automatically |
 | `--migration-config` | off | Also write `kafka-to-kof.properties` for the migration tool |
@@ -1205,7 +1199,6 @@ tibftlimportconfig -h all        # every flag, grouped
 | Group | Covers |
 |---|---|
 | `core` | output location, data dir, server addresses, transport |
-| `brokers` | read the config from running Kafka brokers instead of properties files |
 | `tls` | server and client certificates, private keys, trust files |
 | `oauth` | token/JWKS endpoints, claims, audience, server and UI client credentials |
 | `auth` | users file, role map, and the FTL service credentials |
@@ -1222,12 +1215,12 @@ TLS/mTLS flags from steps 2, 6, 8, 9 and 10 are under `tibftlimportconfig -h tls
 When the tool cannot fully convert a setting it writes a `RESOLVE-REQUIRED` block in
 the generated `kof.broker.N.properties` and exits with code 2. Common causes:
 
-- **JKS/PKCS12 keystore** — convert to PEM with the commands in the block, or re-run
-  with `--auto`.
 - **Unrecognized SASL handler class** — set the `=<oauth|file|inline>` value in the
   block and re-run.
-- **Unsupported SASL mechanism** (e.g. GSSAPI, SCRAM) — switch the listener to `PLAIN`
-  or `OAUTHBEARER` in the block.
+- **Unsupported SASL mechanism** (e.g. GSSAPI, SCRAM) on a listener that speaks SASL —
+  switch the listener to `PLAIN` or `OAUTHBEARER` in the block.
+- **Unrecognized `authorizer.class.name`** — a custom Java authorizer FSK cannot run.
+  Set the value to `KofAuthorizer` to use FSK's own ACL enforcement.
 
 After editing, re-run the same `tibftlimportconfig` command. The tool recomputes status on
 every run; once all blocks are resolved the exit code is 0 and output shows:
@@ -1235,6 +1228,18 @@ every run; once all blocks are resolved the exit code is 0 and output shows:
 ```
 All kof.broker.*.properties files are processed successfully.
 ```
+
+Two kinds of setting look like problems but are not:
+
+- **A JKS/PKCS12 keystore is translated, not refused.** The type becomes `PEM` and the
+  location is repointed at the `.pem`, so the file is ACCEPTED. The run ends with a
+  `NOTE` listing every `.pem` that does not exist yet, and the commands that create them
+  sit in the generated file above each setting. Run them — or re-run with `--auto` — before
+  starting `tibftlserver`, or the pserver fails on a missing file.
+- **A setting that is present but doing nothing is commented out, not flagged.** An empty
+  `authorizer.class.name`, a `sasl.enabled.mechanisms` list on a broker where no listener
+  speaks SASL, an `ssl.keystore.type` with no matching `.location` — each is written back
+  as a comment with the reason, and none of them makes the file INVALID.
 
 Settings with no FSK equivalent (Kerberos families, delegation tokens, per-IP
 connection limits) are written to `unsupported.properties` for reference and do not

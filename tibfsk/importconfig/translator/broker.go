@@ -71,6 +71,11 @@ type BrokerConfig struct {
 	// RemovedListeners lists the inter-broker/controller listener entries dropped
 	// from listeners/advertised.listeners/listener.security.protocol.map.
 	RemovedListeners []RemovedListener
+
+	// KeystoreConversions records the JKS/PKCS12 keystores NormalizeKeystores
+	// rewrote to PEM. Settings already holds the rewritten values; this is what
+	// the generated file and the post-run notice need to explain them.
+	KeystoreConversions []KeystoreConversion
 }
 
 // ParseBrokerConfig reads a Kafka broker server.properties file.
@@ -232,6 +237,11 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 		cfg.Settings[k] = raw[k]
 		cfg.SettingKeys = append(cfg.SettingKeys, k)
 	}
+
+	// FSK reads PEM, so a JKS/PKCS12 keystore is a translation rather than a
+	// refusal. Doing it here, as part of building the config, is what keeps the
+	// status, the emitted file and --auto from having to agree separately.
+	NormalizeKeystores(cfg)
 
 	return cfg, nil
 }

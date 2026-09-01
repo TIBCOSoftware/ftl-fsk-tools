@@ -124,12 +124,14 @@ func main() {
 		"add a tibschemad (FTL schema daemon) section to the generated cluster YAML\n"+
 			"    each server gains a schemaN persistence and a tibschemad entry; no extra servers or ports")
 
-	fromBrokers := flag.String("from-brokers", "",
-		"comma-separated host:port list of live Kafka brokers to fetch config from via Admin API\n"+
-			"    e.g. localhost:9092,localhost:9093,localhost:9094\n"+
-			"    mutually exclusive with positional server.properties arguments")
-	fromBrokersTimeout := flag.Int("from-brokers-timeout-ms", 10000,
-		"Admin API connection/request timeout in milliseconds for -from-brokers mode")
+	// Undocumented. Reads the configuration from live Kafka brokers over the Admin
+	// API instead of from server.properties files: a comma-separated host:port list,
+	// mutually exclusive with the positional arguments. What the Admin API reports is
+	// the broker's effective configuration, not the file the operator wrote, so the
+	// translation it produces is harder to reason about than the file-based one.
+	// Kept working, but deliberately absent from every help topic.
+	fromBrokers := flag.String("from-brokers", "", "")
+	fromBrokersTimeout := flag.Int("from-brokers-timeout-ms", 10000, "")
 
 	// Undocumented. Turns off the default cluster's disk index: writes
 	// "default.cluster.disk.index: 'false'" into every realm block of the generated
@@ -387,10 +389,43 @@ func main() {
 			printResolveSummary(os.Stderr, translator.Summarize(cfgs[i]), *outputDir, *autoMode, i+1)
 		}
 	}
+	// A keystore rewritten to PEM is settled as far as the config goes, so it does
+	// not make the file INVALID -- but the .pem does not exist until someone makes
+	// it, and a config pointing at a missing file fails at startup. Say so.
+	for i, cfg := range cfgs {
+		printKeystoreNotice(os.Stderr, cfg, *outputDir, *autoMode, i+1)
+	}
 	if anyInvalid {
 		os.Exit(2)
 	}
 	fmt.Fprintln(os.Stdout, "\nAll kof.broker.*.properties files are processed successfully.")
+}
+
+// printKeystoreNotice lists the Java keystores rewritten to PEM whose .pem file
+// still has to be produced. It is a notice, not a failure: the generated config is
+// correct, the missing piece is a file only the operator (or --auto, on the host
+// that holds the .jks) can create.
+func printKeystoreNotice(w io.Writer, cfg *translator.BrokerConfig, outputDir string, autoRan bool, n int) {
+	pending := translator.PendingKeystores(cfg)
+	if len(pending) == 0 {
+		return
+	}
+	brokerPath := filepath.Join(outputDir, fmt.Sprintf("kof.broker.%d.properties", n))
+	fmt.Fprintf(w, "\nNOTE -- %d Java keystore(s) rewritten to PEM in %s.\n", len(pending), brokerPath)
+	if autoRan {
+		fmt.Fprintln(w, "--auto could not convert these here (the source file is not on this host).")
+	}
+	fmt.Fprintln(w, "The .pem files do not exist yet. Create them before starting tibftlserver:")
+	for i, kc := range pending {
+		fmt.Fprintf(w, "\n  %d. %s\n", i+1, kc.TypeKey)
+		for _, cmd := range kc.Commands() {
+			fmt.Fprintf(w, "       %s\n", cmd)
+		}
+	}
+	if !autoRan {
+		fmt.Fprintf(w, "\nOr re-run with --auto, on a host that has %s, to run these for you.\n",
+			pending[0].FromLoc)
+	}
 }
 
 // printResolveSummary prints, after an INVALID run, a numbered list of the
@@ -403,28 +438,49 @@ func printResolveSummary(w io.Writer, s translator.ResolveSummary, outputDir str
 		s.Total(), brokerPath)
 
 	var autoLines, youLines []int
+	autoAny, youAny := false, false
 	for i, it := range s.Items {
 		val := it.Value
 		if it.Note != "" {
 			val += "   (file: " + it.Note + ")"
 		}
 		what, fix, autoFixable := resolveExplain(it.Kind, autoRan)
-		fmt.Fprintf(w, "\n  %d. line %d:  %s = %s\n", i+1, it.Line, it.Key, val)
+		// A config fetched over the Admin API has no source file, so there is no
+		// line to cite; naming one would just be wrong.
+		if it.Line > 0 {
+			fmt.Fprintf(w, "\n  %d. line %d:  %s = %s\n", i+1, it.Line, it.Key, val)
+		} else {
+			fmt.Fprintf(w, "\n  %d. %s = %s\n", i+1, it.Key, val)
+		}
 		fmt.Fprintf(w, "        %s\n", what)
 		fmt.Fprintf(w, "        %s\n", fix)
 		if autoFixable && !autoRan {
-			autoLines = append(autoLines, it.Line)
+			autoAny = true
+			if it.Line > 0 {
+				autoLines = append(autoLines, it.Line)
+			}
 		} else {
-			youLines = append(youLines, it.Line)
+			youAny = true
+			if it.Line > 0 {
+				youLines = append(youLines, it.Line)
+			}
 		}
 	}
 
 	fmt.Fprintln(w)
-	if len(autoLines) > 0 {
-		fmt.Fprintf(w, "Run with --auto to convert line(s) %s for you (keystore -> PEM).\n", joinInts(autoLines))
+	if autoAny {
+		if len(autoLines) > 0 {
+			fmt.Fprintf(w, "Run with --auto to convert line(s) %s for you (keystore -> PEM).\n", joinInts(autoLines))
+		} else {
+			fmt.Fprintln(w, "Run with --auto to convert the keystore(s) to PEM for you.")
+		}
 	}
-	if len(youLines) > 0 {
-		fmt.Fprintf(w, "Line(s) needing you: %s -- edit the >>>>>>> block in the file.\n", joinInts(youLines))
+	if youAny {
+		if len(youLines) > 0 {
+			fmt.Fprintf(w, "Line(s) needing you: %s -- edit the >>>>>>> block in the file.\n", joinInts(youLines))
+		} else {
+			fmt.Fprintln(w, "Edit the >>>>>>> block(s) in the file for the setting(s) above.")
+		}
 	}
 	fmt.Fprintf(w, "Then re-run the same command:\n  tibftlimportconfig -output-dir %s %s\n", outputDir, brokerPath)
 }
@@ -451,7 +507,7 @@ func resolveExplain(kind translator.ResolveKind, autoRan bool) (what, fix string
 			"Fix: in the block, switch this listener to PLAIN or OAUTHBEARER.", false
 	case translator.KindAuthorizer:
 		return "a custom authorizer; FSK supports the standard one.",
-			"Fix: in the block, set the value to: standard.", false
+			"Fix: in the block, set the value to: " + translator.AuthorizerCanonical + ".", false
 	}
 	return "", "", false
 }

@@ -56,8 +56,10 @@ func TestAutoConvertKeystores_Success(t *testing.T) {
 	}
 }
 
-// A missing source file is skipped gracefully (not a failure): no command runs and
-// cfg is left unchanged for the block.
+// A missing source file is skipped gracefully (not a failure): no command runs. The
+// config still names the PEM form -- that translation does not depend on this host
+// having the .jks -- but the conversion stays pending, so the operator is still told
+// the .pem does not exist.
 func TestAutoConvertKeystores_MissingFile(t *testing.T) {
 	cfg := makeCfg(t, "node.id=1\nssl.keystore.type=JKS\nssl.keystore.location=/nope/broker.jks\n")
 	called := false
@@ -70,8 +72,12 @@ func TestAutoConvertKeystores_MissingFile(t *testing.T) {
 	if called {
 		t.Error("should not run any command when the source file is missing")
 	}
-	if cfg.Settings["ssl.keystore.type"] != "JKS" {
-		t.Error("type must be left unchanged when skipped")
+	if cfg.Settings["ssl.keystore.type"] != "PEM" {
+		t.Errorf("type = %q, want PEM (the translation does not need the file)", cfg.Settings["ssl.keystore.type"])
+	}
+	pending := PendingKeystores(cfg)
+	if len(pending) != 1 || pending[0].FromLoc != "/nope/broker.jks" {
+		t.Errorf("pending = %+v, want the unconverted /nope/broker.jks", pending)
 	}
 }
 

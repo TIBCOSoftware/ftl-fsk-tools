@@ -35,15 +35,17 @@ type ResolveSummary struct {
 func (s ResolveSummary) Total() int { return len(s.Items) }
 
 // Summarize collects the unresolved settings from a parsed config, in file order,
-// using the same resolution the status computation uses. Only settings that appear
-// in kof.broker.properties (i.e. pass isSupportedBrokerProperty) are included.
+// using the same resolution the status computation uses -- it must stay in step with
+// configStatus, or the report and the status would disagree. Only settings that
+// appear in kof.broker.properties (i.e. pass isSupportedBrokerProperty) and that the
+// source is actually using (see inertReason) are included.
 func Summarize(cfg *BrokerConfig) ResolveSummary {
 	var s ResolveSummary
 	add := func(kind ResolveKind, k, value, note string) {
 		s.Items = append(s.Items, ResolveItem{Kind: kind, Line: cfg.SettingLines[k], Key: k, Value: value, Note: note})
 	}
 	for _, k := range cfg.SettingKeys {
-		if !isSupportedBrokerProperty(k) {
+		if !isSupportedBrokerProperty(k) || inertReason(cfg, k) != "" {
 			continue
 		}
 		switch {
@@ -52,9 +54,10 @@ func Summarize(cfg *BrokerConfig) ResolveSummary {
 				add(KindAuthorizer, k, cfg.Settings[k], "")
 			}
 		case isKeystoreTypeKey(k):
+			// A keystore NormalizeKeystores could rewrite to PEM is already
+			// resolved; only one it could not reach lands here.
 			if isJavaKeystore(cfg.Settings[k]) {
-				locKey := k[:len(k)-len(".type")] + ".location"
-				add(KindKeystore, k, cfg.Settings[k], cfg.Settings[locKey])
+				add(KindKeystore, k, cfg.Settings[k], cfg.Settings[keystoreLocationKey(k)])
 			}
 		case isMechanismsKey(k):
 			if mechanismsUnservable(cfg.Settings[k]) {

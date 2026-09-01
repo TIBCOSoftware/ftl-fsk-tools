@@ -40,18 +40,10 @@ go build tibco.com/ftl-support/tibftlimportconfig
 
 ```
 tibftlimportconfig [flags] <server.properties> [<server.properties> ...]
-tibftlimportconfig [flags] -from-brokers <host:port>[,<host:port> ...]
 ```
 
-There are two ways to give the tool a broker configuration, and they are mutually exclusive:
-
-- **From files.** Positional arguments are one or more `server.properties` files (1–9).
-- **From live brokers.** `-from-brokers` takes a comma-separated `host:port` list (1–9) and reads
-  each broker's configuration over the Apache Kafka Admin API instead — see
-  [Fetching from live brokers](#fetching-from-live-brokers).
-
-Either way, each broker becomes one pserver — the pserver count is derived from the number of
-brokers, not from a flag.
+Positional arguments are one or more `server.properties` files (1–9). Each broker becomes one
+pserver — the pserver count is derived from the number of input files, not from a flag.
 
 ### Getting help
 
@@ -66,7 +58,6 @@ tibftlimportconfig -h all        # every flag, grouped
 | Group | `-h <group>` covers |
 |---|---|
 | `core` | output location, data dir, server addresses, transport |
-| `brokers` | read the config from running Apache Kafka brokers instead of properties files |
 | `tls` | server and client certificates, private keys, trust files |
 | `oauth` | token/JWKS endpoints, claims, audience, server and UI client credentials |
 | `auth` | users file, role map, and the FTL service credentials |
@@ -88,16 +79,6 @@ The sections below list the same flags as the corresponding `-h <group>` topic.
 | `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated pserver. This is the *output* FTL servers' logging, not this tool's. |
 | `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `tibftlfskimportdata` data migration tool) |
 | `-tibschemad` | `false` | Add the FTL schema daemon to the generated cluster YAML: every server gains a `schemaN` persistence and a `- tibschemad:` entry with `auth.type: none` and `cluster.size` set to the number of realm servers. No extra servers and no extra ports — the schema pserver shares the `tibftlserver` process that already hosts the FSK pserver. |
-
-### Live broker fetch flags (`-h brokers`)
-
-| Flag | Default | Description |
-|---|---|---|
-| `-from-brokers` | _(none)_ | Comma-separated `host:port` list of running Apache Kafka brokers (1–9) to read the configuration from via the Admin API. Mutually exclusive with positional `server.properties` arguments. |
-| `-from-brokers-timeout-ms` | `10000` | Admin API connect/read/write timeout in milliseconds |
-
-See [Fetching from live brokers](#fetching-from-live-brokers) for what the tool asks each broker
-for and the current limitations.
 
 ### TLS and mTLS flags (`-h tls`)
 
@@ -158,45 +139,7 @@ Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` lis
 |---|---|---|
 | `-list-properties` | `false` | Print how each Apache Kafka listener/security property is treated, then exit |
 | `-color` | `auto` | Colorize `-list-properties` output: `auto`, `always`, or `never` |
-| `-auto` | `false` | Run the mechanical conversions automatically (JKS/PKCS12 keystores → PEM via `keytool`/`openssl`); items needing a human stay `RESOLVE-REQUIRED` |
-
----
-
-## Fetching from live brokers
-
-Instead of collecting a `server.properties` from every broker host, point the tool at the running
-cluster:
-
-```sh
-tibftlimportconfig -output-dir ./kof-output \
-  -from-brokers kafka-1:9092,kafka-2:9092,kafka-3:9092
-```
-
-For each address the tool connects with the Apache Kafka Admin API, resolves that address to its broker
-node ID from cluster metadata, and issues `DescribeConfigs` for that node. The returned entries —
-the broker's *effective* configuration, including defaults the operator never wrote down — feed
-into exactly the same translation pipeline as a parsed file, so the generated artifacts, the
-`RESOLVE-REQUIRED` blocks and the exit codes are identical to the file-based path. Progress is
-printed per broker:
-
-```
-fetching config from broker kafka-1:9092 ...
-fetching config from broker kafka-2:9092 ...
-fetching config from broker kafka-3:9092 ...
-```
-
-Notes and limitations:
-
-- **Mutually exclusive with positional arguments.** Passing both is an error.
-- **1–9 addresses**, same range as the file-based input; each address becomes one pserver.
-- **The Admin connection is plaintext and unauthenticated.** The `-tls-*` and `-oauth-*` flags
-  configure the *generated* FTL servers, not this fetch. Against a cluster whose listeners all
-  require TLS or SASL, the connection will fail — use the file-based input there.
-- **Effective config is larger than a hand-written file.** Broker defaults that a
-  `server.properties` omits are returned by `DescribeConfigs`, so `unsupported.properties` is
-  typically much longer than for the equivalent file input. Those entries are reference-only and
-  do not affect the outcome.
-- The `SourceFile` recorded in the generated comments is the `host:port` address, not a path.
+| `-auto` | `false` | Actually run the keystore conversions (JKS/PKCS12 → PEM via `keytool`/`openssl`) rather than only printing the commands. The generated config names the `.pem` either way; items needing a human decision stay `RESOLVE-REQUIRED` |
 
 ---
 
@@ -797,23 +740,19 @@ Written when any input properties are not in the FSK whitelist. Contains KRaft c
 | `examples/18-3broker-sasl+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SASL_SSL OAUTHBEARER | 3 |
 | `examples/19-3broker-mtls+oauth2/` | 3 (broker+controller) | SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
 | `examples/20-3broker-sasl+mtls+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
-| `examples/21-from-brokers-plaintext/` | N/A (live brokers) | PLAINTEXT — fetch from live brokers | 3 |
-| `examples/22-from-brokers-sasl/` | N/A (live brokers) | SASL — fetch from live brokers | 3 |
-| `examples/23-single-node-tibschemad/` | 1 (broker+controller) | PLAINTEXT + `-tibschemad` | 1 |
-| `examples/24-3broker-tibschemad/` | 3 (broker+controller) | PLAINTEXT + `-tibschemad` | 3 |
+| `examples/21-single-node-tibschemad/` | 1 (broker+controller) | PLAINTEXT + `-tibschemad` | 1 |
+| `examples/22-3broker-tibschemad/` | 3 (broker+controller) | PLAINTEXT + `-tibschemad` | 3 |
 
-Examples 01–20, 23 and 24 each ship a checked-in `output/` directory, regenerated by
-`examples/regen-examples.sh`. Examples 21 and 22 cover the `-from-brokers` mode and hold a
-`README.md` only: their input is a running Apache Kafka cluster, so there is nothing reproducible to
-check in. Follow the commands in those READMEs against a live cluster of your own.
+Every example ships a checked-in `output/` directory, regenerated by
+`examples/regen-examples.sh`.
 
-Examples 23 and 24 take the same inputs as 01 and 02 and add only `-tibschemad`, so diffing
+Examples 21 and 22 take the same inputs as 01 and 02 and add only `-tibschemad`, so diffing
 their outputs shows exactly what the flag contributes — the standalone case at `cluster.size: 1`
 and the cluster case at `cluster.size: 3`:
 
 ```bash
 diff examples/01-single-node-plaintext/output/tibftlserver_standalone.yaml \
-     examples/23-single-node-tibschemad/output/tibftlserver_standalone.yaml
+     examples/21-single-node-tibschemad/output/tibftlserver_standalone.yaml
 diff examples/02-3broker-plaintext/output/tibftlserver-cluster.yaml \
-     examples/24-3broker-tibschemad/output/tibftlserver-cluster.yaml
+     examples/22-3broker-tibschemad/output/tibftlserver-cluster.yaml
 ```

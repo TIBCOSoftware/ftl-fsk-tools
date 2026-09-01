@@ -4,7 +4,6 @@
 # All Rights Reserved.
 #
 # Regenerate all tibftlimportconfig example outputs using relative paths.
-# (Examples 21 and 22 need live brokers and are documented, not regenerated.)
 set -euo pipefail
 
 # Resolve everything relative to this script so this copy regenerates its own
@@ -215,16 +214,16 @@ run 20-3broker-sasl+mtls+oauth2 \
   "${OAUTH_SVR[@]}" \
   server-1.properties server-2.properties server-3.properties
 
-# ── 23: single-node + schema daemon ──────────────────────────────────────
+# ── 21: single-node + schema daemon ──────────────────────────────────────
 # Same input as 01; --tibschemad is the only difference. cluster.size: 1.
-run 23-single-node-tibschemad \
+run 21-single-node-tibschemad \
   --core-servers "SRV1=localhost:5663" \
   --tibschemad \
   server-1.properties
 
-# ── 24: 3-broker + schema daemon ─────────────────────────────────────────
+# ── 22: 3-broker + schema daemon ─────────────────────────────────────────
 # Same input as 02; --tibschemad is the only difference. cluster.size: 3.
-run 24-3broker-tibschemad \
+run 22-3broker-tibschemad \
   --core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602" \
   --tibschemad \
   server-1.properties server-2.properties server-3.properties

@@ -43,15 +43,6 @@ var flagGroups = []flagGroup{
 		},
 	},
 	{
-		name:  "brokers",
-		title: "Live broker fetch flags (-from-brokers*)",
-		blurb: "read the config from running Kafka brokers instead of properties files",
-		flags: []string{
-			"from-brokers",
-			"from-brokers-timeout-ms",
-		},
-	},
-	{
 		name:  "tls",
 		title: "TLS and mTLS flags (-tls-*)",
 		blurb: "server and client certificates, private keys, trust files",
@@ -187,13 +178,10 @@ func writeHelp(w io.Writer, topic string) bool {
 
 func writeSynopsis(w io.Writer) {
 	fmt.Fprintln(w, "Usage: tibftlimportconfig [flags] <server.properties...>")
-	fmt.Fprintln(w, "       tibftlimportconfig [flags] -from-brokers host:port[,host:port...]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Translates one or more Apache Kafka broker configurations into TIBCO FTL(R) Service")
-	fmt.Fprintln(w, "for Kafka (FSK) artifacts. Pass one server.properties file per broker (1-9 files),")
-	fmt.Fprintln(w, "or use -from-brokers to read the config from running brokers over the Kafka Admin")
-	fmt.Fprintln(w, "API. The two are mutually exclusive; pserver count is derived from the number of")
-	fmt.Fprintln(w, "brokers.")
+	fmt.Fprintln(w, "for Kafka (FSK) artifacts. Pass one server.properties file per broker (1-9 files);")
+	fmt.Fprintln(w, "the pserver count is derived from the number of brokers.")
 }
 
 func writeOverview(w io.Writer) {
@@ -233,7 +221,6 @@ func writeOverview(w io.Writer) {
 	fmt.Fprintln(w, "  tibftlimportconfig -output-dir ./out \\")
 	fmt.Fprintln(w, "      -core-servers SRV1=h1:5600,SRV2=h2:5601,SRV3=h3:5602 \\")
 	fmt.Fprintln(w, "      server-1.properties server-2.properties server-3.properties")
-	fmt.Fprintln(w, "  tibftlimportconfig -output-dir ./out -from-brokers localhost:9092,localhost:9093")
 	fmt.Fprintln(w, "  tibftlimportconfig -h oauth")
 }
 

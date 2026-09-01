@@ -160,20 +160,20 @@ func mechanismsUnservable(value string) bool {
 // recognizedAuthorizers are Kafka's built-in ACL authorizer classes. FSK
 // reproduces their ACL model natively. StandardAuthorizer is the KRaft-mode
 // authorizer; AclAuthorizer is the ZooKeeper-mode one; SimpleAclAuthorizer is the
-// older deprecated name. All enforce the same rules, so all map to authorizerCanonical.
+// older deprecated name. All enforce the same rules, so all map to AuthorizerCanonical.
 var recognizedAuthorizers = map[string]bool{
 	"org.apache.kafka.metadata.authorizer.StandardAuthorizer": true,
 	"kafka.security.authorizer.AclAuthorizer":                 true,
 	"kafka.security.auth.SimpleAclAuthorizer":                 true,
 }
 
-// authorizerCanonical is the value the tool writes for authorizer.class.name when
+// AuthorizerCanonical is the value the tool writes for authorizer.class.name when
 // a recognized authorizer is named: FSK turns on its native ACL enforcement.
 //
 // CANONICAL VOCABULARY: this token is the canonical kof.broker.properties value the pserver
 // consumes. The single source of truth is the C header hydra/header/private/kof/kofcanonical.h
 // (KOF_CANON_AUTHORIZER_STANDARD); keep in sync with it.
-const authorizerCanonical = "KofAuthorizer"
+const AuthorizerCanonical = "KofAuthorizer"
 
 // recognizedAuthorizerNames returns the recognized authorizer classes in sorted
 // order, for listing in messages.
@@ -198,11 +198,11 @@ func isAuthorizerKey(key string) bool {
 func resolveAuthorizer(value string) (recognized bool, canonical string) {
 	v := strings.TrimSpace(value)
 	// Already the canonical token (operator edit or a prior run) -- idempotent.
-	if strings.EqualFold(v, authorizerCanonical) {
-		return true, authorizerCanonical
+	if strings.EqualFold(v, AuthorizerCanonical) {
+		return true, AuthorizerCanonical
 	}
 	if recognizedAuthorizers[v] {
-		return true, authorizerCanonical
+		return true, AuthorizerCanonical
 	}
 	return false, ""
 }

@@ -92,10 +92,11 @@ func WriteUnsupportedProperties(outputDir string, unsupportedKV []string) error 
 // configStatus reports the file's validation state: StatusInvalid if any authorizer
 // is a custom class, any keystore is JKS/PKCS12, or any SASL mechanism is unservable;
 // otherwise StatusAccepted. Only properties that appear in kof.broker.properties
-// (i.e. pass isSupportedBrokerProperty) are considered.
+// (i.e. pass isSupportedBrokerProperty) are considered, and a setting the source is
+// not actually using (inertReason) is not a reason to refuse the file.
 func configStatus(cfg *BrokerConfig) ConfigStatus {
 	for _, k := range cfg.SettingKeys {
-		if !isSupportedBrokerProperty(k) {
+		if !isSupportedBrokerProperty(k) || inertReason(cfg, k) != "" {
 			continue
 		}
 		switch {
@@ -207,13 +208,20 @@ func writeKOFProps(f *os.File, cfg *BrokerConfig) (ConfigStatus, []string) {
 }
 
 // emitProp writes one whitelisted property, dispatching security-relevant ones to
-// their handlers: authorizer.class.name is translated or flagged, Java keystores are
-// flagged for conversion, and SASL mechanisms are flagged when unservable. Handler
+// their handlers: a setting the source is not using is commented out, keystores
+// rewritten to PEM carry their conversion commands, authorizer.class.name is
+// translated or flagged, and SASL mechanisms are flagged when unservable. Handler
 // classes and inter-broker/controller keys never reach emitProp — they are routed to
 // unsupported.properties by writeKOFProps before this function is called.
 func emitProp(f *os.File, cfg *BrokerConfig, k string) {
 	v := cfg.Settings[k]
 	switch {
+	case inertReason(cfg, k) != "":
+		emitInert(f, cfg, k, v)
+	case isKeystoreTypeKey(k) && cfg.keystoreConversionByType(k) != nil:
+		emitKeystoreConversion(f, cfg, k)
+	case isKeystoreLocationKey(k) && cfg.keystoreConversionByLoc(k) != nil:
+		emitKeystoreLocation(f, cfg, k)
 	case isAuthorizerKey(k):
 		emitAuthorizer(f, cfg, k, v)
 	case isKeystoreTypeKey(k) && isJavaKeystore(v):
@@ -225,6 +233,50 @@ func emitProp(f *os.File, cfg *BrokerConfig, k string) {
 	default:
 		fmt.Fprintf(f, "%s=%s\n", k, v)
 	}
+}
+
+// sourceNote renders the "[source:N] " provenance tag for a comment line. A config
+// fetched from live brokers over the Admin API has no source file, so every line is
+// 0 -- print nothing rather than a meaningless "[source:0]".
+func sourceNote(line int) string {
+	if line <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("[source:%d] ", line)
+}
+
+// emitInert comments out a setting the source carried but was not using, with the
+// reason. It is not an error -- the file is still ACCEPTED -- but writing it active
+// would make the generated config claim something the source never did.
+func emitInert(f *os.File, cfg *BrokerConfig, k, v string) {
+	fmt.Fprintf(f, "# %sNOT in use: %s.\n", sourceNote(cfg.SettingLines[k]), inertReason(cfg, k))
+	fmt.Fprintln(f, "# Kept for reference; it had no effect on the source broker either.")
+	fmt.Fprintf(f, "#%s=%s\n", k, v)
+}
+
+// emitKeystoreConversion writes a keystore type NormalizeKeystores rewrote to PEM.
+// FSK reads PEM, so the value itself is settled and written active; what the
+// operator still owes is the file, so the commands that create it come first.
+func emitKeystoreConversion(f *os.File, cfg *BrokerConfig, k string) {
+	kc := cfg.keystoreConversionByType(k)
+	fmt.Fprintf(f, "# %soriginal: %s=%s\n", sourceNote(cfg.SettingLines[k]), k, kc.FromType)
+	fmt.Fprintf(f, "# FSK reads PEM, not a %s %s, so this and %s were rewritten below.\n",
+		kc.FromType, kc.Kind, kc.LocKey)
+	fmt.Fprintf(f, "# Creating the .pem is a real conversion, NOT a rename. Run it before starting\n")
+	fmt.Fprintf(f, "# tibftlserver (or re-run tibftlimportconfig with --auto to run it for you):\n")
+	for _, cmd := range kc.Commands() {
+		fmt.Fprintf(f, "#   %s\n", cmd)
+	}
+	fmt.Fprintf(f, "%s=PEM\n", k)
+}
+
+// emitKeystoreLocation writes the .location that NormalizeKeystores repointed at the
+// .pem, keeping the Java keystore it came from visible.
+func emitKeystoreLocation(f *os.File, cfg *BrokerConfig, k string) {
+	kc := cfg.keystoreConversionByLoc(k)
+	fmt.Fprintf(f, "# %soriginal: %s=%s (repointed at the PEM form; see %s above)\n",
+		sourceNote(cfg.SettingLines[k]), k, kc.FromLoc, kc.TypeKey)
+	fmt.Fprintf(f, "%s=%s\n", k, kc.ToLoc)
 }
 
 // emitRejected comments out a key the ftlserver runtime would reject at startup
@@ -249,7 +301,7 @@ func emitMechanisms(f *os.File, cfg *BrokerConfig, k, v string) {
 	src := cfg.SettingLines[k]
 	_, unsup := mechanismsSupport(v)
 	fmt.Fprintln(f, resolveBandOpen)
-	fmt.Fprintf(f, "# [source:%d] original: %s=%s\n", src, k, v)
+	fmt.Fprintf(f, "# %soriginal: %s=%s\n", sourceNote(src), k, v)
 	fmt.Fprintf(f, "# RESOLVE-REQUIRED: FSK cannot serve %s. It supports PLAIN and OAUTHBEARER.\n", strings.Join(unsup, ", "))
 	fmt.Fprintf(f, "# Switch this listener to one of those (and configure its backend), then uncomment:\n")
 	fmt.Fprintf(f, "#%s=<PLAIN|OAUTHBEARER>\n", k)
@@ -286,7 +338,7 @@ func emitJavaKeystore(f *os.File, cfg *BrokerConfig, k, v string) {
 	p12 := strings.TrimSuffix(loc, filepath.Ext(loc)) + ".p12"
 
 	fmt.Fprintln(f, resolveBandOpen)
-	fmt.Fprintf(f, "# [source:%d] original: %s=%s\n", src, k, v)
+	fmt.Fprintf(f, "# %soriginal: %s=%s\n", sourceNote(src), k, v)
 	fmt.Fprintf(f, "# RESOLVE-REQUIRED: FSK reads PEM, not a %s %s. This is a real file conversion,\n", srcType, kind)
 	fmt.Fprintf(f, "# NOT just a rename -- run the conversion below to actually create the .pem file:\n")
 	if srcType == "JKS" {
@@ -304,7 +356,7 @@ func emitJavaKeystore(f *os.File, cfg *BrokerConfig, k, v string) {
 }
 
 // emitAuthorizer rewrites authorizer.class.name. A recognized Kafka authorizer
-// class is replaced with authorizerCanonical; FSK enforces the same ACL model.
+// class is replaced with AuthorizerCanonical; FSK enforces the same ACL model.
 // Any other class is a custom Java authorizer FSK cannot run, so it is left with
 // no active value and the file is INVALID until the operator resolves it.
 func emitAuthorizer(f *os.File, cfg *BrokerConfig, k, v string) {
@@ -315,7 +367,7 @@ func emitAuthorizer(f *os.File, cfg *BrokerConfig, k, v string) {
 		// Already canonical (re-run / operator edit): write it through. A Java class
 		// is rewritten to the canonical value, keeping the original as a comment.
 		if !strings.EqualFold(strings.TrimSpace(v), canonical) {
-			fmt.Fprintf(f, "# [source:%d] original: %s=%s\n", src, k, v)
+			fmt.Fprintf(f, "# %soriginal: %s=%s\n", sourceNote(src), k, v)
 			fmt.Fprintf(f, "# %s rewritten to %q. FSK enforces the same ACL model:\n", strings.TrimSpace(v), canonical)
 			fmt.Fprintf(f, "# default-deny, super.users bypass, per-principal allow rules.\n")
 		}
@@ -323,11 +375,11 @@ func emitAuthorizer(f *os.File, cfg *BrokerConfig, k, v string) {
 		return
 	}
 	fmt.Fprintln(f, resolveBandOpen)
-	fmt.Fprintf(f, "# [source:%d] original: %s=%s\n", src, k, v)
+	fmt.Fprintf(f, "# %soriginal: %s=%s\n", sourceNote(src), k, v)
 	fmt.Fprintf(f, "# RESOLVE-REQUIRED: unrecognized authorizer. Supported: %s.\n", strings.Join(recognizedAuthorizerNames(), ", "))
 	fmt.Fprintf(f, "# A custom Java authorizer cannot be run. Uncomment only if it is\n")
 	fmt.Fprintf(f, "# ACL-equivalent to a standard authorizer:\n")
-	fmt.Fprintf(f, "#%s=%s\n", k, authorizerCanonical)
+	fmt.Fprintf(f, "#%s=%s\n", k, AuthorizerCanonical)
 	fmt.Fprintln(f, resolveBandClose)
 }
 
@@ -342,7 +394,7 @@ func emitHandlerClass(f *os.File, cfg *BrokerConfig, k, v string) {
 	// Unrecognized custom class: the operator must choose a backend.
 	if o.NeedsPick {
 		fmt.Fprintln(f, resolveBandOpen)
-		fmt.Fprintf(f, "# [source:%d] original: %s=%s\n", src, k, v)
+		fmt.Fprintf(f, "# %soriginal: %s=%s\n", sourceNote(src), k, v)
 		fmt.Fprintln(f, "# RESOLVE-REQUIRED: FSK cannot run custom Java handler class.")
 		if o.Guess == BackendNone {
 			fmt.Fprintln(f, "# Set the value to one of (oauth, file, inline) and uncomment:")
@@ -362,7 +414,7 @@ func emitHandlerClass(f *os.File, cfg *BrokerConfig, k, v string) {
 	// RESOLVE-REQUIRED block listing the keys to add.
 	if !o.Resolved {
 		if o.FromClass {
-			fmt.Fprintf(f, "# [source:%d] original: %s=%s\n", src, k, v)
+			fmt.Fprintf(f, "# %soriginal: %s=%s\n", sourceNote(src), k, v)
 		}
 		fmt.Fprintf(f, "%s=%s\n", k, o.Active)
 		fmt.Fprintln(f, resolveBandOpen)
@@ -375,7 +427,7 @@ func emitHandlerClass(f *os.File, cfg *BrokerConfig, k, v string) {
 	// Resolved: write the active value. If it came from a Java class, keep the
 	// original as a comment for provenance.
 	if o.FromClass {
-		fmt.Fprintf(f, "# [source:%d] original: %s=%s\n", src, k, v)
+		fmt.Fprintf(f, "# %soriginal: %s=%s\n", sourceNote(src), k, v)
 	}
 	fmt.Fprintf(f, "%s=%s\n", k, o.Active)
 }

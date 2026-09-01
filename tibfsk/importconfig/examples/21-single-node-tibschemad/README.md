@@ -1,4 +1,4 @@
-# Example 23 — Single node with the FTL schema daemon
+# Example 21 — Single node with the FTL schema daemon
 
 Single-node plaintext Kafka converted with `-tibschemad`. The input is byte-for-byte the
 same `server-1.properties` as [example 01](../01-single-node-plaintext/), so the only
@@ -60,5 +60,5 @@ tibftlserver -c output/tibftlserver_standalone.yaml -n SRV1
 ## Notes
 
 - `auth.type: none` is what phase 1 emits. Wiring the schema daemon to OAuth2 is phase 2.
-- See [example 24](../24-3broker-tibschemad/) for the three-broker form, where the same flag
+- See [example 22](../22-3broker-tibschemad/) for the three-broker form, where the same flag
   produces `cluster.size: 3`.

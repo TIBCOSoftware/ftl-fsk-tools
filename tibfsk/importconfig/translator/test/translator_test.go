@@ -41,7 +41,7 @@ var fixtures = []struct {
 	{"intervene-opaque-handler", translator.StatusAccepted},      // handler → unsupported.properties
 	{"intervene-custom-authorizer", translator.StatusInvalid},    // custom authorizer (whitelisted) → RESOLVE-REQUIRED
 	{"oauth-missing-jwks", translator.StatusAccepted},            // handler + jwks → unsupported.properties; nothing left to resolve
-	{"inter-broker-and-jks", translator.StatusInvalid},           // JKS keystores (whitelisted) → RESOLVE-REQUIRED
+	{"inter-broker-and-jks", translator.StatusAccepted},          // JKS keystores → rewritten to the PEM form FSK reads
 	{"scram-only", translator.StatusInvalid},                     // SCRAM-only listener (sasl.enabled.mechanisms whitelisted, value invalid)
 }
 
