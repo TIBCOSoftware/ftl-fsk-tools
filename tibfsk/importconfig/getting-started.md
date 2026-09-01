@@ -13,7 +13,7 @@ tool generates:
 | File | Purpose |
 |---|---|
 | `tibftlserver-cluster.yaml` | FTL Server cluster configuration |
-| `realm.json` | FTL realm with `kof.cluster` definition |
+| `ftlserver.json` | FTL realm with `kof.cluster` definition |
 | `kof.broker.N.properties` | Broker properties, one per FTL Server (1-based) |
 | `unsupported.properties` | Settings with no FSK equivalent (reference only) |
 | `tibftlserver-cluster-secure.yaml` | TLS/auth overlay (when security flags are provided) |
@@ -111,7 +111,7 @@ carries from one step to the next, so each ends with a *Shut down the FTL Server
 
 **Start `tibftlserver` from the directory you ran `tibftlimportconfig` in.** The generated YAML
 records `initial.realm.config` and `kof.broker.properties` exactly as they were passed —
-`kof-output/realm.json` for `--output-dir ./kof-output` — so those paths resolve against the working
+`kof-output/ftlserver.json` for `--output-dir ./kof-output` — so those paths resolve against the working
 directory, not against the YAML's own location. `cd kof-output` first and the server will not find
 its realm. Pass an absolute `--output-dir` if you would rather not care.
 
@@ -257,7 +257,7 @@ tibftlimportconfig \
 Writing file: ./kof-output/kof.broker.1.properties [
 Writing file: ./kof-output/unsupported.properties
 Writing file: ./kof-output/tibftlserver_standalone.yaml
-Writing file: ./kof-output/realm.json
+Writing file: ./kof-output/ftlserver.json
 
 All kof.broker.*.properties files are processed successfully.
 ```
@@ -281,7 +281,7 @@ start, named for the single entry under `servers:`:
 tibftlserver -c kof-output/tibftlserver_standalone.yaml -n SRV1
 ```
 
-No realm upload step: the YAML points `initial.realm.config` at the generated `realm.json`, so the
+No realm upload step: the YAML points `initial.realm.config` at the generated `ftlserver.json`, so the
 server seeds the realm itself on first startup. Kafka clients can now connect to `localhost:9092`
 as before.
 
@@ -428,7 +428,7 @@ Writing file: ./kof-output/kof.broker.2.properties [
 Writing file: ./kof-output/kof.broker.3.properties [
 Writing file: ./kof-output/unsupported.properties
 Writing file: ./kof-output/tibftlserver-cluster.yaml
-Writing file: ./kof-output/realm.json
+Writing file: ./kof-output/ftlserver.json
 
 All kof.broker.*.properties files are processed successfully.
 ```
@@ -468,7 +468,7 @@ tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV2
 tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV3
 ```
 
-All three share one YAML and one `realm.json`; `-n` is what selects which entry a process runs.
+All three share one YAML and one `ftlserver.json`; `-n` is what selects which entry a process runs.
 Each carries the same `initial.realm.config`, so whichever starts first seeds the realm and the
 other two join it. The cluster is available once two of the three are up.
 
@@ -622,7 +622,7 @@ does not need to be.
 Writing file: ./kof-output/kof.broker.1.properties [
 Writing file: ./kof-output/unsupported.properties
 Writing file: ./kof-output/tibftlserver_standalone.yaml
-Writing file: ./kof-output/realm.json
+Writing file: ./kof-output/ftlserver.json
 
 All kof.broker.*.properties files are processed successfully.
 ```
@@ -780,7 +780,7 @@ Writing file: ./kof-output/kof.broker.2.properties [
 Writing file: ./kof-output/kof.broker.3.properties [
 Writing file: ./kof-output/unsupported.properties
 Writing file: ./kof-output/tibftlserver-cluster.yaml
-Writing file: ./kof-output/realm.json
+Writing file: ./kof-output/ftlserver.json
 
 All kof.broker.*.properties files are processed successfully.
 ```
@@ -808,7 +808,7 @@ tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV2
 tibftlserver -c kof-output/tibftlserver-cluster.yaml -n SRV3
 ```
 
-All three share one YAML and one `realm.json`; whichever starts first seeds the realm and the
+All three share one YAML and one `ftlserver.json`; whichever starts first seeds the realm and the
 other two join it. The cluster is available once two of the three are up.
 
 ### Shut down the FTL Servers

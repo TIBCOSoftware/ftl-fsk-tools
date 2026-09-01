@@ -19,7 +19,7 @@ servers:
   SRV1:
   - realm:
       data: /var/tmp/kof/data
-      initial.realm.config: output/realm.json
+      initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       user: internal
       password: internal-pw
@@ -41,7 +41,7 @@ servers:
   SRV2:
   - realm:
       data: /var/tmp/kof/data
-      initial.realm.config: output/realm.json
+      initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       user: internal
       password: internal-pw
@@ -63,7 +63,7 @@ servers:
   SRV3:
   - realm:
       data: /var/tmp/kof/data
-      initial.realm.config: output/realm.json
+      initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       user: internal
       password: internal-pw

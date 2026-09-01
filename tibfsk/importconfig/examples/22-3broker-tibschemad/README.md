@@ -24,7 +24,7 @@ servers:
   SRV1:
   - realm:
       data: /var/tmp/kof/data
-      initial.realm.config: output/realm.json
+      initial.realm.config: output/ftlserver.json
   - persistence:
       name: pserver1
       data: /var/tmp/kof/data/pserver1
@@ -53,7 +53,7 @@ Everything except the three schema daemon blocks is unchanged from example 02:
 diff -r ../02-3broker-plaintext/output output
 ```
 
-`realm.json`, the three `kof.broker.N.properties` files and `unsupported.properties` are
+`ftlserver.json`, the three `kof.broker.N.properties` files and `unsupported.properties` are
 identical.
 
 ## Start

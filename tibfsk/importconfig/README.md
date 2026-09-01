@@ -7,7 +7,7 @@ Translates an Apache Kafka KRaft broker `server.properties` file into the TIBCO 
 | `tibftlserver-cluster.yaml` | Cluster config for up to 3 FTL Servers (realm service + FSK persistence in each) |
 | `tibftlserver-cluster-secure.yaml` | Secure variant with TLS/auth blocks (generated when TLS/OAuth flags are provided) |
 | `tibftlserver-cluster-dr.yaml` | DR replica cluster config (generated when `-dr-servers` is provided) |
-| `realm.json` | FTL realm config with `kof.cluster.N` (N is 0-based), stores, and FTL Server definitions |
+| `ftlserver.json` | FTL realm config with `kof.cluster.N` (N is 0-based), stores, and FTL Server definitions |
 | `kof.broker.N.properties` | Per-broker properties file (N is 1-based, one per FTL Server); only contains properties in the FSK whitelist |
 | `unsupported.properties` | Properties from the input not in the FSK whitelist; written when any such properties exist |
 
@@ -87,8 +87,8 @@ The sections below list the same flags as the corresponding `-h <group>` topic.
 | `-output-dir` | `./kof-output` | Directory where output files are written |
 | `-data-dir` | `/var/tmp/kof/data` | FSK data directory path on FTL Server hosts |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are derived from the cluster in range 5600–5699 — the same brokers always yield the same ports, so re-running the tool does not move them |
-| `-transport-type` | `auto` | Transport type for all FTL Server connections in `realm.json`: `auto` or `dtcp`<br>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br>`dtcp` pins every transport to dynamic TCP |
-| `-disk-persistence` | `async` | `disk_persistence` for the generated `kof.cluster.N`: `async`, `sync` or `in-memory`<br>`async` writes reach disk in the background; `sync` flushes every write before acknowledging it; `in-memory` writes nothing to disk and turns off the cluster's `disk_index` and `disk_compact`, which require disk persistence<br>The data store stays `async` and the sync and meta stores `sync` whichever the cluster is — except under `in-memory`, where the stores are in-memory too (see [`realm.json`](#realmjson)) |
+| `-transport-type` | `auto` | Transport type for all FTL Server connections in `ftlserver.json`: `auto` or `dtcp`<br>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br>`dtcp` pins every transport to dynamic TCP |
+| `-disk-persistence` | `async` | `disk_persistence` for the generated `kof.cluster.N`: `async`, `sync` or `in-memory`<br>`async` writes reach disk in the background; `sync` flushes every write before acknowledging it; `in-memory` writes nothing to disk and turns off the cluster's `disk_index` and `disk_compact`, which require disk persistence<br>The data store stays `async` and the sync and meta stores `sync` whichever the cluster is — except under `in-memory`, where the stores are in-memory too (see [`ftlserver.json`](#realmjson)) |
 | `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated FTL Server. This is the *output* FTL Servers' logging, not this tool's. |
 | `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `tibftlfskimportdata` data migration tool) |
 | `-tibschemad` | `false` | Add the FTL schema daemon to the generated cluster YAML: every server gains a `schemaN` persistence and a `- tibschemad:` entry with `auth.type: none` and `cluster.size` set to the number of realm servers. No extra servers and no extra ports — the schema persistence shares the `tibftlserver` process that already hosts the FSK persistence. |
@@ -164,7 +164,7 @@ The number of shards is determined by the number of `server.properties` files pa
 9 input files → tibftlserver-cluster.yaml      (pserver1–3 + SRV1–3 realm servers)
                 tibftlserver-cluster-aux1.yaml  (pserver4–6, no realm)
                 tibftlserver-cluster-aux2.yaml  (pserver7–9, no realm)
-                realm.json             (kof.cluster.0, kof.cluster.1, kof.cluster.2)
+                ftlserver.json             (kof.cluster.0, kof.cluster.1, kof.cluster.2)
 ```
 
 ---
@@ -175,7 +175,7 @@ When `-dr-servers` is provided, DR mode is activated for all output files:
 
 - **`tibftlserver-cluster.yaml`** gains `globals.dr:` (pointing to DR servers), `auto.init.primary.on.first.startup: true`, and `label: PRIMARY_SERVER` on each realm block.
 - **`tibftlserver-cluster-dr.yaml`** is generated with DR servers as `core.servers`, a back-reference `globals.dr:` to the primary servers, and `label: DR_SERVER` on realm blocks. Their persistence entries are named `drpserver1..N`.
-- **`realm.json`** clusters get `dr_enabled: true`, a second persistence set `_DRset` with DR replicas, and transport roles swapped (`dr_transport` populated, `inter_cluster_transport` empty for all FTL Servers).
+- **`ftlserver.json`** clusters get `dr_enabled: true`, a second persistence set `_DRset` with DR replicas, and transport roles swapped (`dr_transport` populated, `inter_cluster_transport` empty for all FTL Servers).
 
 With 9 input files, DR aux files are also produced:
 
@@ -187,7 +187,7 @@ With 9 input files, DR aux files are also produced:
     tibftlserver-cluster-dr.yaml        (DR: drpserver1–3)
     tibftlserver-cluster-dr-aux1.yaml   (DR: drpserver4–6)
     tibftlserver-cluster-dr-aux2.yaml   (DR: drpserver7–9)
-    realm.json                 (kof.cluster.0/1/2 with dr_enabled: true)
+    ftlserver.json                 (kof.cluster.0/1/2 with dr_enabled: true)
 ```
 
 ---
@@ -214,7 +214,7 @@ tibftlimportconfig \
   server-1.properties
 ```
 
-**Output:** `tibftlserver_standalone.yaml` (1 SRV + 1 FTL Server), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
+**Output:** `tibftlserver_standalone.yaml` (1 SRV + 1 FTL Server), `ftlserver.json`, `kof.broker.1.properties`, `unsupported.properties`
 
 ---
 
@@ -232,7 +232,7 @@ tibftlimportconfig \
   server-1.properties server-2.properties server-3.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml`, `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `ftlserver.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
 
 ---
 
@@ -255,7 +255,7 @@ tibftlimportconfig \
   server-1.properties
 ```
 
-**Output:** `tibftlserver_standalone.yaml` (1 SRV + 1 FTL Server), `realm.json`, `kof.broker.1.properties` (`node.id=0`, from `broker.id=0`), `unsupported.properties`
+**Output:** `tibftlserver_standalone.yaml` (1 SRV + 1 FTL Server), `ftlserver.json`, `kof.broker.1.properties` (`node.id=0`, from `broker.id=0`), `unsupported.properties`
 
 ---
 
@@ -273,7 +273,7 @@ tibftlimportconfig \
   server-1.properties server-2.properties server-3.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml`, `realm.json`, `kof.broker.{1,2,3}.properties` (`node.id=1/2/3`, from `broker.id`), `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `ftlserver.json`, `kof.broker.{1,2,3}.properties` (`node.id=1/2/3`, from `broker.id`), `unsupported.properties`
 
 ---
 
@@ -293,7 +293,7 @@ tibftlimportconfig \
   server-1.properties
 ```
 
-**Output:** `tibftlserver_standalone.yaml`, `tibftlserver_standalone-secure.yaml` (auth mode: file-auth+tls), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
+**Output:** `tibftlserver_standalone.yaml`, `tibftlserver_standalone-secure.yaml` (auth mode: file-auth+tls), `ftlserver.json`, `kof.broker.1.properties`, `unsupported.properties`
 
 ---
 
@@ -318,7 +318,7 @@ tibftlimportconfig \
   server-1.properties
 ```
 
-**Output:** `tibftlserver_standalone.yaml`, `tibftlserver_standalone-secure.yaml` (auth mode: oauth2), `realm.json`, `kof.broker.1.properties`, `unsupported.properties`
+**Output:** `tibftlserver_standalone.yaml`, `tibftlserver_standalone-secure.yaml` (auth mode: oauth2), `ftlserver.json`, `kof.broker.1.properties`, `unsupported.properties`
 
 ---
 
@@ -337,7 +337,7 @@ tibftlimportconfig \
   server-1.properties server-2.properties server-3.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: file-auth+tls), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: file-auth+tls), `ftlserver.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
 
 ---
 
@@ -356,7 +356,7 @@ tibftlimportconfig \
   server-1.properties server-2.properties server-3.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: tls-only), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: tls-only), `ftlserver.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
 
 ---
 
@@ -381,7 +381,7 @@ tibftlimportconfig \
   server-1.properties server-2.properties server-3.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS props), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS props), `ftlserver.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
 
 ---
 
@@ -406,7 +406,7 @@ tibftlimportconfig \
   server-1.properties server-2.properties server-3.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2; includes all mTLS FTL properties), `realm.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2; includes all mTLS FTL properties), `ftlserver.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
 
 ---
 
@@ -428,7 +428,7 @@ tibftlimportconfig \
   server-7.properties server-8.properties server-9.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml` (SRV1–3 + pserver1–3), `tibftlserver-cluster-aux1.yaml` (pserver4–6), `tibftlserver-cluster-aux2.yaml` (pserver7–9), `realm.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `ftl-users.txt`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml` (SRV1–3 + pserver1–3), `tibftlserver-cluster-aux1.yaml` (pserver4–6), `tibftlserver-cluster-aux2.yaml` (pserver7–9), `ftlserver.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `ftl-users.txt`, `unsupported.properties`
 
 ---
 
@@ -462,7 +462,7 @@ tibftlimportconfig \
   server-7.properties server-8.properties server-9.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS), `realm.json` (3 clusters), `kof.broker.{1–9}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS), `ftlserver.json` (3 clusters), `kof.broker.{1–9}.properties`, `unsupported.properties`
 
 ---
 
@@ -520,7 +520,7 @@ servers:
       name: drpserver1  ...
 ```
 
-`realm.json` — `kof.cluster.N` with `dr_enabled: true`, `_setA` (pserver1–3) + `_DRset` (drpserver1–3)
+`ftlserver.json` — `kof.cluster.N` with `dr_enabled: true`, `_setA` (pserver1–3) + `_DRset` (drpserver1–3)
 
 ---
 
@@ -548,14 +548,14 @@ Same inputs and same `-core-servers` as example 02, so `diff output output-dr` s
 ```
 tibftlserver-cluster.yaml              (primary: globals.dr + PRIMARY_SERVER labels on realm blocks)
 tibftlserver-cluster-dr.yaml           (DR replica: DRSRV1–3 as core.servers, DR_SERVER labels, drpserver1–3)
-realm.json                    (dr_enabled: true; _setA primary + _DRset DR persistence sets)
+ftlserver.json                    (dr_enabled: true; _setA primary + _DRset DR persistence sets)
 kof.broker.{1,2,3}.properties
 unsupported.properties
 ```
 
 ### Secure 9-broker + DR (3 shards)
 
-Combine the example 12 flags above with `-dr-servers` to generate DR-enabled output for a 9-server, 3-shard deployment. Produces six cluster YAML files (primary + DR, each across three files) and a `realm.json` with `dr_enabled: true` on all three clusters.
+Combine the example 12 flags above with `-dr-servers` to generate DR-enabled output for a 9-server, 3-shard deployment. Produces six cluster YAML files (primary + DR, each across three files) and a `ftlserver.json` with `dr_enabled: true` on all three clusters.
 
 ---
 
@@ -576,14 +576,14 @@ tibftlserver -c tibftlserver-cluster.yaml -n SRV3
 
 **No `services:` section.** Realm settings are written per server, on each `- realm:` entry, rather
 than once in a shared `services:` block. That includes `initial.realm.config`, so every server in
-the file names the generated `realm.json` itself:
+the file names the generated `ftlserver.json` itself:
 
 ```yaml
 servers:
   SRV1:
   - realm:
       data: /var/tmp/kof/data
-      initial.realm.config: realm.json
+      initial.realm.config: ftlserver.json
   - ftlserver.properties:
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV1.log
@@ -621,7 +621,7 @@ servers:
   SRV1:
   - realm:
       data: /var/tmp/kof/data
-      initial.realm.config: realm.json
+      initial.realm.config: ftlserver.json
   - ftlserver.properties:
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV1.log
@@ -677,7 +677,7 @@ When mTLS flags are provided alongside OAuth, the secure YAML includes both sets
 In oauth2 mode the realm credentials (`-realm-service-user` / `-realm-service-password`) are written
 onto each per-server `- realm:` entry, since there is no shared `services:` block to hold them.
 
-### `realm.json`
+### `ftlserver.json`
 
 Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores per cluster (`kof.data.store.N`, `kof.sync.store.N`, `kof.meta.store.N`), and FTL Servers distributed across clusters.
 
@@ -698,11 +698,11 @@ key is omitted and each store inherits the cluster. In-memory also turns off the
 
 No upload step is needed: every generated cluster YAML names this file through
 `initial.realm.config` on each per-server `- realm:` entry (see above), so `tibftlserver` seeds the
-realm from it at startup. Upload manually only to push a *hand-edited* `realm.json` to a realm that
+realm from it at startup. Upload manually only to push a *hand-edited* `ftlserver.json` to a realm that
 is already running:
 
 ```sh
-tibrealmadmin --server localhost:5600 --realm _default_realm upload-realm realm.json
+tibrealmadmin --server localhost:5600 --realm _default_realm upload-realm ftlserver.json
 ```
 
 In DR mode, each cluster has `dr_enabled: true` and two persistence sets: `_setA` (primary) and `_DRset` (DR replicas).

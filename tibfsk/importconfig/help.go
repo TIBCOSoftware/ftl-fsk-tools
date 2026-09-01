@@ -192,7 +192,7 @@ func writeOverview(w io.Writer) {
 	fmt.Fprintln(w, "  tibftlserver-cluster-auxN.yaml    Additional pserver groups (one per group of 3 pservers beyond the first)")
 	fmt.Fprintln(w, "  tibftlserver-cluster-secure.yaml  Secure variant with TLS/auth settings for FTL server")
 	fmt.Fprintln(w, "  tibftlserver-cluster-dr.yaml      DR replica cluster (with -dr-servers)")
-	fmt.Fprintln(w, "  realm.json                        FTL realm configuration with kof.cluster")
+	fmt.Fprintln(w, "  ftlserver.json                    FTL realm configuration with kof.cluster")
 	fmt.Fprintln(w, "  kof.broker.N.properties           Per-pserver broker properties (N is 1-based)")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "A single-broker conversion produces one pserver -- a standalone server rather than a")

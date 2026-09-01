@@ -66,14 +66,14 @@ Four things that will bite you if you skip them:
 2. **Clear the FSK data directory when the cluster shape changes.** `initial.realm.config` seeds
    the realm only on a *first* start with an empty data directory. If `/var/tmp/kof/data` still
    holds state from an earlier run — especially one with a different number of servers — the new
-   `realm.json` is ignored, and you get a realm with the old pserver count or a
+   `ftlserver.json` is ignored, and you get a realm with the old pserver count or a
    `Quorum contains an inadequate number of members` failure. Every path below runs
    `rm -rf /var/tmp/kof/data` before starting FSK.
 
 3. **Use a fresh output directory per run.** `tibftlimportconfig` writes into `--output-dir` without
    clearing it, so a 1-broker run into a directory left over from a 3-broker run leaves stale
    `kof.broker.2.properties` and `kof.broker.3.properties` sitting next to a correct 1-pserver
-   `realm.json`. Every path below runs `rm -rf ./kof-output` first.
+   `ftlserver.json`. Every path below runs `rm -rf ./kof-output` first.
 
 4. **Stop FSK with `tibftladmin`, never `kill`.** `tibftlserver` runs its work in child processes —
    `tibmux`, `tibpserver`, `tibrserver`. Killing the parent orphans them, and they keep holding the
@@ -164,7 +164,7 @@ migration in step 6 never runs against a half-started cluster.
 Kafka listener port.
 
 No realm upload is needed. Every `- realm:` entry in the generated YAML carries
-`initial.realm.config: realm.json`, so `tibftlserver` seeds the realm at startup.
+`initial.realm.config: ftlserver.json`, so `tibftlserver` seeds the realm at startup.
 
 ### 6. Dry run
 
@@ -614,14 +614,14 @@ This writes into `./kof-output/`:
 |---|---|
 | `tibftlserver-cluster.yaml` | FTL server cluster config; also seeds the realm via `initial.realm.config` |
 | `tibftlserver-cluster-aux1.yaml` | Additional pserver groups, one file per extra three pservers |
-| `realm.json` | FTL realm with the `kof.cluster` definitions |
+| `ftlserver.json` | FTL realm with the `kof.cluster` definitions |
 | `kof.broker.N.properties` | Per-pserver Kafka broker properties |
 | `unsupported.properties` | Source keys with no FSK equivalent, for review |
 | **`kafka-to-kof.properties`** | **Migration config, pre-filled with the source broker addresses** |
 
 Then:
 
-2. Deploy `tibftlserver-cluster.yaml` (plus any `tibftlserver-cluster-auxN.yaml`), `realm.json`, and the
+2. Deploy `tibftlserver-cluster.yaml` (plus any `tibftlserver-cluster-auxN.yaml`), `ftlserver.json`, and the
    `kof.broker.N.properties` files to your FSK hosts, and start one `tibftlserver -c
    tibftlserver-cluster.yaml -n SRVn` per server entry. On separate hosts there is no port collision, so no
    `sed` step. Wait for the cluster to form with
@@ -671,11 +671,11 @@ ports appear in firewall rules or scripts:
 --core-servers "SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602"  # three servers
 ```
 
-To push a *hand-edited* `realm.json` to an already-running realm — the only case that needs a
+To push a *hand-edited* `ftlserver.json` to an already-running realm — the only case that needs a
 manual upload — use that port:
 
 ```bash
-tibrealmadmin --server <KOF-HOST-1>:5600 --realm my-realm upload-realm ./kof-output/realm.json
+tibrealmadmin --server <KOF-HOST-1>:5600 --realm my-realm upload-realm ./kof-output/ftlserver.json
 ```
 
 ---

@@ -16,7 +16,7 @@ servers:
   SRV1:
   - realm:
       data: /var/tmp/kof/data
-      initial.realm.config: output/realm.json
+      initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV1.log
@@ -31,7 +31,7 @@ servers:
   SRV2:
   - realm:
       data: /var/tmp/kof/data
-      initial.realm.config: output/realm.json
+      initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV2.log
@@ -46,7 +46,7 @@ servers:
   SRV3:
   - realm:
       data: /var/tmp/kof/data
-      initial.realm.config: output/realm.json
+      initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV3.log

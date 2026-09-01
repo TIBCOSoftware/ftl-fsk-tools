@@ -37,7 +37,7 @@ func writeCluster(t *testing.T, numPservers int, cores []CoreServer) string {
 		props[i] = "kof.broker.properties"
 	}
 
-	err := WriteKOFClusterYAML(cfg, out, "/var/tmp/kof/data", props, "realm.json",
+	err := WriteKOFClusterYAML(cfg, out, "/var/tmp/kof/data", props, RealmFileName,
 		numPservers, ports, cores, "", "", DROpts{}, ClusterOpts{LogLevel: "kof:info"})
 	if err != nil {
 		t.Fatalf("WriteKOFClusterYAML: %v", err)

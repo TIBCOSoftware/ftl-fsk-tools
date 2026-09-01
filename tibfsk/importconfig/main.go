@@ -9,7 +9,7 @@
 //	tibftlserver-cluster.yaml         — FTL pserver cluster configuration (primary)
 //	tibftlserver-cluster-auxN.yaml    — Auxiliary pserver groups (one per additional group of 3 pservers)
 //	tibftlserver-cluster-secure.yaml  — Secure variant with TLS/auth (when --tls-cert or --oauth-token-url provided)
-//	realm.json                        — FTL realm configuration with kof.cluster definition
+//	ftlserver.json                    — FTL realm configuration with kof.cluster definition
 //	kof.broker.N.properties           — Per-pserver broker properties (one file per input, N is 1-based)
 //
 // A single-broker conversion produces one pserver, which is a standalone server
@@ -43,7 +43,7 @@ func main() {
 			"cluster YAML (the output servers' logging, NOT this tool's own logging; "+
 			"e.g. connections:debug;kof:info;durables:info;store:info)")
 	transportType := flag.String("transport-type", "auto",
-		"transport type for all pserver connections in realm.json: auto|dtcp\n"+
+		"transport type for all pserver connections in ftlserver.json: auto|dtcp\n"+
 			"    auto lets the realm server pick the concrete transport for each connection\n"+
 			"    at deployment time: dynamic TCP for client and intra-cluster transports,\n"+
 			"    static TCP for inter-cluster and DR transports\n"+
@@ -137,7 +137,7 @@ func main() {
 
 	// Undocumented. Turns off the default cluster's disk index: writes
 	// "default.cluster.disk.index: 'false'" into every realm block of the generated
-	// cluster YAMLs and sets cluster_disk_index_default_value to false in realm.json.
+	// cluster YAMLs and sets cluster_disk_index_default_value to false in ftlserver.json.
 	// tibftlserver enables the index by default whenever disk persistence is sync or
 	// async, so both places have to say no. Deliberately absent from every help topic.
 	disableDiskIndex := flag.Bool("disable-disk-index", false, "")
@@ -220,7 +220,7 @@ func main() {
 	}
 
 	ports := generatePorts(cfgs)
-	realmPath := filepath.Join(*outputDir, "realm.json")
+	realmPath := filepath.Join(*outputDir, translator.RealmFileName)
 
 	// Build per-pserver properties file paths (1-based index).
 	propsPaths := make([]string, numPservers)
@@ -241,7 +241,7 @@ func main() {
 		DRDataDir: drDataDirResolved,
 	}
 
-	// Settings shared by every generated cluster YAML and by realm.json.
+	// Settings shared by every generated cluster YAML and by ftlserver.json.
 	clusterOpts := translator.ClusterOpts{
 		LogLevel:         *ftlLogLevel,
 		DisableDiskIndex: *disableDiskIndex,
@@ -374,7 +374,7 @@ func main() {
 		}
 	}
 	if err := translator.WriteRealmJSON(cfgs[0], *outputDir, numPservers, drOpts, *transportType, clusterOpts); err != nil {
-		fmt.Fprintln(os.Stderr, "error writing realm.json:", err)
+		fmt.Fprintln(os.Stderr, "error writing "+translator.RealmFileName+":", err)
 		os.Exit(1)
 	}
 	if *writeMigrationConfig {

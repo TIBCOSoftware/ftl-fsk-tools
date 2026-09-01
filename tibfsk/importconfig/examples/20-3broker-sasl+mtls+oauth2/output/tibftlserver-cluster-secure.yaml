@@ -28,7 +28,7 @@ servers:
       user: primary
       password: primary-pw
       data: /var/tmp/kof/data
-      initial.realm.config: output/realm.json
+      initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
       tls.server.trust.file: /etc/ftl/certs/client-ca.pem
@@ -56,7 +56,7 @@ servers:
       user: primary
       password: primary-pw
       data: /var/tmp/kof/data
-      initial.realm.config: output/realm.json
+      initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
       tls.server.trust.file: /etc/ftl/certs/client-ca.pem
@@ -84,7 +84,7 @@ servers:
       user: primary
       password: primary-pw
       data: /var/tmp/kof/data
-      initial.realm.config: output/realm.json
+      initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
       tls.server.trust.file: /etc/ftl/certs/client-ca.pem

@@ -16,15 +16,24 @@ import (
 // whatever it loads to "_default_realm", so there is nothing to configure here.
 const realmName = "_default_realm"
 
-// WriteRealmJSON generates realm.json with one kof.cluster per group of 3 pservers.
-// transportType sets the transport_type field for all pserver connections ("auto" or "dtcp").
+// RealmFileName is the generated realm configuration file. The name is ours to
+// choose -- the cluster YAML points at it by path through initial.realm.config --
+// so it says which server reads it rather than repeating "realm".
+const RealmFileName = "ftlserver.json"
+
+// WriteRealmJSON generates the realm configuration with one kof.cluster per group
+// of 3 pservers. transportType sets the transport_type field for all pserver
+// connections ("auto" or "dtcp").
 func WriteRealmJSON(cfg *BrokerConfig, outputDir string, numPservers int, drOpts DROpts, transportType string, copts ClusterOpts) error {
-	path := filepath.Join(outputDir, "realm.json")
+	path := filepath.Join(outputDir, RealmFileName)
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}
 	defer f.Close()
+	// Every other writer announces itself; this one did not, so the realm file was
+	// the one generated artifact the run never mentioned.
+	fmt.Fprintf(os.Stdout, "Writing file: %s\n", path)
 
 	realm := buildRealm(cfg, numPservers, drOpts, transportType, copts)
 	enc := json.NewEncoder(f)
@@ -113,7 +122,7 @@ func buildRealmProps(cfg *BrokerConfig, copts ClusterOpts) map[string]any {
 }
 
 // diskPersistenceModes maps a -disk-persistence flag token to the disk_persistence
-// literal written into realm.json. "in-memory" is the realm model's NoDiskPersist,
+// literal written into ftlserver.json. "in-memory" is the realm model's NoDiskPersist,
 // which is spelled as the empty string.
 var diskPersistenceModes = map[string]string{
 	"async":     "async",
@@ -124,7 +133,7 @@ var diskPersistenceModes = map[string]string{
 // DiskPersistenceModeNames lists the accepted -disk-persistence tokens, in help order.
 var DiskPersistenceModeNames = []string{"async", "sync", "in-memory"}
 
-// RealmDiskPersistence maps a -disk-persistence flag token to its realm.json literal,
+// RealmDiskPersistence maps a -disk-persistence flag token to its ftlserver.json literal,
 // reporting false for an unrecognized token. The empty token selects the default,
 // async, so a zero-valued ClusterOpts keeps the historical behavior.
 func RealmDiskPersistence(mode string) (string, bool) {
