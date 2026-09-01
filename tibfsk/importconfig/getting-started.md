@@ -27,7 +27,7 @@ advance as your environment requires.
 ## Before you start
 
 Every step runs end to end: bring up the Apache Kafka brokers the `server.properties` describes,
-convert the configuration, then start the FSK servers on the result. Five things hold for all twelve.
+convert the configuration, then start the FSK servers on the result. Six things hold for all twelve.
 
 **`tibftlimportconfig`.** Every `tibftlimportconfig` command below is the binary checked in at
 `bin/tibftlimportconfig` (linux/amd64) — no build step is needed. Put it on your `PATH`:
@@ -48,6 +48,32 @@ export KAFKA_HOME=/opt/kafka
 Steps 3 and 4 are the exception: they run Kafka in ZooKeeper mode, which 4.x removed, so those
 two need `KAFKA_HOME` pointed at Kafka 3.9 or earlier. The conversion itself does not care —
 `tibftlimportconfig` reads a `server.properties`, not a running broker.
+
+**Clear any inherited `CLASSPATH`.** `kafka-run-class.sh` *appends* Kafka's own `libs/` to whatever
+`CLASSPATH` your shell already exports, so those jars are searched first and can shadow the ones
+Kafka ships. Kafka 4.x configures logging from a YAML file, which pulls in `jackson-dataformat-yaml`
+and `snakeyaml`, so an older copy of either is enough to kill the broker before it reads a single
+line of your `server.properties`:
+
+```
+Exception in thread "main" java.lang.NoSuchMethodError: 'void
+org.yaml.snakeyaml.parser.ParserImpl.<init>(org.yaml.snakeyaml.reader.StreamReader,
+org.yaml.snakeyaml.LoaderOptions)'
+    at com.fasterxml.jackson.dataformat.yaml.YAMLParser.<init>(YAMLParser.java:204)
+    ...
+    at kafka.Kafka.main(Kafka.scala)
+```
+
+The failure is in a static initializer, which is why the trace bottoms out in `kafka.Kafka` with no
+Kafka code of your own on it. Start Kafka from a shell where the variable is unset:
+
+```bash
+unset CLASSPATH
+```
+
+`-daemon` hides this. It sends stdout and stderr to `$LOG_DIR/kafkaServer.out`, so a broker that
+dies this way looks like one that simply never came up — drop `-daemon` whenever a broker fails to
+start and the reason is not obvious.
 
 **Every broker needs an `inter.broker.listener.name`.** Kafka defaults it to a listener called
 `PLAINTEXT`, and none of the KRaft configurations here has one, so leaving it out stops the broker
