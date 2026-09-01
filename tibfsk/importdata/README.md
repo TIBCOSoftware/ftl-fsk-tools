@@ -28,7 +28,7 @@ Already have a Kafka cluster you want to migrate? Skip to
 
 ## Prerequisites
 
-- JDK 11+
+- JDK 17+ — the checked-in `classes/` were compiled with JDK 25, targeting `--release 17`
 - A Kafka installation, for its client JARs and CLI scripts
 - `tibftlimportconfig`, `tibftlserver`, and `tibftladmin` on your `PATH`
 - `curl`, used by `demo/wait-for-kof.sh` to poll the realm server
@@ -661,9 +661,10 @@ before re-running a topic that partially completed.
 
 ### Realm ports and `--core-servers`
 
-Unless you pass `--core-servers`, `tibftlimportconfig` picks each server's realm port randomly from
-5600–5699, and a regenerated configuration gets different ports. Pin them when the ports appear in
-firewall rules or scripts:
+Unless you pass `--core-servers`, `tibftlimportconfig` derives each server's realm port from the
+cluster itself, in 5600–5699. The same brokers always yield the same ports, so regenerating a
+configuration does not move them — but a different cluster gets different ports. Pin them when the
+ports appear in firewall rules or scripts:
 
 ```bash
 --core-servers "SRV1=localhost:5600"                                          # one server

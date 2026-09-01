@@ -17,11 +17,21 @@ its YAMLs are named `tibftlserver_standalone.yaml`, `tibftlserver_standalone-sec
 
 ---
 
-## Build
+## Getting the tool
 
-Requires Go 1.25+ (`toolchain go1.25.6` is pinned in `go.mod`).
+A built binary is checked in at [`bin/tibftlimportconfig`](bin/) (linux/amd64, statically linked),
+so a clone needs no Go toolchain. That is the binary every command in this document and in
+[getting-started.md](getting-started.md) refers to — put it on your `PATH`, or invoke it by path:
 
-From this directory — the one holding `go.mod`:
+```sh
+export PATH="$PWD/bin:$PATH"
+tibftlimportconfig -h
+```
+
+### Building from source
+
+Only needed for a platform other than linux/amd64, or when changing the tool. Requires Go 1.25+
+(`toolchain go1.25.6` is pinned in `go.mod`). From this directory — the one holding `go.mod`:
 
 ```sh
 go build .
@@ -33,6 +43,9 @@ workspace root:
 ```sh
 go build tibco.com/ftl-support/tibftlimportconfig
 ```
+
+To refresh the checked-in binary after changing the sources, run `./build-artifacts.sh` at the
+repository root and commit the result.
 
 ---
 
@@ -73,7 +86,7 @@ The sections below list the same flags as the corresponding `-h <group>` topic.
 |---|---|---|
 | `-output-dir` | `./kof-output` | Directory where output files are written |
 | `-data-dir` | `/var/tmp/kof/data` | FSK data directory path on pserver hosts |
-| `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are randomly generated in range 5600–5699 |
+| `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are derived from the cluster in range 5600–5699 — the same brokers always yield the same ports, so re-running the tool does not move them |
 | `-transport-type` | `auto` | Transport type for all pserver connections in `realm.json`: `auto` or `dtcp`<br>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br>`dtcp` pins every transport to dynamic TCP |
 | `-disk-persistence` | `async` | `disk_persistence` for the generated `kof.cluster.N`: `async`, `sync` or `in-memory`<br>`async` writes reach disk in the background; `sync` flushes every write before acknowledging it; `in-memory` writes nothing to disk and turns off the cluster's `disk_index` and `disk_compact`, which require disk persistence<br>The data store stays `async` and the sync and meta stores `sync` whichever the cluster is — except under `in-memory`, where the stores are in-memory too (see [`realm.json`](#realmjson)) |
 | `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated pserver. This is the *output* FTL servers' logging, not this tool's. |
@@ -552,7 +565,7 @@ Combine the example 12 flags above with `-dr-servers` to generate DR-enabled out
 
 Primary cluster with realm servers (SRV1–SRV3) and first 3 pservers. Realm server names and ports
 both come from `-core-servers`; if that flag is omitted the names default to `SRV1–SRV3` and the
-ports are randomly chosen in 5600–5699. The `-n` argument is the `servers:` key, which is always the
+ports are derived from the cluster in 5600–5699. The `-n` argument is the `servers:` key, which is always the
 core-server name:
 
 ```sh

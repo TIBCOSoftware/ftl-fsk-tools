@@ -38,10 +38,10 @@ export KAFKA_HOME=/path/to/kafka      # or set KAFKA_CLASSPATH directly
 ./build-artifacts.sh
 ```
 
-The Java is compiled with `--release 11` whatever JDK does the compiling, so the class files load
-on the Java 11 listed below. `GO`, `GOOS`, `GOARCH`, `JAVAC`, `JAVA_RELEASE` and `KAFKA_CLASSPATH`
-override the defaults. Nothing refreshes these automatically — `sync-to-fsk-tools.sh` copies
-sources only, so re-run the script and commit the result whenever the sources move.
+The checked-in class files were compiled with JDK 25 targeting `--release 17`, so they load on the
+Java 17 listed below and on anything newer. `GO`, `GOOS`, `GOARCH`, `JAVAC`, `JAVA_RELEASE` and
+`KAFKA_CLASSPATH` override the defaults. Nothing refreshes these artifacts automatically — re-run
+the script and commit the result whenever the sources change.
 
 CMake ignores the checked-in artifacts and builds from source into its own binary directory.
 
@@ -49,13 +49,18 @@ CMake ignores the checked-in artifacts and builds from source into its own binar
 
 ## Building
 
+Building is optional. The documentation throughout this repository refers to the checked-in
+artifacts above — `tibfsk/importconfig/bin/tibftlimportconfig` and
+`tibfsk/importdata/classes/` — which is what a clone runs by default. Build from source when you
+need a platform other than linux/amd64, or when you are changing the tools themselves.
+
 ### Prerequisites
 
 | Requirement | Minimum | Notes |
 |-------------|---------|-------|
 | CMake | 3.15 | |
 | Go | 1.25 | For `tibftlimportconfig`. Set `GO_EXECUTABLE` if the right version is not first on `PATH`. |
-| Java (JDK) | 11 | For `tibftlfskimportdata`. |
+| Java (JDK) | 17 | For `tibftlfskimportdata`. The checked-in classes were built with JDK 25. |
 | Apache Kafka client jars | — | `kafka-clients.jar` + `slf4j-api.jar`; see below. |
 
 ### Build (both tools)

@@ -14,7 +14,7 @@
 # directory and does not read these; they are for people who just want to run.
 #
 # Re-run this and commit the result whenever the Go or Java sources change --
-# sync-to-fsk-tools.sh copies sources only, so a stale binary here is silent.
+# nothing refreshes them automatically, so a stale binary here is silent.
 #
 # Usage:
 #   ./build-artifacts.sh
@@ -23,7 +23,7 @@
 #   GO               Go 1.25+ executable                (default: go on PATH)
 #   GOOS GOARCH      target platform for the binary     (default: linux amd64)
 #   JAVAC            javac executable                   (default: JDK 25 from Homebrew)
-#   JAVA_RELEASE     --release passed to javac          (default: 11, the documented minimum)
+#   JAVA_RELEASE     --release passed to javac          (default: 17, the documented minimum)
 #   KAFKA_CLASSPATH  kafka-clients.jar:slf4j-api.jar    (default: derived from KAFKA_HOME)
 #   KAFKA_HOME       Apache Kafka installation          (used only to find those two jars)
 
@@ -40,7 +40,7 @@ export GOARCH="${GOARCH:-amd64}"
 export CGO_ENABLED="${CGO_ENABLED:-0}"
 
 JAVAC="${JAVAC:-/usr/local/opt/openjdk/bin/javac}"
-JAVA_RELEASE="${JAVA_RELEASE:-11}"
+JAVA_RELEASE="${JAVA_RELEASE:-17}"
 
 IMPORTCONFIG="$ROOT/tibfsk/importconfig"
 IMPORTDATA="$ROOT/tibfsk/importdata"
@@ -72,7 +72,7 @@ fi
 [[ -x "$JAVAC" ]] || command -v "$JAVAC" >/dev/null 2>&1 || {
     echo "ERROR: no javac at $JAVAC. Set \$JAVAC." >&2; exit 1; }
 
-# --release keeps the class files loadable on the Java 11 the READMEs promise, even
+# --release keeps the class files loadable on the Java 17 the READMEs promise, even
 # though a much newer JDK compiles them.
 echo "==> Compiling tibftlfskimportdata with $("$JAVAC" -version 2>&1) --release $JAVA_RELEASE"
 rm -rf "$IMPORTDATA/classes"

@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// PortMap holds the randomly generated FTL ports for a cluster of N pservers.
+// PortMap holds the generated FTL ports for a cluster of N pservers.
 type PortMap struct {
 	RealmPorts   []int // FTL realm server listening ports (first 3 used for primary cluster)
 	PserverPorts []int // FTL ports pservers listen on (one per pserver)

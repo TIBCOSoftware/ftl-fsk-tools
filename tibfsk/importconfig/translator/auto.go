@@ -14,12 +14,12 @@ import (
 )
 
 // --auto runs only the deterministic, mechanical conversions: it converts JKS/PKCS12
-// keystores to PEM via keytool/openssl and updates the config so they resolve. It
-// does NOT make judgment calls -- it never picks a handler backend (the class name
-// only suggests one; that is the operator's call in the resolve block) or invents an
-// external fact (an OAuth URL, a secret). Every action is narrated with its outcome,
-// and anything it cannot do is left as a RESOLVE-REQUIRED block -- nothing changes
-// silently.
+// keystores to PEM via keytool/openssl, so the .pem the config already names really
+// exists. It does NOT make judgment calls -- it never picks a handler backend (the
+// class name only suggests one; that is the operator's call in the resolve block) or
+// invents an external fact (an OAuth URL, a secret). Every action is narrated with its
+// outcome, and every keystore it could not convert is warned about here and again in
+// the SEVERE WARNING at the end of the run -- nothing fails silently.
 
 type commandRunner func(name string, args ...string) (string, error)
 
@@ -75,10 +75,11 @@ func convertOneKeystore(cfg *BrokerConfig, kc *KeystoreConversion, log io.Writer
 	loc := kc.FromLoc
 	pw := cfg.Settings[pwKey]
 
-	// Skips are silent: nothing was produced, and the pending-keystore notice
-	// already tells the operator the .pem is still theirs to create. Only real work
-	// (a conversion or a failure) is narrated.
+	// --auto was asked to produce this .pem and cannot, so say so here rather than
+	// leaving the operator to infer it from the warning at the end of the run.
 	if _, err := os.Stat(loc); err != nil {
+		fmt.Fprintf(log, "auto: WARNING: cannot convert %s %s -> PEM: %v\n", kind, loc, err)
+		fmt.Fprintf(log, "  %s is not on this host; %s must be created elsewhere\n", loc, kc.ToLoc)
 		return keystoreSkipped
 	}
 	fmt.Fprintf(log, "auto: converting %s %s -> PEM\n", kind, loc)
@@ -94,7 +95,7 @@ func convertOneKeystore(cfg *BrokerConfig, kc *KeystoreConversion, log io.Writer
 		}
 		fmt.Fprintf(log, "  run: keytool %s\n", strings.Join(redactPass(args, pw), " "))
 		if out, err := run("keytool", args...); err != nil {
-			fmt.Fprintf(log, "  FAILED: keytool: %v %s; left as RESOLVE-REQUIRED\n", err, strings.TrimSpace(out))
+			fmt.Fprintf(log, "  WARNING: keytool failed: %v %s; %s was not created\n", err, strings.TrimSpace(out), pem)
 			return keystoreFailed
 		}
 		fmt.Fprintf(log, "  ok:  wrote %s\n", p12)
@@ -110,7 +111,7 @@ func convertOneKeystore(cfg *BrokerConfig, kc *KeystoreConversion, log io.Writer
 	oargs = append(oargs, "-out", pem)
 	fmt.Fprintf(log, "  run: openssl %s\n", strings.Join(redactPass(oargs, pw), " "))
 	if out, err := run("openssl", oargs...); err != nil {
-		fmt.Fprintf(log, "  FAILED: openssl: %v %s; left as RESOLVE-REQUIRED\n", err, strings.TrimSpace(out))
+		fmt.Fprintf(log, "  WARNING: openssl failed: %v %s; %s was not created\n", err, strings.TrimSpace(out), pem)
 		return keystoreFailed
 	}
 	fmt.Fprintf(log, "  ok:  wrote %s\n", pem)

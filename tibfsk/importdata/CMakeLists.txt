@@ -1,6 +1,6 @@
 # tibftlfskimportdata — Java tool that replicates Kafka records to FSK brokers.
 #
-# Requires Java 11+ and Kafka client jars on KAFKA_CLASSPATH.
+# Requires Java 17+ and Kafka client jars on KAFKA_CLASSPATH.
 # Supply at configure time:
 #   cmake -DKAFKA_CLASSPATH="/path/kafka-clients.jar:/path/slf4j-api.jar:/path/slf4j-simple.jar" ..
 
@@ -15,7 +15,7 @@ if(NOT KAFKA_CLASSPATH)
     return()
 endif()
 
-find_package(Java 11 COMPONENTS Development REQUIRED)
+find_package(Java 17 COMPONENTS Development REQUIRED)
 
 set(FSKIMPORT_SRC_DIR    "${CMAKE_CURRENT_SOURCE_DIR}/src/main/java")
 set(FSKIMPORT_CLASSES_DIR "${CMAKE_CURRENT_BINARY_DIR}/classes")

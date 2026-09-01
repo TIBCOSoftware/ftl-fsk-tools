@@ -13,7 +13,7 @@ globals:
 servers:
   PSRV7:
   - ftl:
-      server: localhost:5731
+      server: localhost:5786
   - ftlserver.properties:
       loglevel: info
       #logfile: /var/tmp/kof/data/PSRV7.log
@@ -27,7 +27,7 @@ servers:
 
   PSRV8:
   - ftl:
-      server: localhost:5774
+      server: localhost:5771
   - ftlserver.properties:
       loglevel: info
       #logfile: /var/tmp/kof/data/PSRV8.log
@@ -41,7 +41,7 @@ servers:
 
   PSRV9:
   - ftl:
-      server: localhost:5745
+      server: localhost:5725
   - ftlserver.properties:
       loglevel: info
       #logfile: /var/tmp/kof/data/PSRV9.log

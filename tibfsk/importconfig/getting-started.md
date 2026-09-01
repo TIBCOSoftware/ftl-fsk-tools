@@ -27,7 +27,17 @@ advance as your environment requires.
 ## Before you start
 
 Every step runs end to end: bring up the Apache Kafka brokers the `server.properties` describes,
-convert the configuration, then start the FSK servers on the result. Four things hold for all ten.
+convert the configuration, then start the FSK servers on the result. Five things hold for all ten.
+
+**`tibftlimportconfig`.** Every `tibftlimportconfig` command below is the binary checked in at
+`bin/tibftlimportconfig` (linux/amd64) — no build step is needed. Put it on your `PATH`:
+
+```bash
+export PATH=/path/to/ftl-fsk-tools/tibfsk/importconfig/bin:$PATH
+```
+
+Building from source is only necessary on another platform or when changing the tool; see
+[README.md](./README.md#building-from-source).
 
 **`KAFKA_HOME`.** The Kafka commands assume a Kafka 4.x installation:
 
@@ -224,8 +234,8 @@ transaction.state.log.min.isr=1
 ### Convert keystores to PEM
 
 The generated `kof.broker.1.properties` already names the `.pem` files; these are the
-commands, printed in the file above each setting and again as a `NOTE` at the end of the
-run, that actually create them. For JKS:
+commands, printed in the file above each setting and again as a `SEVERE WARNING` at the end
+of the run, that actually create them. For JKS:
 
 ```bash
 # Convert keystore
@@ -504,7 +514,8 @@ All kof.broker.*.properties files are processed successfully.
 ```
 
 The generated `tibftlserver-cluster.yaml` contains three pserver entries (`SRV1`, `SRV2`,
-`SRV3`) with randomly assigned FTL ports in the 5600–5799 range. To pin specific
+`SRV3`) with FTL ports derived from the cluster in the 5600–5799 range — the same brokers
+always yield the same ports, so re-running the tool does not move them. To pin specific
 ports use `--core-servers SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`.
 
 ### Start the FSK servers
@@ -1229,17 +1240,30 @@ every run; once all blocks are resolved the exit code is 0 and output shows:
 All kof.broker.*.properties files are processed successfully.
 ```
 
-Two kinds of setting look like problems but are not:
+### Keystores: ACCEPTED but not yet runnable
 
-- **A JKS/PKCS12 keystore is translated, not refused.** The type becomes `PEM` and the
-  location is repointed at the `.pem`, so the file is ACCEPTED. The run ends with a
-  `NOTE` listing every `.pem` that does not exist yet, and the commands that create them
-  sit in the generated file above each setting. Run them — or re-run with `--auto` — before
-  starting `tibftlserver`, or the pserver fails on a missing file.
-- **A setting that is present but doing nothing is commented out, not flagged.** An empty
-  `authorizer.class.name`, a `sasl.enabled.mechanisms` list on a broker where no listener
-  speaks SASL, an `ssl.keystore.type` with no matching `.location` — each is written back
-  as a comment with the reason, and none of them makes the file INVALID.
+PEM is FSK's keystore format, so a JKS/PKCS12 keystore is translated rather than refused:
+the type becomes `PEM`, the location is repointed at the `.pem`, and the file is stamped
+ACCEPTED. **Creating that `.pem` is a separate step, and until it is done the configuration
+will not run.** The tool is explicit about it:
+
+```
+*** SEVERE WARNING -- kof-output/kof.broker.1.properties WILL NOT RUN WITH FSK AS IT STANDS ***
+2 Java keystore(s) were rewritten to PEM, but the .pem file(s) do not exist.
+tibftlserver will fail at startup on the missing file. Create them first:
+```
+
+followed by the `keytool`/`openssl` commands for each one — the same commands the generated
+file carries above each setting. Run them, or re-run with `--auto` on a host that holds the
+`.jks`, and the warning disappears. When `--auto` cannot do a conversion it says so per
+keystore and the SEVERE WARNING still stands.
+
+### Settings that are present but doing nothing
+
+These are commented out with a reason, not flagged. An empty `authorizer.class.name`, a
+`sasl.enabled.mechanisms` list on a broker where no listener speaks SASL, an
+`ssl.keystore.type` with no matching `.location` — each had no effect on the source broker
+either, so none of them makes the file INVALID.
 
 Settings with no FSK equivalent (Kerberos families, delegation tokens, per-IP
 connection limits) are written to `unsupported.properties` for reference and do not

@@ -23,6 +23,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	rand "math/rand/v2"
 	"os"
@@ -50,7 +51,8 @@ func main() {
 	coreServersFlag := flag.String("core-servers", "",
 		"comma-separated NAME=host:port list for globals.core.servers\n"+
 			"    e.g. SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602\n"+
-			"    if omitted, ports are randomly generated in range 5600-5699")
+			"    if omitted, ports are derived from the cluster in range 5600-5699\n"+
+			"    (the same brokers always yield the same ports, so re-runs do not churn)")
 
 	// TLS flags
 	tlsCert := flag.String("tls-cert", "", "server TLS certificate PEM file path")
@@ -217,7 +219,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ports := generatePorts(numPservers)
+	ports := generatePorts(cfgs)
 	realmPath := filepath.Join(*outputDir, "realm.json")
 
 	// Build per-pserver properties file paths (1-based index).
@@ -282,9 +284,9 @@ func main() {
 	if *autoMode {
 		for _, cfg := range cfgs {
 			r := translator.AutoResolve(cfg, os.Stderr)
-			if r.KeystoresConverted > 0 || r.KeystoresFailed > 0 {
-				fmt.Fprintf(os.Stderr, "auto: %d keystore converted, %d failed\n\n",
-					r.KeystoresConverted, r.KeystoresFailed)
+			if r.KeystoresConverted > 0 || r.KeystoresFailed > 0 || r.KeystoresSkipped > 0 {
+				fmt.Fprintf(os.Stderr, "auto: %d keystore(s) converted, %d failed, %d could not be done here\n\n",
+					r.KeystoresConverted, r.KeystoresFailed, r.KeystoresSkipped)
 			}
 		}
 	}
@@ -391,31 +393,45 @@ func main() {
 	}
 	// A keystore rewritten to PEM is settled as far as the config goes, so it does
 	// not make the file INVALID -- but the .pem does not exist until someone makes
-	// it, and a config pointing at a missing file fails at startup. Say so.
+	// it, and a config pointing at a missing file fails at startup. Say so, loudly.
+	anyPendingKeystore := false
 	for i, cfg := range cfgs {
-		printKeystoreNotice(os.Stderr, cfg, *outputDir, *autoMode, i+1)
+		if len(translator.PendingKeystores(cfg)) > 0 {
+			anyPendingKeystore = true
+		}
+		printKeystoreWarning(os.Stderr, cfg, *outputDir, *autoMode, i+1)
 	}
 	if anyInvalid {
 		os.Exit(2)
 	}
+	// Don't follow a SEVERE WARNING with "processed successfully" -- the translation
+	// did succeed, but the output is not runnable until the .pem files exist, and
+	// only one of those two facts should be the last thing on screen.
+	if anyPendingKeystore {
+		fmt.Fprintln(os.Stdout, "\nAll kof.broker.*.properties files were translated, but the keystore"+
+			"\nconversion(s) above must be completed before FSK will start.")
+		return
+	}
 	fmt.Fprintln(os.Stdout, "\nAll kof.broker.*.properties files are processed successfully.")
 }
 
-// printKeystoreNotice lists the Java keystores rewritten to PEM whose .pem file
-// still has to be produced. It is a notice, not a failure: the generated config is
-// correct, the missing piece is a file only the operator (or --auto, on the host
-// that holds the .jks) can create.
-func printKeystoreNotice(w io.Writer, cfg *translator.BrokerConfig, outputDir string, autoRan bool, n int) {
+// printKeystoreWarning reports the Java keystores rewritten to PEM whose .pem file
+// was not produced. The config itself is correct and stamped ACCEPTED -- but it names
+// files that do not exist, so tibftlserver will not start on it. That is severe enough
+// to say in those words, and it is the one thing standing between this output and a
+// working FSK server.
+func printKeystoreWarning(w io.Writer, cfg *translator.BrokerConfig, outputDir string, autoRan bool, n int) {
 	pending := translator.PendingKeystores(cfg)
 	if len(pending) == 0 {
 		return
 	}
 	brokerPath := filepath.Join(outputDir, fmt.Sprintf("kof.broker.%d.properties", n))
-	fmt.Fprintf(w, "\nNOTE -- %d Java keystore(s) rewritten to PEM in %s.\n", len(pending), brokerPath)
+	fmt.Fprintf(w, "\n*** SEVERE WARNING -- %s WILL NOT RUN WITH FSK AS IT STANDS ***\n", brokerPath)
+	fmt.Fprintf(w, "%d Java keystore(s) were rewritten to PEM, but the .pem file(s) do not exist.\n", len(pending))
 	if autoRan {
-		fmt.Fprintln(w, "--auto could not convert these here (the source file is not on this host).")
+		fmt.Fprintln(w, "--auto could not create them here -- see the warnings above.")
 	}
-	fmt.Fprintln(w, "The .pem files do not exist yet. Create them before starting tibftlserver:")
+	fmt.Fprintln(w, "tibftlserver will fail at startup on the missing file. Create them first:")
 	for i, kc := range pending {
 		fmt.Fprintf(w, "\n  %d. %s\n", i+1, kc.TypeKey)
 		for _, cmd := range kc.Commands() {
@@ -593,18 +609,27 @@ func parseCoreServers(s string) []translator.CoreServer {
 	return out
 }
 
-// generatePorts picks n random FTL ports in two non-overlapping ranges:
+// generatePorts picks one FTL port per pserver in two non-overlapping ranges:
 //   - realm server ports: 5600–5699
 //   - pserver connection ports: 5700–5799
-func generatePorts(n int) translator.PortMap {
+//
+// The choice is arbitrary but NOT random: the generator is seeded from the cluster
+// itself (node ids and Kafka listener addresses), so converting the same brokers twice
+// produces the same YAML. Re-running the tool should not churn the output, and the
+// checked-in examples would otherwise differ on every regeneration. Two clusters on one
+// host still get different ports, because they must already differ in their Kafka
+// listeners to coexist.
+func generatePorts(cfgs []*translator.BrokerConfig) translator.PortMap {
+	n := len(cfgs)
 	pm := translator.PortMap{
 		RealmPorts:   make([]int, n),
 		PserverPorts: make([]int, n),
 	}
+	r := rand.New(rand.NewPCG(clusterSeed(cfgs), 0))
 	used := map[int]bool{}
 	pick := func(lo, hi int) int {
 		for {
-			p := rand.IntN(hi-lo) + lo
+			p := r.IntN(hi-lo) + lo
 			if !used[p] {
 				used[p] = true
 				return p
@@ -618,4 +643,19 @@ func generatePorts(n int) translator.PortMap {
 		pm.PserverPorts[i] = pick(5700, 5800)
 	}
 	return pm
+}
+
+// clusterSeed hashes the identity of the cluster being converted. It deliberately uses
+// only what the source configuration says -- not the file path, the output directory or
+// the clock -- so the same brokers seed the same ports no matter where the tool runs.
+func clusterSeed(cfgs []*translator.BrokerConfig) uint64 {
+	h := fnv.New64a()
+	for _, cfg := range cfgs {
+		fmt.Fprintf(h, "node=%d;", cfg.NodeID)
+		for _, ld := range cfg.Listeners {
+			fmt.Fprintf(h, "%s://%s:%d;", ld.Name, ld.AdvAddr, ld.AdvPort)
+		}
+		fmt.Fprint(h, "|")
+	}
+	return h.Sum64()
 }
