@@ -37,9 +37,9 @@ The repository checks in a built copy of each tool, so a clone runs with no Go t
 Both scripts prefer `classes/` and fall back to compiling into `build/` only when it is missing.
 Set `FSK_FORCE_REBUILD=1` to compile from source anyway after editing the Java.
 
-The binary is **linux/amd64**, statically linked with `CGO_ENABLED=0`. It is cross-compiled, so it
-does not run on the machine that built it; build from source (below) for any other platform, or
-pass `GOOS`/`GOARCH` to the script. The class files are platform-independent.
+The binary is **linux/amd64**, statically linked with `CGO_ENABLED=0`. Build from source (below)
+for any other platform, or pass `GOOS`/`GOARCH` to the script. The class files are
+platform-independent.
 
 To refresh the artifacts after changing a source file:
 
