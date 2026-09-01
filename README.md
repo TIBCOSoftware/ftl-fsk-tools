@@ -10,7 +10,7 @@ Tools for configuring and migrating to TIBCO FTL(R) Service for Kafka (FSK) pers
 **Coming from an existing Apache Kafka cluster?** Start with
 [tibfsk/importconfig/getting-started.md](tibfsk/importconfig/getting-started.md), which converts
 the `server.properties` you already run into a working FSK configuration across twelve worked
-steps, from a single plaintext broker up to a secured three-node cluster. It is the guide to read
+scenarios, from a single plaintext broker up to a secured three-node cluster. It is the guide to read
 first; `importconfig/README.md` is the flag-by-flag reference for once you know what you are
 looking for, and `importdata` is a separate job — moving the *records* over after the
 configuration is in place. The same guide is browsable offline at
