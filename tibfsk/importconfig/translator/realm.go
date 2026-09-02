@@ -22,8 +22,8 @@ const realmName = "_default_realm"
 const RealmFileName = "ftlserver.json"
 
 // WriteRealmJSON generates the realm configuration with one kof.cluster per group
-// of 3 pservers. transportType sets the transport_type field for all pserver
-// connections ("auto" or "dtcp").
+// of -replication-factor pservers. transportType sets the transport_type field for
+// all pserver connections ("auto" or "dtcp").
 func WriteRealmJSON(cfg *BrokerConfig, outputDir string, numPservers int, drOpts DROpts, transportType string, copts ClusterOpts) error {
 	path := filepath.Join(outputDir, RealmFileName)
 	f, err := os.Create(path)
@@ -42,7 +42,9 @@ func WriteRealmJSON(cfg *BrokerConfig, outputDir string, numPservers int, drOpts
 }
 
 func buildRealm(cfg *BrokerConfig, numPservers int, drOpts DROpts, transportType string, copts ClusterOpts) map[string]any {
-	numClusters := (numPservers + 2) / 3
+	// Exact division: main rejects a pserver count that is not a multiple of the
+	// replication factor, so there is no short final shard to round up for.
+	numClusters := numPservers / copts.RF()
 	if numClusters < 1 {
 		numClusters = 1
 	}
@@ -145,6 +147,7 @@ func RealmDiskPersistence(mode string) (string, bool) {
 }
 
 // buildKOFCluster constructs the kof.cluster map per FSK requirements:
+//   - one shard of -replication-factor pservers, assigned in input order
 //   - cluster name: "kof.cluster.N" where N is the 0-based cluster index
 //   - kof_enabled: true; disk_persistence from -disk-persistence (default async)
 //   - 3 required stores: kof.data.store.N, kof.sync.store.N, kof.meta.store.N,
@@ -155,8 +158,9 @@ func RealmDiskPersistence(mode string) (string, bool) {
 // disk without sync or async persistence ("indexes on disk requires sync or async disk
 // persistence"), and compaction is inert with nothing on disk.
 func buildKOFCluster(cfg *BrokerConfig, clusterIdx, numPservers int, drOpts DROpts, transportType string, copts ClusterOpts) map[string]any {
-	startPserver := clusterIdx*3 + 1
-	endPserver := min(startPserver+3, numPservers+1)
+	rf := copts.RF()
+	startPserver := clusterIdx*rf + 1
+	endPserver := min(startPserver+rf, numPservers+1)
 	clusterName := fmt.Sprintf("kof.cluster.%d", clusterIdx)
 
 	// Validated in main before we get here; an unknown token falls back to the default.

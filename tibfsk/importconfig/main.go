@@ -7,7 +7,7 @@
 // the FTL artifacts needed to run a FSK-enabled pserver cluster:
 //
 //	tibftlserver-cluster.yaml         — FTL pserver cluster configuration (primary)
-//	tibftlserver-cluster-auxN.yaml    — Auxiliary pserver groups (one per additional group of 3 pservers)
+//	tibftlserver-cluster-auxN.yaml    — Auxiliary pserver groups (the pservers beyond the first 3, in groups of 3)
 //	tibftlserver-cluster-secure.yaml  — Secure variant with TLS/auth (when --tls-cert or --oauth-token-url provided)
 //	ftlserver.json                    — FTL realm configuration with kof.cluster definition
 //	kof.broker.N.properties           — Per-pserver broker properties (one file per input, N is 1-based)
@@ -119,6 +119,18 @@ func main() {
 			"    whichever the cluster is -- except under in-memory, where the stores are\n"+
 			"    in-memory too, since an override would otherwise put them back on disk")
 
+	// 0 is the "auto" sentinel: 3, or 1 for a lone broker. Resolved once the input
+	// count is known, below. Naming the real default in the text keeps flag's own
+	// "(default 0)" out of the help.
+	replicationFactor := flag.Int("replication-factor", 0,
+		"pservers per FSK shard (kof.cluster.N): 1, 3 or 5 (default 3)\n"+
+			"    the number of input server.properties files must be an exact multiple\n"+
+			"    of this -- 9 files at 3 gives three shards, 6 gives two, 5 files at 5\n"+
+			"    gives one; the FTL realm keeps its own 3 servers either way\n"+
+			"    the values are odd because a shard needs a majority quorum, so a\n"+
+			"    2-file input is refused; use 1 for one unreplicated shard per broker\n"+
+			"    unset, it is 3, or 1 when a single file is given")
+
 	writeMigrationConfig := flag.Bool("migration-config", false,
 		"write kafka-to-kof.properties to the output directory (migration tool configuration)")
 
@@ -160,6 +172,13 @@ func main() {
 	if _, ok := translator.RealmDiskPersistence(*diskPersistence); !ok {
 		fmt.Fprintf(os.Stderr, "error: --disk-persistence must be one of %s (got %q)\n",
 			strings.Join(translator.DiskPersistenceModeNames, ", "), *diskPersistence)
+		os.Exit(1)
+	}
+
+	// The accepted factors are odd because an FSK shard needs a majority quorum.
+	// 0 is the unset sentinel and is resolved against the input count below.
+	if *replicationFactor != 0 && *replicationFactor != 1 && *replicationFactor != 3 && *replicationFactor != 5 {
+		fmt.Fprintf(os.Stderr, "error: --replication-factor must be one of 1, 3, 5 (got %d)\n", *replicationFactor)
 		os.Exit(1)
 	}
 
@@ -210,6 +229,26 @@ func main() {
 	}
 	numPservers := len(cfgs)
 
+	// Resolve --replication-factor now that the broker count is known. Unset means 3,
+	// the FTL quorum, except for a lone broker: that is a standalone server and is
+	// explicitly unreplicated. Two brokers get no such exemption -- FTL runs 1, 3 or 5,
+	// and two servers have no majority, so losing either one stalls the shard.
+	replFactor := *replicationFactor
+	if replFactor == 0 {
+		replFactor = 3
+		if numPservers == 1 {
+			replFactor = 1
+		}
+	}
+	if numPservers%replFactor != 0 {
+		fmt.Fprintf(os.Stderr,
+			"error: --replication-factor %d requires the number of broker files to be a multiple of %d (got %d)\n",
+			replFactor, replFactor, numPservers)
+		fmt.Fprintln(os.Stderr,
+			"       use --replication-factor 1 for one unreplicated shard per broker")
+		os.Exit(1)
+	}
+
 	// Every pserver needs a distinct, non-negative node.id or it will not start.
 	// Whichever way the configs arrived, fill in the ones the source left out.
 	translator.EnsureNodeIDs(cfgs)
@@ -243,10 +282,11 @@ func main() {
 
 	// Settings shared by every generated cluster YAML and by ftlserver.json.
 	clusterOpts := translator.ClusterOpts{
-		LogLevel:         *ftlLogLevel,
-		DisableDiskIndex: *disableDiskIndex,
-		DiskPersistence:  *diskPersistence,
-		Tibschemad:       *writeTibschemad,
+		LogLevel:          *ftlLogLevel,
+		DisableDiskIndex:  *disableDiskIndex,
+		DiskPersistence:   *diskPersistence,
+		Tibschemad:        *writeTibschemad,
+		ReplicationFactor: replFactor,
 	}
 
 	// Build SecureOpts from flags.

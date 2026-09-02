@@ -88,6 +88,7 @@ The sections below list the same flags as the corresponding `-h <group>` topic.
 | `-data-dir` | `/var/tmp/kof/data` | FSK data directory path on FTL Server hosts |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br>If omitted, ports are derived from the cluster in range 5600–5699 — the same brokers always yield the same ports, so re-running the tool does not move them |
 | `-transport-type` | `auto` | Transport type for all FTL Server connections in `ftlserver.json`: `auto` or `dtcp`<br>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br>`dtcp` pins every transport to dynamic TCP |
+| `-replication-factor` | `3` | FTL Servers per FSK shard (`kof.cluster.N`): `1`, `3` or `5`. The number of input `server.properties` files must be an exact multiple of it — 9 files at `3` give three shards, 6 give two, 5 files at `5` give one. The FTL realm keeps its own 3 servers either way.<br>The accepted values are odd because a shard needs a majority quorum, so **2 input files are refused**; use `-replication-factor 1` for one unreplicated shard per broker. With a single input file the default is `1` — a standalone server is explicitly unreplicated. See [Multi-cluster split](#multi-cluster-split-9-input-files--3-shards) |
 | `-disk-persistence` | `async` | `disk_persistence` for the generated `kof.cluster.N`: `async`, `sync` or `in-memory`<br>`async` writes are buffered for an eventual flush to disk; `sync` flushes every write before acknowledging it; `in-memory` writes nothing to disk and turns off the cluster's `disk_index` and `disk_compact`, which require disk persistence<br>The data store stays `async` and the sync and meta stores `sync` whichever the cluster is — except under `in-memory`, where the stores are in-memory too (see [`ftlserver.json`](#realmjson)) |
 | `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated FTL Server. This is the *output* FTL Servers' logging, not this tool's. |
 | `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `tibftlfskimportdata` data migration tool) |
@@ -158,7 +159,7 @@ Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` lis
 
 ## Multi-cluster split (9 input files → 3 shards)
 
-The number of shards is determined by the number of `server.properties` files passed on the command line. Every 3 input files → 1 FSK cluster (shard). The primary `tibftlserver-cluster.yaml` always holds the first 3 FTL Servers with FTL realm servers. Every additional group of up to 3 FTL Servers goes into `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, etc. Auxiliary files contain **no realm server entries** — FTL Servers connect to the primary realm cluster via `globals.core.servers`.
+The number of FTL Servers is the number of `server.properties` files passed on the command line; how they are grouped into shards is [`-replication-factor`](#core-flags--h-core). Every *replication factor* input files → 1 FSK cluster (shard), and the file count must be an exact multiple of it, so no shard is ever short of servers.
 
 ```
 9 input files → tibftlserver-cluster.yaml      (pserver1–3 + SRV1–3 realm servers)
@@ -166,6 +167,23 @@ The number of shards is determined by the number of `server.properties` files pa
                 tibftlserver-cluster-aux2.yaml  (pserver7–9, no realm)
                 ftlserver.json             (kof.cluster.0, kof.cluster.1, kof.cluster.2)
 ```
+
+### Accepted input-file counts
+
+| `-replication-factor` | Input files | Shards |
+|---|---|---|
+| _(omitted)_ | 1 | one server, unreplicated — a standalone, not a cluster |
+| _(omitted)_ or `3` | 3, 6, 9 | one, two or three shards of 3 |
+| `5` | 5 | one shard of 5 |
+| `1` | 1–9 | one unreplicated shard per broker |
+
+Any other count is refused. In particular **2 input files are refused**: FTL runs 1, 3 or 5 servers, and two have no majority quorum, so losing either one stalls the shard. Use `-replication-factor 1` if you really want two independent unreplicated shards. Counts such as 4, 7 and 8 are refused for the same reason — they would leave a short final shard.
+
+### File layout
+
+The primary `tibftlserver-cluster.yaml` always holds the first 3 FTL Servers, which are the ones carrying FTL realm servers. The rest go into `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml` and so on, in groups of 3 (or of the replication factor, when that is larger). Auxiliary files contain **no realm server entries** — those FTL Servers connect to the primary realm cluster via `globals.core.servers`.
+
+Which YAML file a server is declared in is packaging only. Shard membership lives entirely in `ftlserver.json`, so at `-replication-factor 5` the one 5-server shard spans the primary file and `aux1.yaml`, and at `-replication-factor 1` a single aux file holds servers belonging to three different shards.
 
 ---
 
@@ -430,6 +448,8 @@ tibftlimportconfig \
 
 **Output:** `tibftlserver-cluster.yaml` (SRV1–3 + pserver1–3), `tibftlserver-cluster-aux1.yaml` (pserver4–6), `tibftlserver-cluster-aux2.yaml` (pserver7–9), `ftlserver.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `ftl-users.txt`, `unsupported.properties`
 
+The three shards are the default [`-replication-factor`](#core-flags--h-core) of 3. Adding `--replication-factor 1` to the same nine inputs gives nine unreplicated shards, `kof.cluster.0` through `.8`, with the YAML file layout unchanged.
+
 ---
 
 ### 12 — 9-broker, full security stack (3 shards)
@@ -463,6 +483,8 @@ tibftlimportconfig \
 ```
 
 **Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS), `ftlserver.json` (3 clusters), `kof.broker.{1–9}.properties`, `unsupported.properties`
+
+As in example 11, the three shards come from the default [`-replication-factor`](#core-flags--h-core) of 3. The secure YAML covers the primary file's three FTL Servers whatever the factor is — there is no `-secure-auxN.yaml`.
 
 ---
 

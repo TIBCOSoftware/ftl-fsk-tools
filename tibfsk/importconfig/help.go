@@ -30,12 +30,13 @@ var flagGroups = []flagGroup{
 	{
 		name:  "core",
 		title: "Core flags",
-		blurb: "output location, data dir, server addresses, transport, persistence",
+		blurb: "output location, data dir, server addresses, transport, persistence, sharding",
 		flags: []string{
 			"output-dir",
 			"data-dir",
 			"core-servers",
 			"transport-type",
+			"replication-factor",
 			"disk-persistence",
 			"ftl-loglevel",
 			"migration-config",
@@ -189,7 +190,7 @@ func writeOverview(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Output files:")
 	fmt.Fprintln(w, "  tibftlserver-cluster.yaml         FTL pserver cluster configuration (primary, first 3 pservers)")
-	fmt.Fprintln(w, "  tibftlserver-cluster-auxN.yaml    Additional pserver groups (one per group of 3 pservers beyond the first)")
+	fmt.Fprintln(w, "  tibftlserver-cluster-auxN.yaml    Additional pserver groups (the pservers beyond the first 3, in groups of 3)")
 	fmt.Fprintln(w, "  tibftlserver-cluster-secure.yaml  Secure variant with TLS/auth settings for FTL server")
 	fmt.Fprintln(w, "  tibftlserver-cluster-dr.yaml      DR replica cluster (with -dr-servers)")
 	fmt.Fprintln(w, "  ftlserver.json                    FTL realm configuration with kof.cluster")
