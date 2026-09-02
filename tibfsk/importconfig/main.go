@@ -111,7 +111,7 @@ func main() {
 
 	diskPersistence := flag.String("disk-persistence", "async",
 		"disk persistence for the generated kof.cluster: async, sync, or in-memory\n"+
-			"    async      writes reach disk in the background\n"+
+			"    async      writes are buffered for an eventual flush to disk\n"+
 			"    sync       every write is flushed to disk before it is acknowledged\n"+
 			"    in-memory  nothing is written to disk; also turns off the cluster's\n"+
 			"               disk index and compaction, which require disk persistence\n"+
