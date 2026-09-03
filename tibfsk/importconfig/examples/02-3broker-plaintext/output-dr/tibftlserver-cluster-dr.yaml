@@ -12,7 +12,7 @@ servers:
   DRSRV1:
   - realm:
       label: DR_SERVER
-      data: /var/kof/dr
+      data: /var/kof/dr/srv1
       initial.realm.config: output-dr/ftlserver.json
   - ftlserver.properties:
       loglevel: info
@@ -28,7 +28,7 @@ servers:
   DRSRV2:
   - realm:
       label: DR_SERVER
-      data: /var/kof/dr
+      data: /var/kof/dr/srv2
       initial.realm.config: output-dr/ftlserver.json
   - ftlserver.properties:
       loglevel: info
@@ -44,7 +44,7 @@ servers:
   DRSRV3:
   - realm:
       label: DR_SERVER
-      data: /var/kof/dr
+      data: /var/kof/dr/srv3
       initial.realm.config: output-dr/ftlserver.json
   - ftlserver.properties:
       loglevel: info

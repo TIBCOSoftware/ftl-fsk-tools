@@ -127,14 +127,18 @@ func ShouldWriteSecure(cfg *BrokerConfig, opts SecureOpts) bool {
 	return opts.TLSCert != "" || opts.OAuthTokenURL != "" || opts.AuthUsersFile != ""
 }
 
-// WriteKOFSecureYAML generates the secure variant of the primary cluster YAML
-// (<stem>-secure.yaml, first 3 pservers). See clusterYAMLStem for the stem.
+// WriteKOFSecureYAML generates the secure variant of the cluster YAML
+// (<stem>-secure.yaml). See clusterYAMLStem for the stem.
+//
+// It covers every server, laid out exactly as WriteKOFClusterYAML lays out the plain
+// variant: globals.core.servers names the first shard only, every server carries its own
+// "- realm:" block with its own data directory, and the servers past core.servers state
+// their address in an "- ftl:" block.
 func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, opts SecureOpts, drOpts DROpts, copts ClusterOpts) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
-	primaryCount := min3(numPservers)
-	path := filepath.Join(outputDir, clusterYAMLStem(primaryCount)+"-secure.yaml")
+	path := filepath.Join(outputDir, clusterYAMLStem(numPservers)+"-secure.yaml")
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -155,13 +159,17 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 		fmt.Fprintln(f, "# Auth providers: none — TLS encryption only")
 	}
 	fmt.Fprintln(f, "#")
-	fmt.Fprintln(f, "# Start the cluster (one tibftlserver per SRV entry):")
-	for i := 0; i < primaryCount; i++ {
-		fmt.Fprintf(f, "#   tibftlserver -c %s -n SRV%d\n", filepath.Base(path), i+1)
+	fmt.Fprintln(f, "# Start the cluster (one tibftlserver per server entry):")
+	for i := 0; i < numPservers; i++ {
+		fmt.Fprintf(f, "#   tibftlserver -c %s -n %s\n", filepath.Base(path), primaryServerName(cores, i))
 	}
 	fmt.Fprintln(f)
 
 	fmt.Fprintln(f, "globals:")
+	if numPservers > len(cores) {
+		fmt.Fprintln(f, "  # Bootstrap addresses for the FTL backend: the first shard only. The")
+		fmt.Fprintln(f, "  # remaining servers carry their own address in an 'ftl:' block below.")
+	}
 	fmt.Fprintln(f, "  core.servers:")
 	for _, c := range cores {
 		fmt.Fprintf(f, "    %s: %s\n", c.Name, c.Address)
@@ -195,14 +203,20 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 	}
 
 	fmt.Fprintln(f, "servers:")
-	for i := 0; i < primaryCount; i++ {
-		name := fmt.Sprintf("SRV%d", i+1)
+	for i := 0; i < numPservers; i++ {
+		name := primaryServerName(cores, i)
 		fmt.Fprintf(f, "  %s:\n", name)
+		// Servers named in globals.core.servers inherit their listen address from it.
+		// The rest -- the shards after the first -- have to state their own.
+		if i >= len(cores) {
+			fmt.Fprintln(f, "  - ftl:")
+			fmt.Fprintf(f, "      server: %s:%d\n", host, ports.PserverPorts[i])
+		}
 		label := ""
 		if drOpts.Enabled() {
 			label = "PRIMARY_SERVER"
 		}
-		writeRealmBlock(f, dataDir, realmPath, label, copts, realmCreds...)
+		writeRealmBlock(f, realmDataDir(dataDir, i), realmPath, label, copts, realmCreds...)
 
 		// The block is always written for the logging settings; the credentials and the
 		// TLS/OAuth properties inside it stay conditional on what this configuration uses.
@@ -234,8 +248,11 @@ func WriteKOFSecureYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths
 		fmt.Fprintf(f, "      loglevel: %s\n", copts.LogLevel)
 		// auth.type stays none here in phase 1; wiring the schema daemon to oauth2
 		// alongside the rest of this file's security settings is phase 2.
-		if copts.Tibschemad {
-			writeTibschemadBlock(f, i+1, primaryCount)
+		//
+		// The schema daemon is its own small cluster and does not scale with the
+		// pservers: it stays on the first 3 servers however many shards there are.
+		if copts.Tibschemad && i < min3(numPservers) {
+			writeTibschemadBlock(f, i+1, min3(numPservers))
 		}
 		fmt.Fprintln(f)
 	}

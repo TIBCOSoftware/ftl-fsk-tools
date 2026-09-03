@@ -162,9 +162,7 @@ Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` lis
 The number of FTL Servers is the number of `server.properties` files passed on the command line; how they are grouped into shards is [`-replication-factor`](#core-flags--h-core). Every *replication factor* input files → 1 FSK cluster (shard), and the file count must be an exact multiple of it, so no shard is ever short of servers.
 
 ```
-9 input files → tibftlserver-cluster.yaml      (pserver1–3 + SRV1–3 realm servers)
-                tibftlserver-cluster-aux1.yaml  (pserver4–6, no realm)
-                tibftlserver-cluster-aux2.yaml  (pserver7–9, no realm)
+9 input files → tibftlserver-cluster.yaml  (SRV1–9, pserver1–9)
                 ftlserver.json             (kof.cluster.0, kof.cluster.1, kof.cluster.2)
 ```
 
@@ -181,9 +179,13 @@ Any other count is refused. In particular **2 input files are refused**: FTL run
 
 ### File layout
 
-The primary `tibftlserver-cluster.yaml` always holds the first 3 FTL Servers, which are the ones carrying FTL realm servers. The rest go into `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml` and so on, in groups of 3 (or of the replication factor, when that is larger). Auxiliary files contain **no realm server entries** — those FTL Servers connect to the primary realm cluster via `globals.core.servers`.
+There is **one** `tibftlserver-cluster.yaml` however many servers and shards there are — the layout of `samples/yaml/kof/scaling` in the FTL installation. Each server is one entry under `servers:`, started with `tibftlserver -c tibftlserver-cluster.yaml -n SRV<n>`:
 
-Which YAML file a server is declared in is packaging only. Shard membership lives entirely in `ftlserver.json`, so at `-replication-factor 5` the one 5-server shard spans the primary file and `aux1.yaml`, and at `-replication-factor 1` a single aux file holds servers belonging to three different shards.
+- `globals.core.servers` lists **only the first shard**, since it is the bootstrap address list for the FTL backend. The servers beyond it state their own address in an `ftl: server:` block of their own.
+- **Every** server gets a `realm:` block with its own data directory, `<-data-dir>/srv<n>` — two realm services on one host cannot share a directory. Its pserver keeps the separate `<-data-dir>/pserver<n>`.
+- With `-tibschemad`, the schema daemon stays on the first 3 servers whatever the server count: it is its own small cluster and does not scale with the pservers.
+
+Shard membership is settled entirely in `ftlserver.json`, not by the YAML — the YAML says which FTL Servers exist, `ftlserver.json` says which `kof.cluster.N` each one belongs to.
 
 ---
 
@@ -195,18 +197,16 @@ When `-dr-servers` is provided, DR mode is activated for all output files:
 - **`tibftlserver-cluster-dr.yaml`** is generated with DR servers as `core.servers`, a back-reference `globals.dr:` to the primary servers, and `label: DR_SERVER` on realm blocks. Their persistence entries are named `drpserver1..N`.
 - **`ftlserver.json`** clusters get `dr_enabled: true`, a second persistence set `_DRset` with DR replicas, and transport roles swapped (`dr_transport` populated, `inter_cluster_transport` empty for all FTL Servers).
 
-With 9 input files, DR aux files are also produced:
+The DR YAML covers every DR server in one file, exactly as the primary YAML does:
 
 ```
 9 files + -dr-servers ... →
-    tibftlserver-cluster.yaml           (primary: pserver1–3)
-    tibftlserver-cluster-aux1.yaml      (primary: pserver4–6)
-    tibftlserver-cluster-aux2.yaml      (primary: pserver7–9)
-    tibftlserver-cluster-dr.yaml        (DR: drpserver1–3)
-    tibftlserver-cluster-dr-aux1.yaml   (DR: drpserver4–6)
-    tibftlserver-cluster-dr-aux2.yaml   (DR: drpserver7–9)
+    tibftlserver-cluster.yaml      (primary: pserver1–9)
+    tibftlserver-cluster-dr.yaml   (DR: drpserver1–9)
     ftlserver.json                 (kof.cluster.0/1/2 with dr_enabled: true)
 ```
+
+Pass one `-dr-servers` entry per input file. When the list is shorter, the extra replicas are named `DRSRV<n>` and fall back to the primary's addresses, which is only usable if the DR cluster runs on other hosts.
 
 ---
 
@@ -446,9 +446,11 @@ tibftlimportconfig \
   server-7.properties server-8.properties server-9.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml` (SRV1–3 + pserver1–3), `tibftlserver-cluster-aux1.yaml` (pserver4–6), `tibftlserver-cluster-aux2.yaml` (pserver7–9), `ftlserver.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `ftl-users.txt`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml` (SRV1–9, pserver1–9), `ftlserver.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `ftl-users.txt`, `unsupported.properties`
 
-The three shards are the default [`-replication-factor`](#core-flags--h-core) of 3. Adding `--replication-factor 1` to the same nine inputs gives nine unreplicated shards, `kof.cluster.0` through `.8`, with the YAML file layout unchanged.
+All nine FTL Servers are in the one YAML: `globals.core.servers` lists SRV1–3, the first shard, and SRV4–9 each carry their own `ftl: server:` address. See [File layout](#file-layout).
+
+The three shards are the default [`-replication-factor`](#core-flags--h-core) of 3. Adding `--replication-factor 1` to the same nine inputs gives nine unreplicated shards, `kof.cluster.0` through `.8`, with the YAML unchanged.
 
 ---
 
@@ -482,9 +484,9 @@ tibftlimportconfig \
   server-7.properties server-8.properties server-9.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-aux1.yaml`, `tibftlserver-cluster-aux2.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS), `ftlserver.json` (3 clusters), `kof.broker.{1–9}.properties`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS), `ftlserver.json` (3 clusters), `kof.broker.{1–9}.properties`, `unsupported.properties`
 
-As in example 11, the three shards come from the default [`-replication-factor`](#core-flags--h-core) of 3. The secure YAML covers the primary file's three FTL Servers whatever the factor is — there is no `-secure-auxN.yaml`.
+As in example 11, the three shards come from the default [`-replication-factor`](#core-flags--h-core) of 3, and both YAMLs carry all nine FTL Servers. Run the secure one instead of the plain one — it is the same cluster with the TLS and OAuth settings added.
 
 ---
 
@@ -577,7 +579,7 @@ unsupported.properties
 
 ### Secure 9-broker + DR (3 shards)
 
-Combine the example 12 flags above with `-dr-servers` to generate DR-enabled output for a 9-server, 3-shard deployment. Produces six cluster YAML files (primary + DR, each across three files) and a `ftlserver.json` with `dr_enabled: true` on all three clusters.
+Combine the example 12 flags above with `-dr-servers` to generate DR-enabled output for a 9-server, 3-shard deployment. Produces three cluster YAML files — plain, secure and DR, each carrying all nine servers — and a `ftlserver.json` with `dr_enabled: true` on all three clusters.
 
 ---
 
@@ -585,10 +587,10 @@ Combine the example 12 flags above with `-dr-servers` to generate DR-enabled out
 
 ### `tibftlserver-cluster.yaml`
 
-Primary cluster with realm servers (SRV1–SRV3) and first 3 FTL Servers. Realm server names and ports
-both come from `-core-servers`; if that flag is omitted the names default to `SRV1–SRV3` and the
-ports are derived from the cluster in 5600–5699. The `-n` argument is the `servers:` key, which is always the
-core-server name:
+Every FTL Server, in one file — see [File layout](#file-layout). Names and ports for the first
+shard's servers come from `-core-servers`; if that flag is omitted the names default to `SRV1–SRV3`
+and the ports are derived from the cluster in 5600–5699. Servers past the first shard are named
+`SRV4`, `SRV5`, … and take their ports from 5700–5799. The `-n` argument is the `servers:` key:
 
 ```sh
 tibftlserver -c tibftlserver-cluster.yaml -n SRV1
@@ -598,13 +600,14 @@ tibftlserver -c tibftlserver-cluster.yaml -n SRV3
 
 **No `services:` section.** Realm settings are written per server, on each `- realm:` entry, rather
 than once in a shared `services:` block. That includes `initial.realm.config`, so every server in
-the file names the generated `ftlserver.json` itself:
+the file names the generated `ftlserver.json` itself, and `data`, which is `<-data-dir>/srv<n>` —
+its own directory per server, separate from the pserver's `<-data-dir>/pserver<n>`:
 
 ```yaml
 servers:
   SRV1:
   - realm:
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv1
       initial.realm.config: ftlserver.json
   - ftlserver.properties:
       loglevel: info
@@ -631,18 +634,18 @@ a file instead, uncomment all three: `max.log.size` and `max.logs` are ignored w
 unset, and `tibftlserver` rejects a `logfile` given without them. The suggested path is
 `<data-dir>/<server-name>.log`, so it matches the `-n` argument that starts the server.
 
-Auxiliary and DR servers get the same block; DR uses `-dr-data-dir` for the suggested path.
+DR servers get the same block, with `-dr-data-dir` as the suggested path.
 
-**Schema daemon (`-tibschemad`).** With the flag set, every server that carries a realm block also
-gets a second persistence service and a `- tibschemad:` entry. No extra `tibftlserver` processes and
-no extra ports — the schema persistence rides the process that already hosts the FSK one, so a 3-broker
+**Schema daemon (`-tibschemad`).** With the flag set, the first 3 servers each get a second
+persistence service and a `- tibschemad:` entry. No extra `tibftlserver` processes and no extra
+ports — the schema persistence rides the process that already hosts the FSK one, so a 3-broker
 conversion is still three servers:
 
 ```yaml
 servers:
   SRV1:
   - realm:
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv1
       initial.realm.config: ftlserver.json
   - ftlserver.properties:
       loglevel: info
@@ -661,32 +664,26 @@ servers:
       cluster.size: 3
 ```
 
-`cluster.size` is the number of realm servers in the file — 1 for a standalone server, 3 for a
-cluster. The block is written to the primary and secure YAMLs. Auxiliary files never get it, since
-their servers have no realm entry to attach a schema daemon to, and DR files are not covered yet.
-`auth.type` is always `none` for now; OAuth options for `tibschemad` are a later addition.
-
-### `tibftlserver-cluster-auxN.yaml`
-
-Auxiliary FTL Server groups. Each file references the same `globals.core.servers` as the primary. No realm entries at all — these FTL Servers join the primary realm cluster.
-
-```sh
-tibftlserver -c tibftlserver-cluster-aux1.yaml -n PSRV4
-```
+`cluster.size` is the size of the schema daemon's own cluster — 1 for a standalone server, 3
+otherwise. It does not scale with the pservers: a 9-server, 3-shard conversion still puts the
+schema daemon on SRV1–3 only. The block is written to the plain and secure YAMLs; DR files are not
+covered yet. `auth.type` is always `none` for now; OAuth options for `tibschemad` are a later
+addition.
 
 ### `tibftlserver-cluster-dr.yaml`
 
-DR replica cluster. Start on the DR hosts using the DR server names from `-dr-servers`:
+DR replica cluster, laid out like the plain YAML and likewise covering every server. Start on the
+DR hosts using the DR server names from `-dr-servers`:
 
 ```sh
-tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV1
-tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV2
-tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV3
+tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver1
+tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver2
+tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver3
 ```
 
 ### `tibftlserver-cluster-secure.yaml`
 
-Extends each realm server's `ftlserver.properties` block with TLS and auth settings, above the logging settings every cluster YAML already carries. Auth mode is determined by the Apache Kafka listener types:
+The same servers as `tibftlserver-cluster.yaml` — run one file or the other, not both — with each `ftlserver.properties` block extended by TLS and auth settings, above the logging settings every cluster YAML already carries. Auth mode is determined by the Apache Kafka listener types:
 
 | Apache Kafka auth | FTL secure YAML mode |
 |---|---|

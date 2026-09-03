@@ -3,7 +3,7 @@
 #
 # Auth providers: file:output/ftl-users.txt,mtls
 #
-# Start the cluster (one tibftlserver per SRV entry):
+# Start the cluster (one tibftlserver per server entry):
 #   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV1
 #   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV2
 #   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV3
@@ -18,7 +18,7 @@ globals:
 servers:
   SRV1:
   - realm:
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv1
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       user: internal
@@ -40,7 +40,7 @@ servers:
 
   SRV2:
   - realm:
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv2
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       user: internal
@@ -62,7 +62,7 @@ servers:
 
   SRV3:
   - realm:
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv3
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       user: internal

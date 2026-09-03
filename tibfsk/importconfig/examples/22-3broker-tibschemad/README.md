@@ -16,14 +16,15 @@ tibftlimportconfig \
 
 ## What the flag adds
 
-Every server that carries a `- realm:` entry gains a `schemaN` persistence and a `tibschemad`
-entry. `cluster.size` is the number of realm servers, so a three-broker conversion is sized 3:
+The first three servers each gain a `schemaN` persistence and a `tibschemad` entry.
+`cluster.size` is the size of the schema daemon's own cluster, so a three-broker conversion is
+sized 3:
 
 ```yaml
 servers:
   SRV1:
   - realm:
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv1
       initial.realm.config: output/ftlserver.json
   - persistence:
       name: pserver1
@@ -67,8 +68,7 @@ tibftlserver -c output/tibftlserver-cluster.yaml -n SRV3
 ## Notes
 
 - `auth.type: none` is what phase 1 emits. Wiring the schema daemon to OAuth2 is phase 2.
-- Auxiliary YAMLs (`tibftlserver-cluster-auxN.yaml`, produced above three pservers) get no
-  schema daemon: their `PSRV*` servers have no `- realm:` entry, so there is nothing for it to
-  attach to. DR YAMLs are likewise left alone in phase 1.
+- The schema daemon does not scale with the pservers: it stays on the first three servers
+  however many shards a conversion produces. DR YAMLs are left alone in phase 1.
 - See [example 21](../21-single-node-tibschemad/) for the standalone form, where the same flag
   produces `cluster.size: 1`.

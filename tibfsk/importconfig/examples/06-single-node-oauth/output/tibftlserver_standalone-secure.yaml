@@ -3,7 +3,7 @@
 #
 # Auth providers: file:output/ftl-users.txt,oauth2
 #
-# Start the cluster (one tibftlserver per SRV entry):
+# Start the cluster (one tibftlserver per server entry):
 #   tibftlserver -c tibftlserver_standalone-secure.yaml -n SRV1
 
 globals:
@@ -23,7 +23,7 @@ servers:
   - realm:
       user: primary
       password: primary-pw
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv1
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       oauth2.validation.key: file:/etc/ftl/oauth.json

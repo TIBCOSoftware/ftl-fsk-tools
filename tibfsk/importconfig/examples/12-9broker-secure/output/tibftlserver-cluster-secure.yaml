@@ -3,12 +3,20 @@
 #
 # Auth providers: file:output/ftl-users.txt,mtls,oauth2
 #
-# Start the cluster (one tibftlserver per SRV entry):
+# Start the cluster (one tibftlserver per server entry):
 #   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV1
 #   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV2
 #   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV3
+#   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV4
+#   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV5
+#   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV6
+#   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV7
+#   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV8
+#   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV9
 
 globals:
+  # Bootstrap addresses for the FTL backend: the first shard only. The
+  # remaining servers carry their own address in an 'ftl:' block below.
   core.servers:
     SRV1: localhost:5601
     SRV2: localhost:5602
@@ -27,7 +35,7 @@ servers:
   - realm:
       user: primary
       password: primary-pw
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv1
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
@@ -54,7 +62,7 @@ servers:
   - realm:
       user: primary
       password: primary-pw
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv2
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
@@ -81,7 +89,7 @@ servers:
   - realm:
       user: primary
       password: primary-pw
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv3
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
@@ -102,5 +110,179 @@ servers:
       name: pserver3
       data: /var/tmp/kof/data/pserver3
       kof.broker.properties: output/kof.broker.3.properties
+      loglevel: connections:info;kof:info;durables:info;store:info
+
+  SRV4:
+  - ftl:
+      server: localhost:5760
+  - realm:
+      user: primary
+      password: primary-pw
+      data: /var/tmp/kof/data/srv4
+      initial.realm.config: output/ftlserver.json
+  - ftlserver.properties:
+      tls.server.cert: /etc/ftl/certs/server.pem
+      tls.server.trust.file: /etc/ftl/certs/client-ca.pem
+      tls.client.cert: /etc/ftl/certs/client.pem
+      tls.client.private.key: /etc/ftl/certs/client.key
+      oauth2.validation.key: file:/etc/ftl/oauth.json
+      oauth2.ui.client.id: ftl-ui
+      oauth2.ui.client.secret: env:OAUTH_UI_CLIENT_SECRET
+      oauth2.provider.trust.file: /etc/ftl/certs/oauth-provider.pem
+      oauth2.svr.client.id: ftl-server
+      oauth2.svr.client.secret: env:OAUTH_CLIENT_SECRET
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV4.log
+      #max.log.size: 10240000
+      #max.logs: 10
+  - persistence:
+      name: pserver4
+      data: /var/tmp/kof/data/pserver4
+      kof.broker.properties: output/kof.broker.4.properties
+      loglevel: connections:info;kof:info;durables:info;store:info
+
+  SRV5:
+  - ftl:
+      server: localhost:5756
+  - realm:
+      user: primary
+      password: primary-pw
+      data: /var/tmp/kof/data/srv5
+      initial.realm.config: output/ftlserver.json
+  - ftlserver.properties:
+      tls.server.cert: /etc/ftl/certs/server.pem
+      tls.server.trust.file: /etc/ftl/certs/client-ca.pem
+      tls.client.cert: /etc/ftl/certs/client.pem
+      tls.client.private.key: /etc/ftl/certs/client.key
+      oauth2.validation.key: file:/etc/ftl/oauth.json
+      oauth2.ui.client.id: ftl-ui
+      oauth2.ui.client.secret: env:OAUTH_UI_CLIENT_SECRET
+      oauth2.provider.trust.file: /etc/ftl/certs/oauth-provider.pem
+      oauth2.svr.client.id: ftl-server
+      oauth2.svr.client.secret: env:OAUTH_CLIENT_SECRET
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV5.log
+      #max.log.size: 10240000
+      #max.logs: 10
+  - persistence:
+      name: pserver5
+      data: /var/tmp/kof/data/pserver5
+      kof.broker.properties: output/kof.broker.5.properties
+      loglevel: connections:info;kof:info;durables:info;store:info
+
+  SRV6:
+  - ftl:
+      server: localhost:5781
+  - realm:
+      user: primary
+      password: primary-pw
+      data: /var/tmp/kof/data/srv6
+      initial.realm.config: output/ftlserver.json
+  - ftlserver.properties:
+      tls.server.cert: /etc/ftl/certs/server.pem
+      tls.server.trust.file: /etc/ftl/certs/client-ca.pem
+      tls.client.cert: /etc/ftl/certs/client.pem
+      tls.client.private.key: /etc/ftl/certs/client.key
+      oauth2.validation.key: file:/etc/ftl/oauth.json
+      oauth2.ui.client.id: ftl-ui
+      oauth2.ui.client.secret: env:OAUTH_UI_CLIENT_SECRET
+      oauth2.provider.trust.file: /etc/ftl/certs/oauth-provider.pem
+      oauth2.svr.client.id: ftl-server
+      oauth2.svr.client.secret: env:OAUTH_CLIENT_SECRET
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV6.log
+      #max.log.size: 10240000
+      #max.logs: 10
+  - persistence:
+      name: pserver6
+      data: /var/tmp/kof/data/pserver6
+      kof.broker.properties: output/kof.broker.6.properties
+      loglevel: connections:info;kof:info;durables:info;store:info
+
+  SRV7:
+  - ftl:
+      server: localhost:5786
+  - realm:
+      user: primary
+      password: primary-pw
+      data: /var/tmp/kof/data/srv7
+      initial.realm.config: output/ftlserver.json
+  - ftlserver.properties:
+      tls.server.cert: /etc/ftl/certs/server.pem
+      tls.server.trust.file: /etc/ftl/certs/client-ca.pem
+      tls.client.cert: /etc/ftl/certs/client.pem
+      tls.client.private.key: /etc/ftl/certs/client.key
+      oauth2.validation.key: file:/etc/ftl/oauth.json
+      oauth2.ui.client.id: ftl-ui
+      oauth2.ui.client.secret: env:OAUTH_UI_CLIENT_SECRET
+      oauth2.provider.trust.file: /etc/ftl/certs/oauth-provider.pem
+      oauth2.svr.client.id: ftl-server
+      oauth2.svr.client.secret: env:OAUTH_CLIENT_SECRET
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV7.log
+      #max.log.size: 10240000
+      #max.logs: 10
+  - persistence:
+      name: pserver7
+      data: /var/tmp/kof/data/pserver7
+      kof.broker.properties: output/kof.broker.7.properties
+      loglevel: connections:info;kof:info;durables:info;store:info
+
+  SRV8:
+  - ftl:
+      server: localhost:5771
+  - realm:
+      user: primary
+      password: primary-pw
+      data: /var/tmp/kof/data/srv8
+      initial.realm.config: output/ftlserver.json
+  - ftlserver.properties:
+      tls.server.cert: /etc/ftl/certs/server.pem
+      tls.server.trust.file: /etc/ftl/certs/client-ca.pem
+      tls.client.cert: /etc/ftl/certs/client.pem
+      tls.client.private.key: /etc/ftl/certs/client.key
+      oauth2.validation.key: file:/etc/ftl/oauth.json
+      oauth2.ui.client.id: ftl-ui
+      oauth2.ui.client.secret: env:OAUTH_UI_CLIENT_SECRET
+      oauth2.provider.trust.file: /etc/ftl/certs/oauth-provider.pem
+      oauth2.svr.client.id: ftl-server
+      oauth2.svr.client.secret: env:OAUTH_CLIENT_SECRET
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV8.log
+      #max.log.size: 10240000
+      #max.logs: 10
+  - persistence:
+      name: pserver8
+      data: /var/tmp/kof/data/pserver8
+      kof.broker.properties: output/kof.broker.8.properties
+      loglevel: connections:info;kof:info;durables:info;store:info
+
+  SRV9:
+  - ftl:
+      server: localhost:5725
+  - realm:
+      user: primary
+      password: primary-pw
+      data: /var/tmp/kof/data/srv9
+      initial.realm.config: output/ftlserver.json
+  - ftlserver.properties:
+      tls.server.cert: /etc/ftl/certs/server.pem
+      tls.server.trust.file: /etc/ftl/certs/client-ca.pem
+      tls.client.cert: /etc/ftl/certs/client.pem
+      tls.client.private.key: /etc/ftl/certs/client.key
+      oauth2.validation.key: file:/etc/ftl/oauth.json
+      oauth2.ui.client.id: ftl-ui
+      oauth2.ui.client.secret: env:OAUTH_UI_CLIENT_SECRET
+      oauth2.provider.trust.file: /etc/ftl/certs/oauth-provider.pem
+      oauth2.svr.client.id: ftl-server
+      oauth2.svr.client.secret: env:OAUTH_CLIENT_SECRET
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV9.log
+      #max.log.size: 10240000
+      #max.logs: 10
+  - persistence:
+      name: pserver9
+      data: /var/tmp/kof/data/pserver9
+      kof.broker.properties: output/kof.broker.9.properties
       loglevel: connections:info;kof:info;durables:info;store:info
 

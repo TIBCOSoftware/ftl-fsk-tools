@@ -123,10 +123,9 @@ func writeServerLogging(f *os.File, name, dataDir string) {
 // the realm settings per server rather than in a shared services section, so there
 // is no services block in any file this tool writes.
 //
-// label is "" for a non-DR realm. realmPath is "" for realms that do not seed the
-// realm configuration (currently none, but aux files have no realm block at all).
-// extra holds already-formatted "key: value" entries (the secure YAML's realm
-// credentials) written between the label and the data path.
+// label is "" for a non-DR realm. realmPath is "" for realms that do not seed the realm
+// configuration (currently none). extra holds already-formatted "key: value" entries (the
+// secure YAML's realm credentials) written between the label and the data path.
 func writeRealmBlock(f *os.File, dataDir, realmPath, label string, opts ClusterOpts, extra ...string) {
 	fmt.Fprintln(f, "  - realm:")
 	if label != "" {
@@ -153,11 +152,16 @@ func buildDRString(servers []CoreServer) string {
 	return strings.Join(parts, "|")
 }
 
-// WriteKOFClusterYAML generates the primary tibftlserver YAML and, when numPservers > 3,
-// one or more <stem>-auxN.yaml files for additional pserver groups.
-// When drOpts.Enabled(), also generates <stem>-dr.yaml (and aux DR files).
-// The stem is tibftlserver-cluster, or tibftlserver_standalone for a single pserver
-// (see clusterYAMLStem).
+// WriteKOFClusterYAML generates the one tibftlserver YAML that configures every FTL
+// Server, however many shards they are divided into. When drOpts.Enabled(), also
+// generates <stem>-dr.yaml. The stem is tibftlserver-cluster, or
+// tibftlserver_standalone for a single pserver (see clusterYAMLStem).
+//
+// The layout follows samples/yaml/kof/scaling: globals.core.servers names only the
+// first shard, every server carries its own "- realm:" block, and the servers beyond
+// core.servers carry their own address in an "- ftl:" block. Shard membership is
+// settled in ftlserver.json rather than by which file a server appears in, so
+// splitting the servers across files expressed nothing and is not done.
 func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, coreServers []CoreServer, authUsersFile, kafkaUsersFile string, drOpts DROpts, copts ClusterOpts) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
@@ -165,59 +169,42 @@ func WriteKOFClusterYAML(cfg *BrokerConfig, outputDir, dataDir string, propsPath
 
 	host := resolveHost(cfg.KOFHost)
 
-	// Build the globals.core.servers list (shared by primary and all aux files).
+	// globals.core.servers holds the first shard only; see buildCoreServers.
 	cores := buildCoreServers(coreServers, host, ports)
 
-	// Primary cluster: first 3 pservers with realm servers.
-	primaryCount := min3(numPservers)
-	stem := clusterYAMLStem(primaryCount)
+	stem := clusterYAMLStem(numPservers)
 	primaryPath := filepath.Join(outputDir, stem+".yaml")
-	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPaths, realmPath, primaryCount, ports, cores, authUsersFile, kafkaUsersFile, drOpts, copts); err != nil {
+	if err := writePrimaryYAML(primaryPath, cfg, dataDir, propsPaths, realmPath, numPservers, ports, cores, authUsersFile, kafkaUsersFile, drOpts, copts); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "Writing file: %s\n", primaryPath)
 
 	if drOpts.Enabled() {
 		drPath := filepath.Join(outputDir, stem+"-dr.yaml")
-		if err := writeDRYAML(drPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, 0, primaryCount, 0, drOpts.DRServers, cores, copts); err != nil {
+		if err := writeDRYAML(drPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, numPservers, ports, drOpts.DRServers, cores, copts); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stdout, "Writing file: %s\n", drPath)
 	}
-
-	// Auxiliary files: the pservers the primary file did not take, in groups with no
-	// realm sections. The group size is a packaging choice, not a shard boundary --
-	// which pserver belongs to which kof.cluster is settled in ftlserver.json -- so it
-	// stays at 3 unless the replication factor is larger, which keeps the file count
-	// down at -replication-factor 1 (three files at nine pservers, not nine).
-	auxChunk := max(copts.RF(), 3)
-	auxIdx := 1
-	for start := primaryCount; start < numPservers; start += auxChunk {
-		end := min(start+auxChunk, numPservers)
-		auxPath := filepath.Join(outputDir, fmt.Sprintf("%s-aux%d.yaml", stem, auxIdx))
-		if err := writeAuxYAML(auxPath, cfg, dataDir, propsPaths, start, end, auxIdx+1, ports, cores, drOpts, copts); err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stdout, "Writing file: %s\n", auxPath)
-
-		if drOpts.Enabled() {
-			drAuxPath := filepath.Join(outputDir, fmt.Sprintf("%s-dr-aux%d.yaml", stem, auxIdx))
-			if err := writeDRYAML(drAuxPath, cfg, drOpts.DRDataDir, propsPaths, realmPath, start, end, auxIdx+1, drOpts.DRServers, cores, copts); err != nil {
-				return err
-			}
-			fmt.Fprintf(os.Stdout, "Writing file: %s\n", drAuxPath)
-		}
-		auxIdx++
-	}
 	return nil
 }
 
-func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, realmPath string, numPservers int, _ PortMap, cores []CoreServer, authUsersFile, kafkaUsersFile string, drOpts DROpts, copts ClusterOpts) error {
+// realmDataDir is the per-server directory holding the realm service's own state.
+// Each server needs its own -- the scaling sample gives every server a realm block,
+// and two realm services cannot share a directory on one host. It is keyed on the
+// server's position rather than its name so that -core-servers cannot change it.
+func realmDataDir(dataDir string, i int) string {
+	return fmt.Sprintf("%s/srv%d", dataDir, i+1)
+}
+
+func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, cores []CoreServer, authUsersFile, kafkaUsersFile string, drOpts DROpts, copts ClusterOpts) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}
 	defer f.Close()
+
+	host := resolveHost(cfg.KOFHost)
 
 	fmt.Fprintln(f, "# FSK Cluster Configuration")
 	fmt.Fprintf(f, "# Generated by tibftlimportconfig from: %s\n", cfg.SourceFile)
@@ -229,6 +216,10 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 	fmt.Fprintln(f)
 
 	fmt.Fprintln(f, "globals:")
+	if numPservers > len(cores) {
+		fmt.Fprintln(f, "  # Bootstrap addresses for the FTL backend: the first shard only. The")
+		fmt.Fprintln(f, "  # remaining servers carry their own address in an 'ftl:' block below.")
+	}
 	fmt.Fprintln(f, "  core.servers:")
 	for _, c := range cores {
 		fmt.Fprintf(f, "    %s: %s\n", c.Name, c.Address)
@@ -255,11 +246,17 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 	for i := 0; i < numPservers; i++ {
 		name := primaryServerName(cores, i)
 		fmt.Fprintf(f, "  %s:\n", name)
+		// Servers named in globals.core.servers inherit their listen address from it.
+		// The rest -- the shards after the first -- have to state their own.
+		if i >= len(cores) {
+			fmt.Fprintln(f, "  - ftl:")
+			fmt.Fprintf(f, "      server: %s:%d\n", host, ports.PserverPorts[i])
+		}
 		label := ""
 		if drOpts.Enabled() {
 			label = "PRIMARY_SERVER"
 		}
-		writeRealmBlock(f, dataDir, realmPath, label, copts)
+		writeRealmBlock(f, realmDataDir(dataDir, i), realmPath, label, copts)
 		fmt.Fprintln(f, "  - ftlserver.properties:")
 		// Each server's login (ftl-internal role) for connecting to the other FTL servers, when
 		// the FTL servers require authentication.
@@ -273,20 +270,28 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
 		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
 		fmt.Fprintf(f, "      loglevel: %s\n", copts.LogLevel)
-		if copts.Tibschemad {
-			writeTibschemadBlock(f, i+1, numPservers)
+		// The schema daemon is its own small cluster and does not scale with the
+		// pservers: it stays on the first 3 servers however many shards there are.
+		if copts.Tibschemad && i < min3(numPservers) {
+			writeTibschemadBlock(f, i+1, min3(numPservers))
 		}
 		fmt.Fprintln(f)
 	}
 	return nil
 }
 
-// writeAuxYAML writes one auxiliary file holding pservers [start, end). groupNum is
-// the file's 1-based position counting the primary file as group 1, so aux1 is
-// group 2. It is used only in the header comment and is not a kof.cluster index,
-// which is why it is passed in rather than derived from start -- the two coincide
-// only when the group size equals the replication factor.
-func writeAuxYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []string, start, end, groupNum int, ports PortMap, cores []CoreServer, drOpts DROpts, copts ClusterOpts) error {
+// writeDRYAML writes the DR replica cluster's YAML (<stem>-dr.yaml), covering every
+// DR server in one file exactly as the primary YAML does.
+// drServers is the list of DR server names/addresses from -dr-servers; primaryCores is
+// the primary core.servers list (used as the back-reference in globals.dr).
+//
+// -dr-servers is normally as long as the pserver count. When it is shorter -- one shard's
+// worth of DR servers for a multi-shard primary -- the extra replicas are named DRSRVn and
+// carry their own address, the same way the primary YAML handles the servers that
+// globals.core.servers does not name. Generating the names keeps the servers: keys unique,
+// which YAML requires. Their addresses are the primary's, which only works if the DR
+// cluster is on other hosts; list all of them in -dr-servers to set the addresses.
+func writeDRYAML(path string, cfg *BrokerConfig, drDataDir string, propsPaths []string, realmPath string, numPservers int, ports PortMap, drServers, primaryCores []CoreServer, copts ClusterOpts) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
@@ -295,64 +300,7 @@ func writeAuxYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths []s
 
 	host := resolveHost(cfg.KOFHost)
 
-	fmt.Fprintf(f, "# FSK Auxiliary Cluster Configuration (group %d)\n", groupNum)
-	fmt.Fprintf(f, "# Generated by tibftlimportconfig from: %s\n", cfg.SourceFile)
-	fmt.Fprintln(f, "#")
-	fmt.Fprintln(f, "# Pservers in this file connect to the primary realm cluster.")
-	fmt.Fprintf(f, "# Start: tibftlserver -c %s -n PSRV%d\n", filepath.Base(path), start+1)
-	fmt.Fprintln(f)
-
-	fmt.Fprintln(f, "globals:")
-	fmt.Fprintln(f, "  core.servers:")
-	for _, c := range cores {
-		fmt.Fprintf(f, "    %s: %s\n", c.Name, c.Address)
-	}
-	if drOpts.Enabled() {
-		fmt.Fprintf(f, "  dr: %s\n", buildDRString(drOpts.DRServers))
-		fmt.Fprintln(f, "  auto.init.primary.on.first.startup: true")
-	}
-	fmt.Fprintln(f)
-
-	fmt.Fprintln(f, "servers:")
-	for i := start; i < end; i++ {
-		name := fmt.Sprintf("PSRV%d", i+1)
-		fmt.Fprintf(f, "  %s:\n", name)
-		fmt.Fprintln(f, "  - ftl:")
-		fmt.Fprintf(f, "      server: %s:%d\n", host, ports.PserverPorts[i])
-		fmt.Fprintln(f, "  - ftlserver.properties:")
-		writeServerLogging(f, name, dataDir)
-		fmt.Fprintln(f, "  - persistence:")
-		fmt.Fprintf(f, "      name: pserver%d\n", i+1)
-		fmt.Fprintf(f, "      data: %s/pserver%d\n", dataDir, i+1)
-		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
-		fmt.Fprintf(f, "      loglevel: %s\n", copts.LogLevel)
-		fmt.Fprintln(f)
-	}
-	// No realm entries in auxiliary files -- these pservers join the primary realm cluster.
-	return nil
-}
-
-// writeDRYAML writes the primary DR YAML (<stem>-dr.yaml) or an aux DR YAML for the
-// DR replica cluster.
-// start=0 produces the primary DR YAML with realm entries; start>0 produces an aux DR file,
-// whose header is labelled with groupNum (the same primary-inclusive group number
-// writeAuxYAML uses; ignored when start=0).
-// drServers is the list of DR server names/addresses; primaryCores is the primary core.servers list
-// (used as the back-reference in globals.dr of the DR YAML).
-func writeDRYAML(path string, cfg *BrokerConfig, drDataDir string, propsPaths []string, realmPath string, start, end, groupNum int, drServers, primaryCores []CoreServer, copts ClusterOpts) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create %s: %w", path, err)
-	}
-	defer f.Close()
-
-	isPrimary := start == 0
-
-	if isPrimary {
-		fmt.Fprintln(f, "# FSK Cluster — DR Configuration")
-	} else {
-		fmt.Fprintf(f, "# FSK Auxiliary Cluster — DR Configuration (group %d)\n", groupNum)
-	}
+	fmt.Fprintln(f, "# FSK Cluster — DR Configuration")
 	fmt.Fprintf(f, "# Generated by tibftlimportconfig from: %s\n", cfg.SourceFile)
 	fmt.Fprintln(f)
 
@@ -365,18 +313,22 @@ func writeDRYAML(path string, cfg *BrokerConfig, drDataDir string, propsPaths []
 	fmt.Fprintln(f)
 
 	fmt.Fprintln(f, "servers:")
-	for i := start; i < end; i++ {
-		drSrv := drServers[i%len(drServers)]
-		drPserverNum := i + 1
-		fmt.Fprintf(f, "  %s:\n", drSrv.Name)
-		if isPrimary {
-			writeRealmBlock(f, drDataDir, realmPath, "DR_SERVER", copts)
+	for i := 0; i < numPservers; i++ {
+		name := fmt.Sprintf("DRSRV%d", i+1)
+		if i < len(drServers) {
+			name = drServers[i].Name
 		}
+		fmt.Fprintf(f, "  %s:\n", name)
+		if i >= len(drServers) {
+			fmt.Fprintln(f, "  - ftl:")
+			fmt.Fprintf(f, "      server: %s:%d\n", host, ports.PserverPorts[i])
+		}
+		writeRealmBlock(f, realmDataDir(drDataDir, i), realmPath, "DR_SERVER", copts)
 		fmt.Fprintln(f, "  - ftlserver.properties:")
-		writeServerLogging(f, drSrv.Name, drDataDir)
+		writeServerLogging(f, name, drDataDir)
 		fmt.Fprintln(f, "  - persistence:")
-		fmt.Fprintf(f, "      name: drpserver%d\n", drPserverNum)
-		fmt.Fprintf(f, "      data: %s/drpserver%d\n", drDataDir, drPserverNum)
+		fmt.Fprintf(f, "      name: drpserver%d\n", i+1)
+		fmt.Fprintf(f, "      data: %s/drpserver%d\n", drDataDir, i+1)
 		fmt.Fprintf(f, "      kof.broker.properties: %s\n", propsPaths[i%len(propsPaths)])
 		fmt.Fprintf(f, "      loglevel: %s\n", copts.LogLevel)
 		fmt.Fprintln(f)
@@ -384,16 +336,14 @@ func writeDRYAML(path string, cfg *BrokerConfig, drDataDir string, propsPaths []
 	return nil
 }
 
-// primaryServerName returns the servers: key for the i-th server of the primary cluster.
+// primaryServerName returns the servers: key for the i-th server of the cluster.
 //
-// These servers carry no `ftl:` block, so tibftlserver derives their listen address by
-// matching the name against globals.core.servers. The keys must therefore be the
-// core.servers names -- which -core-servers lets the user choose. (Auxiliary pservers are
-// the other case: they are absent from core.servers and instead carry their own `ftl:`
-// block, so writeAuxYAML is free to name them PSRVn.)
+// The servers named in globals.core.servers carry no `ftl:` block, so tibftlserver derives
+// their listen address by matching the name against core.servers. Their keys must
+// therefore be the core.servers names -- which -core-servers lets the user choose.
 //
-// The fallback only triggers if fewer core servers were supplied than there are servers to
-// write, in which case the extra ones have no address to inherit anyway.
+// The fallback names the servers past core.servers -- the shards after the first. Those
+// state their own address in an `ftl:` block, so any unique key will do.
 func primaryServerName(cores []CoreServer, i int) string {
 	if i < len(cores) {
 		return cores[i].Name

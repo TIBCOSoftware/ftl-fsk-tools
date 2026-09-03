@@ -23,7 +23,7 @@ A single broker is a standalone server rather than a cluster, so the YAML is nam
 servers:
   SRV1:
   - realm:
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv1
       initial.realm.config: output/ftlserver.json
   - persistence:
       name: pserver1

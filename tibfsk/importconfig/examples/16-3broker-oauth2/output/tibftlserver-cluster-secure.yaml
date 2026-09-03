@@ -3,7 +3,7 @@
 #
 # Auth providers: file:output/ftl-users.txt,mtls,oauth2
 #
-# Start the cluster (one tibftlserver per SRV entry):
+# Start the cluster (one tibftlserver per server entry):
 #   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV1
 #   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV2
 #   tibftlserver -c tibftlserver-cluster-secure.yaml -n SRV3
@@ -27,7 +27,7 @@ servers:
   - realm:
       user: primary
       password: primary-pw
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv1
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
@@ -55,7 +55,7 @@ servers:
   - realm:
       user: primary
       password: primary-pw
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv2
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem
@@ -83,7 +83,7 @@ servers:
   - realm:
       user: primary
       password: primary-pw
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv3
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       tls.server.cert: /etc/ftl/certs/server.pem

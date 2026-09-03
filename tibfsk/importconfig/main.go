@@ -6,8 +6,7 @@
 // tibftlimportconfig translates one or more Kafka broker server.properties files into
 // the FTL artifacts needed to run a FSK-enabled pserver cluster:
 //
-//	tibftlserver-cluster.yaml         — FTL pserver cluster configuration (primary)
-//	tibftlserver-cluster-auxN.yaml    — Auxiliary pserver groups (the pservers beyond the first 3, in groups of 3)
+//	tibftlserver-cluster.yaml         — FTL pserver cluster configuration (every server, however many shards)
 //	tibftlserver-cluster-secure.yaml  — Secure variant with TLS/auth (when --tls-cert or --oauth-token-url provided)
 //	ftlserver.json                    — FTL realm configuration with kof.cluster definition
 //	kof.broker.N.properties           — Per-pserver broker properties (one file per input, N is 1-based)

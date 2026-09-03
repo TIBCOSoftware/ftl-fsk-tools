@@ -15,7 +15,7 @@ globals:
 servers:
   SRV1:
   - realm:
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv1
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       loglevel: info
@@ -35,7 +35,7 @@ servers:
 
   SRV2:
   - realm:
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv2
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       loglevel: info
@@ -55,7 +55,7 @@ servers:
 
   SRV3:
   - realm:
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv3
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       loglevel: info

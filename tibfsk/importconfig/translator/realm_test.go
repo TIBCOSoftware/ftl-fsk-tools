@@ -67,7 +67,7 @@ func TestBuildRealm_ShardsFollowReplicationFactor(t *testing.T) {
 			},
 		},
 		{
-			name: "factor 5, one shard spanning the primary and aux files",
+			name: "factor 5, one shard",
 			rf:   5, numPservers: 5,
 			want: []string{"pserver1,pserver2,pserver3,pserver4,pserver5"},
 		},

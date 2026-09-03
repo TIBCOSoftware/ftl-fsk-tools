@@ -18,7 +18,7 @@ servers:
   primary1:
   - realm:
       label: PRIMARY_SERVER
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv1
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       loglevel: info
@@ -34,7 +34,7 @@ servers:
   primary2:
   - realm:
       label: PRIMARY_SERVER
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv2
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       loglevel: info
@@ -50,7 +50,7 @@ servers:
   primary3:
   - realm:
       label: PRIMARY_SERVER
-      data: /var/tmp/kof/data
+      data: /var/tmp/kof/data/srv3
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
       loglevel: info

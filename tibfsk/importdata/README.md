@@ -612,8 +612,7 @@ This writes into `./kof-output/`:
 
 | File | Purpose |
 |---|---|
-| `tibftlserver-cluster.yaml` | FTL server cluster config; also seeds the realm via `initial.realm.config` |
-| `tibftlserver-cluster-aux1.yaml` | Additional pserver groups, one file per extra three pservers |
+| `tibftlserver-cluster.yaml` | FTL server cluster config, every server in one file; also seeds the realm via `initial.realm.config` |
 | `ftlserver.json` | FTL realm with the `kof.cluster` definitions |
 | `kof.broker.N.properties` | Per-pserver Kafka broker properties |
 | `unsupported.properties` | Source keys with no FSK equivalent, for review |
@@ -621,7 +620,7 @@ This writes into `./kof-output/`:
 
 Then:
 
-2. Deploy `tibftlserver-cluster.yaml` (plus any `tibftlserver-cluster-auxN.yaml`), `ftlserver.json`, and the
+2. Deploy `tibftlserver-cluster.yaml`, `ftlserver.json`, and the
    `kof.broker.N.properties` files to your FSK hosts, and start one `tibftlserver -c
    tibftlserver-cluster.yaml -n SRVn` per server entry. On separate hosts there is no port collision, so no
    `sed` step. Wait for the cluster to form with
