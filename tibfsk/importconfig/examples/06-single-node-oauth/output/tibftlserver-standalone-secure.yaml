@@ -4,7 +4,7 @@
 # Auth providers: file:output/ftl-users.txt,oauth2
 #
 # Start the cluster (one tibftlserver per server entry):
-#   tibftlserver -c tibftlserver_standalone-secure.yaml -n SRV1
+#   tibftlserver -c tibftlserver-standalone-secure.yaml -n SRV1
 
 globals:
   core.servers:

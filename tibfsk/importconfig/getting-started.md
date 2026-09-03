@@ -19,7 +19,7 @@ tool generates:
 | `tibftlserver-cluster-secure.yaml` | TLS/auth overlay (when security flags are provided) |
 
 A single-broker conversion produces one FTL Server — a standalone server rather than a cluster — so
-its YAMLs are named `tibftlserver_standalone.yaml` and `tibftlserver_standalone-secure.yaml`.
+its YAMLs are named `tibftlserver-standalone.yaml` and `tibftlserver-standalone-secure.yaml`.
 
 Each scenario below builds on the previous one. Start with the simplest setup and
 advance as your environment requires.
@@ -29,17 +29,27 @@ advance as your environment requires.
 Every scenario runs end to end: bring up the Apache Kafka brokers the `server.properties` describes,
 convert the configuration, then start the FTL Servers on the result. Each scenario is a numbered
 sequence of steps, so *Scenario 5, Step 2* means the second step of the SASL/PLAIN-over-TLS
-walkthrough. Eight things hold for all twelve scenarios.
+walkthrough. Nine things hold for all twelve scenarios.
 
 **`tibftlimportconfig`.** Every `tibftlimportconfig` command below is the binary checked in at
-`bin/tibftlimportconfig` (linux/amd64) — no build step is needed. Put it on your `PATH`:
+[`bin/tibftlimportconfig`](bin/) (linux/amd64, statically linked) — a clone needs no Go toolchain
+and no build step. Put it on your `PATH`, or invoke it by path:
 
 ```bash
 export PATH=/path/to/ftl-fsk-tools/tibfsk/importconfig/bin:$PATH
 ```
 
-Building from source is only necessary on another platform or when changing the tool; see
-[README.md](./README.md#building-from-source).
+Building from source is only necessary on a platform other than linux/amd64, or when changing the
+tool. It requires Go 1.25+ (`toolchain go1.25.6` is pinned in `go.mod`), from the directory holding
+`go.mod`:
+
+```bash
+go build .
+```
+
+Inside a Go workspace that lists this module it can also be built by module path from the workspace
+root, `go build tibco.com/ftl-support/tibftlimportconfig`. To refresh the checked-in binary after
+changing the sources, run `./build-artifacts.sh` at the repository root and commit the result.
 
 **`KAFKA_HOME`.** The Kafka commands assume a Kafka 4.x installation:
 
@@ -48,8 +58,16 @@ export KAFKA_HOME=/opt/kafka
 ```
 
 Scenarios 3 and 4 are the exception: they run Kafka in ZooKeeper mode, which 4.x removed, so those
-two need `KAFKA_HOME` pointed at Kafka 3.9 or earlier. The conversion itself does not care —
-`tibftlimportconfig` reads a `server.properties`, not a running broker.
+two need `KAFKA_HOME` pointed at Kafka 3.9 or earlier.
+
+**Each scenario owns its directories.** Every path a scenario writes to carries its own number —
+Kafka's `log.dirs` and `LOG_DIR` under `/var/tmp/kafka/scenarioN/`, ZooKeeper's `dataDir` under
+`/var/tmp/zookeeper/scenarioN/`, and the FTL Servers' `--data-dir` under `/var/tmp/kof/scenarioN/`.
+So nothing has to be cleaned up between scenarios, and a scenario can be reset on its own:
+
+```bash
+rm -rf /var/tmp/kafka/scenario1 /var/tmp/kof/scenario1
+```
 
 **Clear any inherited `CLASSPATH`.** `kafka-run-class.sh` *appends* Kafka's own `libs/` to whatever
 `CLASSPATH` your shell already exports, so those jars are searched first and can shadow the ones
@@ -149,7 +167,7 @@ Do not copy that port. Unless you pass `--core-servers`, the tool derives one pe
 5600–5699 range by hashing the cluster, so yours will differ — read it out of your own YAML:
 
 ```bash
-FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone.yaml)"
 
 tibftladmin --ftlserver "$FTLS" --available
 tibftladmin --ftlserver "$FTLS" --status
@@ -200,6 +218,9 @@ never contacts the running broker.
 
 ### Step 1 — Kafka server.properties
 
+Save this as **`server-1.properties`**, in the directory you will work from. Step 2 formats and
+starts the broker with it, and Step 3 passes that same file to `tibftlimportconfig` by name.
+
 ```properties
 process.roles=broker,controller
 node.id=1
@@ -211,7 +232,7 @@ advertised.listeners=CLIENT://localhost:9092
 controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT
 
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario1/data/broker-1
 num.partitions=1
 offsets.topic.replication.factor=1
 transaction.state.log.replication.factor=1
@@ -259,6 +280,7 @@ controller quorum; without it, `kafka-storage.sh` refuses to format a config tha
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario1/data \
   server-1.properties
 ```
 
@@ -267,7 +289,7 @@ tibftlimportconfig \
 ```
 Writing file: ./kof-output/kof.broker.1.properties [
 Writing file: ./kof-output/unsupported.properties
-Writing file: ./kof-output/tibftlserver_standalone.yaml
+Writing file: ./kof-output/tibftlserver-standalone.yaml
 Writing file: ./kof-output/ftlserver.json
 
 All kof.broker.*.properties files are processed successfully.
@@ -276,6 +298,10 @@ All kof.broker.*.properties files are processed successfully.
 The `unsupported.properties` file lists any settings that have no FSK equivalent
 (such as the `CONTROLLER` listener entry). Review it for reference — those settings
 do not affect FSK behavior.
+
+`--data-dir` does not appear in that list: it names the directories the FTL Server will create at
+startup, not files the tool writes now. In the generated YAML the realm service takes
+`/var/tmp/kof/scenario1/data/srv1` and the persistence service `/var/tmp/kof/scenario1/data/pserver1`.
 
 ### Step 4 — Start the FTL Server
 
@@ -289,7 +315,7 @@ A single broker converts to a standalone server rather than a cluster, so there 
 start, named for the single entry under `servers:`:
 
 ```bash
-tibftlserver -c kof-output/tibftlserver_standalone.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-standalone.yaml -n SRV1
 ```
 
 No realm upload step: the YAML points `initial.realm.config` at the generated `ftlserver.json`, so the
@@ -299,7 +325,7 @@ as before.
 Confirm both halves are up — the FTL Server, then the Kafka port it now serves:
 
 ```bash
-FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone.yaml)"
 
 tibftladmin --ftlserver "$FTLS" --available
 "$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
@@ -319,7 +345,7 @@ now answered by FSK.
 Nothing carries over to the next scenario, so stop the FTL Server: it is holding both the realm port and the Kafka port the next scenario wants.
 
 ```bash
-FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone.yaml)"
 
 tibftladmin --ftlserver "$FTLS" -x
 ```
@@ -345,54 +371,60 @@ your own three `server.properties` files. The tool reads the files; it never con
 running brokers.
 :::
 
-### Step 1 — Kafka server.properties (broker 1 of 3)
+### Step 1 — The properties all three brokers share
+
+Save these lines as **`server-1.properties`**, **`server-2.properties`** and
+**`server-3.properties`** — the same content in all three. Step 2 adds the four lines that differ.
 
 ```properties
 process.roles=broker,controller
-node.id=1
 controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:9113
 
-listeners=CLIENT://localhost:9092,CONTROLLER://localhost:9093
 inter.broker.listener.name=CLIENT
-advertised.listeners=CLIENT://localhost:9092
 controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,CLIENT:PLAINTEXT
 
-log.dirs=/var/tmp/kafka/data/broker-1
 num.partitions=3
 offsets.topic.replication.factor=3
 transaction.state.log.replication.factor=3
 transaction.state.log.min.isr=2
 ```
 
-### Step 2 — What changes in each broker file
+`controller.quorum.voters` is identical everywhere — each broker needs the address of all three
+controllers, its own included, and a node that lists only itself forms its own quorum and never
+joins the others.
 
-Copy the file above to `server-2.properties` and `server-3.properties`, then change these four
-lines in each — the ports are the ones the voter list already names:
+### Step 2 — What differs in each broker file
+
+Append the matching block to each file. The ports are the ones the voter list already names, and
+broker *n* takes broker 1's ports plus `10 × (n − 1)`:
 
 ```properties
 # server-1.properties
 node.id=1
 listeners=CLIENT://localhost:9092,CONTROLLER://localhost:9093
 advertised.listeners=CLIENT://localhost:9092
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario2/data/broker-1
+```
 
+```properties
 # server-2.properties
 node.id=2
 listeners=CLIENT://localhost:9102,CONTROLLER://localhost:9103
 advertised.listeners=CLIENT://localhost:9102
-log.dirs=/var/tmp/kafka/data/broker-2
+log.dirs=/var/tmp/kafka/scenario2/data/broker-2
+```
 
+```properties
 # server-3.properties
 node.id=3
 listeners=CLIENT://localhost:9112,CONTROLLER://localhost:9113
 advertised.listeners=CLIENT://localhost:9112
-log.dirs=/var/tmp/kafka/data/broker-3
+log.dirs=/var/tmp/kafka/scenario2/data/broker-3
 ```
 
-Every other line stays as it is in all three files. `controller.quorum.voters` in particular is
-identical everywhere — each broker needs the address of all three controllers, its own included,
-and a node that lists only itself forms its own quorum and never joins the others.
+Nothing else differs: the shared block from Step 1 plus one of these four-line blocks is a complete
+broker configuration.
 
 ### Step 3 — Start Apache Kafka (KRaft)
 
@@ -408,7 +440,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/scenario2/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -433,6 +465,7 @@ The quorum forms once a majority of controllers are up. Confirm:
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario2/data \
   server-1.properties \
   server-2.properties \
   server-3.properties
@@ -572,6 +605,9 @@ or earlier; the conversion itself works whatever version you run.
 
 ### Step 1 — Kafka server.properties
 
+Save this as **`server-1.properties`**, in the directory you will work from. Step 2 starts the
+broker with it, and Step 3 passes that same file to `tibftlimportconfig` by name.
+
 ```properties
 broker.id=0
 
@@ -583,7 +619,7 @@ advertised.listeners=PLAINTEXT://localhost:9092
 inter.broker.listener.name=PLAINTEXT
 listener.security.protocol.map=PLAINTEXT:PLAINTEXT
 
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario3/data/broker-1
 num.partitions=1
 offsets.topic.replication.factor=1
 transaction.state.log.replication.factor=1
@@ -604,7 +640,7 @@ then the broker:
 
 ```bash
 cat > zookeeper.properties <<'EOF'
-dataDir=/var/tmp/zookeeper
+dataDir=/var/tmp/zookeeper/scenario3
 clientPort=2181
 maxClientCnxns=0
 admin.enableServer=false
@@ -635,6 +671,7 @@ from zero.
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario3/data \
   server-1.properties
 ```
 
@@ -646,7 +683,7 @@ does not need to be.
 ```
 Writing file: ./kof-output/kof.broker.1.properties [
 Writing file: ./kof-output/unsupported.properties
-Writing file: ./kof-output/tibftlserver_standalone.yaml
+Writing file: ./kof-output/tibftlserver-standalone.yaml
 Writing file: ./kof-output/ftlserver.json
 
 All kof.broker.*.properties files are processed successfully.
@@ -677,7 +714,7 @@ Stop the broker, then ZooKeeper, then start the standalone server:
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
 "$KAFKA_HOME/bin/zookeeper-server-stop.sh"
 
-tibftlserver -c kof-output/tibftlserver_standalone.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-standalone.yaml -n SRV1
 ```
 
 That order matters only for the log: a broker whose ZooKeeper session drops while it is still
@@ -689,7 +726,7 @@ on the FSK side — the realm server the YAML starts holds the cluster metadata 
 Nothing carries over to the next scenario, so stop the FTL Server: it is holding both the realm port and the Kafka port the next scenario wants.
 
 ```bash
-FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone.yaml)"
+FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone.yaml)"
 
 tibftladmin --ftlserver "$FTLS" -x
 ```
@@ -705,8 +742,7 @@ The command is asynchronous: it returns as soon as the server accepts the reques
 ## Scenario 4 — 3-node plaintext cluster (ZooKeeper)
 
 The ZooKeeper counterpart of Scenario 2. One ZooKeeper serves all three brokers, which differ only
-in `broker.id`, listener port and `log.dirs` — there is no voter list to keep in step, because
-there is no KRaft quorum.
+in `broker.id`, listener port and `log.dirs`.
 
 Kafka 3.9 or earlier is required here too, for the same reason as Scenario 3.
 
@@ -716,60 +752,64 @@ running Kafka broker or brokers, skip them and start at **Step 4 — Run the con
 tool**, passing your own three `server.properties` files.
 :::
 
-### Step 1 — Kafka server.properties (broker 1 of 3)
+### Step 1 — The properties all three brokers share
+
+Save these lines as **`server-1.properties`**, **`server-2.properties`** and
+**`server-3.properties`** — the same content in all three. Step 2 adds the four lines that differ.
 
 ```properties
-broker.id=1
-
 zookeeper.connect=localhost:2181
 zookeeper.connection.timeout.ms=18000
 
-listeners=PLAINTEXT://localhost:9092
-advertised.listeners=PLAINTEXT://localhost:9092
 inter.broker.listener.name=PLAINTEXT
 listener.security.protocol.map=PLAINTEXT:PLAINTEXT
 
-log.dirs=/var/tmp/kafka/data/broker-1
 num.partitions=3
 offsets.topic.replication.factor=3
 transaction.state.log.replication.factor=3
 transaction.state.log.min.isr=2
 ```
 
-### Step 2 — What changes in each broker file
+`zookeeper.connect` is identical in all three — that shared ZooKeeper is what makes them one
+cluster, the way a shared cluster ID does under KRaft. A single ZooKeeper is fine for an
+example; production runs an ensemble of three or five.
 
-Copy the file above to `server-2.properties` and `server-3.properties`, then change these four
-lines in each:
+### Step 2 — What differs in each broker file
+
+Append the matching block to each file. Broker *n* takes broker 1's port plus `10 × (n − 1)`:
 
 ```properties
 # server-1.properties
 broker.id=1
 listeners=PLAINTEXT://localhost:9092
 advertised.listeners=PLAINTEXT://localhost:9092
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario4/data/broker-1
+```
 
+```properties
 # server-2.properties
 broker.id=2
 listeners=PLAINTEXT://localhost:9102
 advertised.listeners=PLAINTEXT://localhost:9102
-log.dirs=/var/tmp/kafka/data/broker-2
+log.dirs=/var/tmp/kafka/scenario4/data/broker-2
+```
 
+```properties
 # server-3.properties
 broker.id=3
 listeners=PLAINTEXT://localhost:9112
 advertised.listeners=PLAINTEXT://localhost:9112
-log.dirs=/var/tmp/kafka/data/broker-3
+log.dirs=/var/tmp/kafka/scenario4/data/broker-3
 ```
 
-`zookeeper.connect` is identical in all three — that shared ZooKeeper is what makes them one
-cluster, the way a shared cluster ID does under KRaft. A single ZooKeeper is fine for an
-example; production runs an ensemble of three or five.
+Nothing else differs: the shared block from Step 1 plus one of these four-line blocks is a complete
+broker configuration. There is no voter list to keep in step, because there is no KRaft quorum.
 
 ### Step 3 — Start Apache Kafka (ZooKeeper)
 
 ```bash
 cat > zookeeper.properties <<'EOF'
-dataDir=/var/tmp/zookeeper
+dataDir=/var/tmp/zookeeper/scenario4
 clientPort=2181
 maxClientCnxns=0
 admin.enableServer=false
@@ -778,7 +818,7 @@ EOF
 "$KAFKA_HOME/bin/zookeeper-server-start.sh" -daemon zookeeper.properties
 
 for n in 1 2 3; do
-  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/scenario4/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -798,6 +838,7 @@ three registered:
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario4/data \
   server-1.properties \
   server-2.properties \
   server-3.properties
@@ -906,7 +947,7 @@ listener.name.broker.plain.sasl.jaas.config=org.apache.kafka.common.security.pla
   username="admin" password="admin-secret" \
   user_admin="admin-secret" user_producer="producer-secret" user_consumer="consumer-secret";
 
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario5/data/broker-1
 num.partitions=1
 offsets.topic.replication.factor=1
 transaction.state.log.replication.factor=1
@@ -960,6 +1001,7 @@ properties file carrying the truststore and JAAS settings, or just check the bro
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario5/data \
   --tls-cert /etc/kafka/certs/server.keystore.pem \
   --tls-key  /etc/kafka/certs/server.keystore.pem \
   --tls-ca   /etc/kafka/certs/kafka.truststore.pem \
@@ -983,7 +1025,7 @@ is used.
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
 
-tibftlserver -c kof-output/tibftlserver_standalone-secure.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-standalone-secure.yaml -n SRV1
 ```
 
 Start from the `-secure` YAML, not the plain one: it is the file that carries the TLS certificate
@@ -995,7 +1037,7 @@ want the same topology without security.
 Stop the FTL Server before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
 
 ```bash
-FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone-secure.yaml)"
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone-secure.yaml)"
 
 tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -x
 ```
@@ -1052,7 +1094,7 @@ listener.name.oauth.oauthbearer.sasl.jaas.config=org.apache.kafka.common.securit
 listener.name.oauth.oauthbearer.sasl.server.callback.handler.class=io.strimzi.kafka.oauth.server.JaasServerOauthValidatorCallbackHandler
 listener.name.oauth.oauthbearer.sasl.login.callback.handler.class=io.strimzi.kafka.oauth.client.JaasClientOauthLoginCallbackHandler
 
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario6/data/broker-1
 num.partitions=1
 offsets.topic.replication.factor=1
 transaction.state.log.replication.factor=1
@@ -1083,6 +1125,7 @@ that the tool reads and maps, as described below.
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario6/data \
   --tls-cert /etc/kafka/certs/server.pem \
   --tls-key  /etc/kafka/certs/server.key \
   --tls-ca   /etc/kafka/certs/ca.pem \
@@ -1103,7 +1146,7 @@ class to the `oauth` backend automatically. If the handler class is unrecognized
 ```bash
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
 
-tibftlserver -c kof-output/tibftlserver_standalone-secure.yaml -n SRV1
+tibftlserver -c kof-output/tibftlserver-standalone-secure.yaml -n SRV1
 ```
 
 The secure YAML carries the `oauth2.*` globals and the per-server validation key, so the server
@@ -1115,7 +1158,7 @@ tokens are rejected.
 Stop the FTL Server before the next scenario. This scenario gave the FTL Server no users file, so the realm service authenticates callers by OAuth2 token rather than by password.
 
 ```bash
-FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver_standalone-secure.yaml)"
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone-secure.yaml)"
 
 tibftladmin --ftlserver "$FTLS" -te --oauth2.token <token> -x
 ```
@@ -1153,19 +1196,19 @@ Java keystores.
 node.id=1
 listeners=BROKER://localhost:9092,CONTROLLER://localhost:9093
 advertised.listeners=BROKER://localhost:9092
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario7/data/broker-1
 
 # server-2.properties
 node.id=2
 listeners=BROKER://localhost:9102,CONTROLLER://localhost:9103
 advertised.listeners=BROKER://localhost:9102
-log.dirs=/var/tmp/kafka/data/broker-2
+log.dirs=/var/tmp/kafka/scenario7/data/broker-2
 
 # server-3.properties
 node.id=3
 listeners=BROKER://localhost:9112,CONTROLLER://localhost:9113
 advertised.listeners=BROKER://localhost:9112
-log.dirs=/var/tmp/kafka/data/broker-3
+log.dirs=/var/tmp/kafka/scenario7/data/broker-3
 ```
 
 Two things change identically in all three files, because Scenario 5 was a single node: swap
@@ -1189,7 +1232,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/scenario7/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -1203,6 +1246,7 @@ check the broker logs under `$KAFKA_HOME/logs` instead.
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario7/data \
   --tls-cert /etc/kafka/certs/server.pem \
   --tls-key  /etc/kafka/certs/server.key \
   --tls-ca   /etc/kafka/certs/ca.pem \
@@ -1288,19 +1332,19 @@ are the same in all three files.
 node.id=1
 listeners=MTLS://localhost:9094,CONTROLLER://localhost:9093
 advertised.listeners=MTLS://localhost:9094
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario8/data/broker-1
 
 # server-2.properties
 node.id=2
 listeners=MTLS://localhost:9104,CONTROLLER://localhost:9103
 advertised.listeners=MTLS://localhost:9104
-log.dirs=/var/tmp/kafka/data/broker-2
+log.dirs=/var/tmp/kafka/scenario8/data/broker-2
 
 # server-3.properties
 node.id=3
 listeners=MTLS://localhost:9114,CONTROLLER://localhost:9113
 advertised.listeners=MTLS://localhost:9114
-log.dirs=/var/tmp/kafka/data/broker-3
+log.dirs=/var/tmp/kafka/scenario8/data/broker-3
 ```
 
 ### Step 3 — Start Apache Kafka (KRaft)
@@ -1314,7 +1358,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/scenario8/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -1328,6 +1372,7 @@ certificate it can verify, including your own verification attempts.
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario8/data \
   --tls-cert         /etc/kafka/certs/server.pem \
   --tls-key          /etc/kafka/certs/server.key \
   --tls-ca           /etc/kafka/certs/ca.pem \
@@ -1434,19 +1479,19 @@ as does `controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:
 node.id=1
 listeners=SASL_AUTH://localhost:9092,OAUTH://localhost:9095,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
 advertised.listeners=SASL_AUTH://localhost:9092,OAUTH://localhost:9095,INTERNAL://localhost:9098
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario9/data/broker-1
 
 # server-2.properties
 node.id=2
 listeners=SASL_AUTH://localhost:9102,OAUTH://localhost:9105,INTERNAL://localhost:9108,CONTROLLER://localhost:9103
 advertised.listeners=SASL_AUTH://localhost:9102,OAUTH://localhost:9105,INTERNAL://localhost:9108
-log.dirs=/var/tmp/kafka/data/broker-2
+log.dirs=/var/tmp/kafka/scenario9/data/broker-2
 
 # server-3.properties
 node.id=3
 listeners=SASL_AUTH://localhost:9112,OAUTH://localhost:9115,INTERNAL://localhost:9118,CONTROLLER://localhost:9113
 advertised.listeners=SASL_AUTH://localhost:9112,OAUTH://localhost:9115,INTERNAL://localhost:9118
-log.dirs=/var/tmp/kafka/data/broker-3
+log.dirs=/var/tmp/kafka/scenario9/data/broker-3
 ```
 
 `INTERNAL` has to be advertised as well as bound: the other two brokers reach this one at the
@@ -1469,7 +1514,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/scenario9/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -1481,6 +1526,7 @@ FSK needs no equivalent jar — token validation is built in and driven by `--oa
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario9/data \
   --tls-cert           /etc/kafka/certs/server.pem \
   --tls-key            /etc/kafka/certs/server.key \
   --tls-ca             /etc/kafka/certs/ca.pem \
@@ -1572,19 +1618,19 @@ certificates, so there is no reason to make them authenticate over SASL as well.
 node.id=1
 listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
 advertised.listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,INTERNAL://localhost:9098
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario10/data/broker-1
 
 # server-2.properties
 node.id=2
 listeners=SASL_AUTH://localhost:9102,MTLS://localhost:9104,INTERNAL://localhost:9108,CONTROLLER://localhost:9103
 advertised.listeners=SASL_AUTH://localhost:9102,MTLS://localhost:9104,INTERNAL://localhost:9108
-log.dirs=/var/tmp/kafka/data/broker-2
+log.dirs=/var/tmp/kafka/scenario10/data/broker-2
 
 # server-3.properties
 node.id=3
 listeners=SASL_AUTH://localhost:9112,MTLS://localhost:9114,INTERNAL://localhost:9118,CONTROLLER://localhost:9113
 advertised.listeners=SASL_AUTH://localhost:9112,MTLS://localhost:9114,INTERNAL://localhost:9118
-log.dirs=/var/tmp/kafka/data/broker-3
+log.dirs=/var/tmp/kafka/scenario10/data/broker-3
 ```
 
 Everything else is identical across the three files, `controller.quorum.voters` and the truststore
@@ -1601,7 +1647,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/scenario10/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -1611,6 +1657,7 @@ done
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario10/data \
   --tls-cert         /etc/kafka/certs/server.pem \
   --tls-key          /etc/kafka/certs/server.key \
   --tls-ca           /etc/kafka/certs/ca.pem \
@@ -1693,19 +1740,19 @@ it out of the generated broker properties.
 node.id=1
 listeners=MTLS://localhost:9094,OAUTH://localhost:9095,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
 advertised.listeners=MTLS://localhost:9094,OAUTH://localhost:9095,INTERNAL://localhost:9098
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario11/data/broker-1
 
 # server-2.properties
 node.id=2
 listeners=MTLS://localhost:9104,OAUTH://localhost:9105,INTERNAL://localhost:9108,CONTROLLER://localhost:9103
 advertised.listeners=MTLS://localhost:9104,OAUTH://localhost:9105,INTERNAL://localhost:9108
-log.dirs=/var/tmp/kafka/data/broker-2
+log.dirs=/var/tmp/kafka/scenario11/data/broker-2
 
 # server-3.properties
 node.id=3
 listeners=MTLS://localhost:9114,OAUTH://localhost:9115,INTERNAL://localhost:9118,CONTROLLER://localhost:9113
 advertised.listeners=MTLS://localhost:9114,OAUTH://localhost:9115,INTERNAL://localhost:9118
-log.dirs=/var/tmp/kafka/data/broker-3
+log.dirs=/var/tmp/kafka/scenario11/data/broker-3
 ```
 
 `controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:9113` and everything under
@@ -1726,7 +1773,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/scenario11/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -1736,6 +1783,7 @@ done
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario11/data \
   --tls-cert           /etc/kafka/certs/server.pem \
   --tls-key            /etc/kafka/certs/server.key \
   --tls-ca             /etc/kafka/certs/ca.pem \
@@ -1826,19 +1874,19 @@ Three client listeners and one internal one — five ports per broker, all moved
 node.id=1
 listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,OAUTH://localhost:9095,INTERNAL://localhost:9098,CONTROLLER://localhost:9093
 advertised.listeners=SASL_AUTH://localhost:9092,MTLS://localhost:9094,OAUTH://localhost:9095,INTERNAL://localhost:9098
-log.dirs=/var/tmp/kafka/data/broker-1
+log.dirs=/var/tmp/kafka/scenario12/data/broker-1
 
 # server-2.properties
 node.id=2
 listeners=SASL_AUTH://localhost:9102,MTLS://localhost:9104,OAUTH://localhost:9105,INTERNAL://localhost:9108,CONTROLLER://localhost:9103
 advertised.listeners=SASL_AUTH://localhost:9102,MTLS://localhost:9104,OAUTH://localhost:9105,INTERNAL://localhost:9108
-log.dirs=/var/tmp/kafka/data/broker-2
+log.dirs=/var/tmp/kafka/scenario12/data/broker-2
 
 # server-3.properties
 node.id=3
 listeners=SASL_AUTH://localhost:9112,MTLS://localhost:9114,OAUTH://localhost:9115,INTERNAL://localhost:9118,CONTROLLER://localhost:9113
 advertised.listeners=SASL_AUTH://localhost:9112,MTLS://localhost:9114,OAUTH://localhost:9115,INTERNAL://localhost:9118
-log.dirs=/var/tmp/kafka/data/broker-3
+log.dirs=/var/tmp/kafka/scenario12/data/broker-3
 ```
 
 `controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:9113` and the security
@@ -1857,7 +1905,7 @@ for n in 1 2 3; do
 done
 
 for n in 1 2 3; do
-  LOG_DIR="/var/tmp/kafka/logs/broker-$n" \
+  LOG_DIR="/var/tmp/kafka/scenario12/logs/broker-$n" \
     "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon "server-$n.properties"
 done
 ```
@@ -1867,6 +1915,7 @@ done
 ```bash
 tibftlimportconfig \
   --output-dir ./kof-output \
+  --data-dir /var/tmp/kof/scenario12/data \
   --tls-cert           /etc/kafka/certs/server.pem \
   --tls-key            /etc/kafka/certs/server.key \
   --tls-ca             /etc/kafka/certs/ca.pem \
@@ -1921,30 +1970,24 @@ The command is asynchronous: it returns as soon as the server accepts the reques
 
 ## Common options reference
 
-| Flag | Default | Purpose |
-|---|---|---|
-| `--output-dir` | `./kof-output` | Directory for all generated files |
-| `--data-dir` | `/var/tmp/kof/data` | FSK data directory on FTL Server hosts |
-| `--core-servers` | _(auto)_ | Pin FTL Server names and ports: `SRV1=host:5600,...` |
-| `--transport-type` | `auto` | FTL transport: `auto` (realm server resolves each connection — dynamic TCP within a cluster, static TCP between clusters and to DR) or `dtcp` (dynamic TCP everywhere) |
-| `--auto` | off | Convert JKS/PKCS12 keystores to PEM automatically |
-| `--migration-config` | off | Also write `kafka-to-kof.properties` for the migration tool |
-| `--tibschemad` | off | Add the FTL schema daemon to the generated cluster YAML |
-| `--list-properties` | off | Print how each Kafka property is handled, then exit |
+```
+tibftlimportconfig [flags] <server.properties> [<server.properties> ...]
+```
 
-### Finding the rest
+Positional arguments are one or more `server.properties` files (1–9). Each broker becomes one
+FTL Server — the FTL Server count is derived from the number of input files, not from a flag.
 
-`tibftlimportconfig -h` prints a short overview — the flags above plus an index of groups. The remaining
-flags are organized into groups you can ask for one at a time, so you never have to read the whole
-list:
+### Getting help
+
+Help is organized in two tiers, so a bare `-h` stays short:
 
 ```sh
-tibftlimportconfig -h            # overview and group index
+tibftlimportconfig -h            # synopsis, output files, the handful of common flags, group index
 tibftlimportconfig -h oauth      # just the OAuth2 flags
 tibftlimportconfig -h all        # every flag, grouped
 ```
 
-| Group | Covers |
+| Group | `-h <group>` covers |
 |---|---|
 | `core` | output location, data dir, server addresses, transport |
 | `tls` | server and client certificates, private keys, trust files |
@@ -1952,11 +1995,343 @@ tibftlimportconfig -h all        # every flag, grouped
 | `auth` | users file, role map, and the FTL service credentials |
 | `dr` | DR server list and DR data directory |
 | `info` | property listing, colorization, automatic keystore conversion |
+| `all` | every flag, grouped |
 
-So the OAuth2 flags used in scenarios 6, 9, 11 and 12 are all under `tibftlimportconfig -h oauth`, and the
-TLS/mTLS flags from scenarios 5, 8, 10, 11 and 12 are under `tibftlimportconfig -h tls`.
+The sections below list the same flags as the corresponding `-h <group>` topic: the OAuth2 flags
+used in scenarios 6, 9, 11 and 12 are all under `tibftlimportconfig -h oauth`, and the TLS/mTLS
+flags from scenarios 5, 8, 10, 11 and 12 under `tibftlimportconfig -h tls`.
+
+Both spellings work: Go's `flag` package accepts `-flag` and `--flag` alike. The scenarios above
+use `--`, the tables below use `-`.
+
+### Core flags (`-h core`)
+
+| Flag | Default | Description |
+|---|---|---|
+| `-output-dir` | `./kof-output` | Directory where output files are written |
+| `-data-dir` | `/var/tmp/kof/data` | FSK data directory path on FTL Server hosts |
+| `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br/>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br/>If omitted, ports are derived from the cluster in range 5600–5699 — the same brokers always yield the same ports, so re-running the tool does not move them |
+| `-transport-type` | `auto` | Transport type for all FTL Server connections in `ftlserver.json`: `auto` or `dtcp`<br/>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br/>`dtcp` pins every transport to dynamic TCP |
+| `-replication-factor` | `3` | FTL Servers per FSK shard (`kof.cluster.N`): `1`, `3` or `5`. The number of input `server.properties` files must be an exact multiple of it — 9 files at `3` give three shards, 6 give two, 5 files at `5` give one. The FTL realm keeps its own 3 servers either way.<br/>The accepted values are odd because a shard needs a majority quorum, so **2 input files are refused**; use `-replication-factor 1` for one unreplicated shard per broker. With a single input file the default is `1` — a standalone server is explicitly unreplicated. See [Multi-cluster split](#multi-cluster-split) |
+| `-disk-persistence` | `async` | `disk_persistence` for the generated `kof.cluster.N`: `async`, `sync` or `in-memory`<br/>`async` writes are buffered for an eventual flush to disk; `sync` flushes every write before acknowledging it; `in-memory` writes nothing to disk and turns off the cluster's `disk_index` and `disk_compact`, which require disk persistence<br/>The data store stays `async` and the sync and meta stores `sync` whichever the cluster is — except under `in-memory`, where the stores are in-memory too (see [`ftlserver.json`](#ftlserverjson)) |
+| `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated FTL Server. This is the *output* FTL Servers' logging, not this tool's. |
+| `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `tibftlfskimportdata` data migration tool) |
+| `-tibschemad` | `false` | Add the FTL schema daemon to the generated cluster YAML: every server gains a `schemaN` persistence and a `- tibschemad:` entry with `auth.type: none` and `cluster.size` set to the number of realm servers. No extra servers and no extra ports — the schema persistence shares the `tibftlserver` process that already hosts the FSK persistence. |
+
+### TLS and mTLS flags (`-h tls`)
+
+Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` listener and you want a `tibftlserver-cluster-secure.yaml` emitted. The `-tls-server-trust` / `-tls-client-*` flags are the ones required when an Apache Kafka mTLS listener (`ssl.client.auth=required`) is present and you want FTL Server-to-server mutual TLS.
+
+| Flag | Description |
+|---|---|
+| `-tls-cert` | Server TLS certificate PEM file path |
+| `-tls-key` | Server TLS private key PEM file path |
+| `-tls-key-password` | TLS private key passphrase |
+| `-tls-ca` | CA/trust PEM file path (for connecting to other FTL Servers) |
+| `-tls-server-trust` | CA PEM used to verify inbound client certificates (`tls.server.trust.file`) |
+| `-tls-client-cert` | Client cert PEM presented to other FTL Servers (`tls.client.cert`) |
+| `-tls-client-key` | Client private key PEM for server-to-server connections (`tls.client.private.key`) |
+| `-tls-client-key-password` | Passphrase for `-tls-client-key` |
+
+### OAuth2 flags (`-h oauth`)
+
+| Flag | Default | Description |
+|---|---|---|
+| `-oauth-token-url` | _(none)_ | OAuth2 token endpoint URL, server-to-server (`oauth2.svr.endpoint.token`) |
+| `-oauth-jwks-url` | _(none)_ | OAuth2 JWKS or validation key, `file:` path or URL (`oauth2.validation.key`) |
+| `-oauth-client-id` | _(none)_ | OAuth2 client ID for server-to-server (`oauth2.svr.client.id`) |
+| `-oauth-client-secret` | _(none)_ | OAuth2 client secret for server-to-server (`oauth2.svr.client.secret`) |
+| `-oauth-provider-trust` | _(none)_ | OAuth2 provider trust PEM file (`oauth2.provider.trust.file`) |
+| `-oauth-audience` | `ftl` | OAuth2 audience value (`oauth2.audience`) |
+| `-oauth-claim-roles` | `group` | Token claim mapped to FTL roles (`oauth2.claim.roles`) |
+| `-oauth-claim-username` | `preferred_username` | Token claim mapped to the FTL user (`oauth2.claim.username`) |
+| `-oauth-ui-auth-url` | _(none)_ | Auth endpoint for the FTL UI (`oauth2.ui.endpoint.auth`) |
+| `-oauth-ui-token-url` | _(none)_ | Token endpoint for the FTL UI (`oauth2.ui.endpoint.token`) |
+| `-oauth-ui-logout-url` | _(none)_ | Logout endpoint for the FTL UI (`oauth2.ui.endpoint.logout`) |
+| `-oauth-ui-client-id` | _(none)_ | Client ID for the UI authorization code flow (`oauth2.ui.client.id`) |
+| `-oauth-ui-client-secret` | _(none)_ | Client secret for the UI (`oauth2.ui.client.secret`) |
+
+### Authentication flags (`-h auth`)
+
+| Flag | Default | Description |
+|---|---|---|
+| `-auth-users-file` | _(none)_ | Path to FTL `users.txt` for file-based authentication (PLAIN SASL → file auth) |
+| `-auth-rolemap` | _(none)_ | Path to an FTL role map file (`auth.rolemap` in `ftlserver.properties`, oauth2 mode) |
+| `-server-user` | `internal` | `user` in `ftlserver.properties` for server-to-server connections (non-oauth2 modes) |
+| `-server-password` | `internal-pw` | `password` in `ftlserver.properties` for server-to-server connections (non-oauth2 modes) |
+| `-realm-service-user` | `primary` | Realm `user` credential for oauth2 mode, written into each per-server realm block |
+| `-realm-service-password` | `primary-pw` | Realm `password` credential for oauth2 mode, written into each per-server realm block |
+
+`tibftlserver-cluster-secure.yaml` is only emitted when **security is detected** in the input props AND at least one of `-tls-cert`, `-oauth-token-url`, or `-auth-users-file` is provided.
+
+### DR (Disaster Recovery) flags (`-h dr`)
+
+| Flag | Default | Description |
+|---|---|---|
+| `-dr-servers` | _(none)_ | Comma-separated `DRSRV1=host:port,DRSRV2=host:port,...` DR server list.<br/>Providing this flag enables DR mode for all generated files. |
+| `-dr-data-dir` | `<data-dir>/dr` | Data directory for DR FTL Servers on DR hosts |
+
+### Inspection and conversion flags (`-h info`)
+
+| Flag | Default | Description |
+|---|---|---|
+| `-list-properties` | `false` | Print how each Apache Kafka listener/security property is treated, then exit |
+| `-color` | `auto` | Colorize `-list-properties` output: `auto`, `always`, or `never` |
+| `-auto` | `false` | Actually run the keystore conversions (JKS/PKCS12 → PEM via `keytool`/`openssl`) rather than only printing the commands. The generated config names the `.pem` either way; items needing a human decision stay `RESOLVE-REQUIRED` |
 
 ---
+
+## Multi-cluster split
+
+The number of FTL Servers is the number of `server.properties` files passed on the command line; how they are grouped into shards is [`-replication-factor`](#core-flags--h-core). Every *replication factor* input files → 1 FSK cluster (shard), and the file count must be an exact multiple of it, so no shard is ever short of servers.
+
+```
+9 input files → tibftlserver-cluster.yaml  (SRV1–9, pserver1–9)
+                ftlserver.json             (kof.cluster.0, kof.cluster.1, kof.cluster.2)
+```
+
+### Accepted input-file counts
+
+| `-replication-factor` | Input files | Shards |
+|---|---|---|
+| _(omitted)_ | 1 | one server, unreplicated — a standalone, not a cluster |
+| _(omitted)_ or `3` | 3, 6, 9 | one, two or three shards of 3 |
+| `5` | 5 | one shard of 5 |
+| `1` | 1–9 | one unreplicated shard per broker |
+
+Any other count is refused. In particular **2 input files are refused**: FTL runs 1, 3 or 5 servers, and two have no majority quorum, so losing either one stalls the shard. Use `-replication-factor 1` if you really want two independent unreplicated shards. Counts such as 4, 7 and 8 are refused for the same reason — they would leave a short final shard.
+
+### File layout
+
+There is **one** `tibftlserver-cluster.yaml` however many servers and shards there are — the layout of `samples/yaml/kof/scaling` in the FTL installation. Each server is one entry under `servers:`, started with `tibftlserver -c tibftlserver-cluster.yaml -n SRV<n>`:
+
+- `globals.core.servers` lists **only the first shard**, since it is the bootstrap address list for the FTL backend. The servers beyond it state their own address in an `ftl: server:` block of their own.
+- **Every** server gets a `realm:` block with its own data directory, `<-data-dir>/srv<n>` — two realm services on one host cannot share a directory. Its pserver keeps the separate `<-data-dir>/pserver<n>`.
+- With `-tibschemad`, the schema daemon stays on the first 3 servers whatever the server count: it is its own small cluster and does not scale with the pservers.
+
+Shard membership is settled entirely in `ftlserver.json`, not by the YAML — the YAML says which FTL Servers exist, `ftlserver.json` says which `kof.cluster.N` each one belongs to.
+
+---
+
+## Disaster recovery mode
+
+When `-dr-servers` is provided, DR mode is activated for all output files:
+
+- **`tibftlserver-cluster.yaml`** gains `globals.dr:` (pointing to DR servers), `auto.init.primary.on.first.startup: true`, and `label: PRIMARY_SERVER` on each realm block.
+- **`tibftlserver-cluster-dr.yaml`** is generated with DR servers as `core.servers`, a back-reference `globals.dr:` to the primary servers, and `label: DR_SERVER` on realm blocks. Their persistence entries are named `drpserver1..N`.
+- **`ftlserver.json`** clusters get `dr_enabled: true`, a second persistence set `_DRset` with DR replicas, and transport roles swapped (`dr_transport` populated, `inter_cluster_transport` empty for all FTL Servers).
+
+The DR YAML covers every DR server in one file, exactly as the primary YAML does:
+
+```
+9 files + -dr-servers ... →
+    tibftlserver-cluster.yaml      (primary: pserver1–9)
+    tibftlserver-cluster-dr.yaml   (DR: drpserver1–9)
+    ftlserver.json                 (kof.cluster.0/1/2 with dr_enabled: true)
+```
+
+Pass one `-dr-servers` entry per input file. When the list is shorter, the extra replicas are named `DRSRV<n>` and fall back to the primary's addresses, which is only usable if the DR cluster runs on other hosts.
+
+### Adding DR to an existing conversion
+
+Add `-dr-servers` (and optionally `-dr-data-dir`) to any `tibftlimportconfig` command — any of the scenarios above, or any of the [example configurations](#example-configurations) — to enable Disaster Recovery output.
+
+### Simple 3-broker + DR
+
+Generated reference output: [`examples/02-3broker-plaintext/output-dr/`](examples/02-3broker-plaintext/output-dr/)
+
+```sh
+cd examples/02-3broker-plaintext
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602 \
+  --dr-servers DRSRV1=dr-host-1:5800,DRSRV2=dr-host-2:5801,DRSRV3=dr-host-3:5802 \
+  --dr-data-dir /var/kof/dr \
+  --output-dir output-dr \
+  server-1.properties server-2.properties server-3.properties
+```
+
+Same inputs and same `-core-servers` as example 02, so `diff output output-dr` shows exactly what `-dr-servers` adds.
+
+**Output:**
+```
+tibftlserver-cluster.yaml              (primary: globals.dr + PRIMARY_SERVER labels on realm blocks)
+tibftlserver-cluster-dr.yaml           (DR replica: DRSRV1–3 as core.servers, DR_SERVER labels, drpserver1–3)
+ftlserver.json                    (dr_enabled: true; _setA primary + _DRset DR persistence sets)
+kof.broker.{1,2,3}.properties
+unsupported.properties
+```
+
+### Secure 9-broker + DR (3 shards)
+
+Combine the flags of [example 12](#12--9-broker-full-security-stack-3-shards) with `-dr-servers` to generate DR-enabled output for a 9-server, 3-shard deployment. Produces three cluster YAML files — plain, secure and DR, each carrying all nine servers — and a `ftlserver.json` with `dr_enabled: true` on all three clusters.
+
+---
+
+## Output details
+
+### `tibftlserver-cluster.yaml`
+
+Every FTL Server, in one file — see [File layout](#file-layout). Names and ports for the first
+shard's servers come from `-core-servers`; if that flag is omitted the names default to `SRV1–SRV3`
+and the ports are derived from the cluster in 5600–5699. Servers past the first shard are named
+`SRV4`, `SRV5`, … and take their ports from 5700–5799. The `-n` argument is the `servers:` key:
+
+```sh
+tibftlserver -c tibftlserver-cluster.yaml -n SRV1
+tibftlserver -c tibftlserver-cluster.yaml -n SRV2
+tibftlserver -c tibftlserver-cluster.yaml -n SRV3
+```
+
+**No `services:` section.** Realm settings are written per server, on each `- realm:` entry, rather
+than once in a shared `services:` block. That includes `initial.realm.config`, so every server in
+the file names the generated `ftlserver.json` itself, and `data`, which is `<-data-dir>/srv<n>` —
+its own directory per server, separate from the pserver's `<-data-dir>/pserver<n>`:
+
+```yaml
+servers:
+  SRV1:
+  - realm:
+      data: /var/tmp/kof/data/srv1
+      initial.realm.config: ftlserver.json
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV1.log
+      #max.log.size: 10240000
+      #max.logs: 10
+  - persistence:
+      name: pserver1
+      data: /var/tmp/kof/data/pserver1
+      kof.broker.properties: kof.broker.1.properties
+      loglevel: connections:info;kof:info;durables:info;store:info
+```
+
+This applies to every cluster YAML the tool writes — primary, secure, and DR.
+
+**Server logging.** Every server carries an `ftlserver.properties` block with the process-wide
+logging settings. `loglevel` is set to `info` and reaches each service in the process that does not
+name a level of its own — the persistence service above does, and keeps
+`connections:info;kof:info;durables:info;store:info`; the realm service does not, so it follows the
+server.
+
+The other three lines are commented out because `tibftlserver` logs to stdout by default. To log to
+a file instead, uncomment all three: `max.log.size` and `max.logs` are ignored while `logfile` is
+unset, and `tibftlserver` rejects a `logfile` given without them. The suggested path is
+`<data-dir>/<server-name>.log`, so it matches the `-n` argument that starts the server.
+
+DR servers get the same block, with `-dr-data-dir` as the suggested path.
+
+**Schema daemon (`-tibschemad`).** With the flag set, the first 3 servers each get a second
+persistence service and a `- tibschemad:` entry. No extra `tibftlserver` processes and no extra
+ports — the schema persistence rides the process that already hosts the FSK one, so a 3-broker
+conversion is still three servers:
+
+```yaml
+servers:
+  SRV1:
+  - realm:
+      data: /var/tmp/kof/data/srv1
+      initial.realm.config: ftlserver.json
+  - ftlserver.properties:
+      loglevel: info
+      #logfile: /var/tmp/kof/data/SRV1.log
+      #max.log.size: 10240000
+      #max.logs: 10
+  - persistence:
+      name: pserver1
+      data: /var/tmp/kof/data/pserver1
+      kof.broker.properties: kof.broker.1.properties
+      loglevel: connections:info;kof:info;durables:info;store:info
+  - persistence:
+      name: schema1
+  - tibschemad:
+      auth.type: none
+      cluster.size: 3
+```
+
+`cluster.size` is the size of the schema daemon's own cluster — 1 for a standalone server, 3
+otherwise. It does not scale with the pservers: a 9-server, 3-shard conversion still puts the
+schema daemon on SRV1–3 only. The block is written to the plain and secure YAMLs; DR files are not
+covered yet. `auth.type` is always `none` for now; OAuth options for `tibschemad` are a later
+addition.
+
+### `tibftlserver-cluster-dr.yaml`
+
+DR replica cluster, laid out like the plain YAML and likewise covering every server. Start on the
+DR hosts using the DR server names from `-dr-servers`:
+
+```sh
+tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver1
+tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver2
+tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver3
+```
+
+### `tibftlserver-cluster-secure.yaml`
+
+The same servers as `tibftlserver-cluster.yaml` — run one file or the other, not both — with each `ftlserver.properties` block extended by TLS and auth settings, above the logging settings every cluster YAML already carries. Auth mode is determined by the Apache Kafka listener types:
+
+| Apache Kafka auth | FTL secure YAML mode |
+|---|---|
+| `sasl_tls` (PLAIN) | `auth.providers: file:<auth-users-file>` + TLS fields |
+| `oauth_tls` (OAUTHBEARER) | `auth.providers: oauth2` + `oauth2.*` globals and per-server properties |
+| `tls` / `mtls` only | TLS fields only, no `auth.providers` |
+
+When mTLS flags are provided alongside OAuth, the secure YAML includes both sets of FTL properties.
+
+In oauth2 mode the realm credentials (`-realm-service-user` / `-realm-service-password`) are written
+onto each per-server `- realm:` entry, since there is no shared `services:` block to hold them.
+
+### `ftlserver.json`
+
+Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores per cluster (`kof.data.store.N`, `kof.sync.store.N`, `kof.meta.store.N`), and FTL Servers distributed across clusters.
+
+Each cluster is generated with `disk_persistence: async`; `-disk-persistence` selects `sync` or
+`in-memory` instead. Every store then overrides the cluster explicitly:
+
+| Store | `disk_persistence` |
+|---|---|
+| `kof.data.store.N` | `async` — bulk message path, tuned for throughput |
+| `kof.sync.store.N` | `sync` |
+| `kof.meta.store.N` | `sync` |
+
+The split holds whether the cluster is `async` or `sync`, so the sync and meta stores are durable
+even when the bulk path is not. `-disk-persistence in-memory` is the exception: an override would
+put the stores back on disk and make the mode a no-op, so there the stores are in-memory too — the
+key is omitted and each store inherits the cluster. In-memory also turns off the cluster's
+`disk_index` and `disk_compact`, since an index on disk requires `sync` or `async` persistence.
+
+No upload step is needed: every generated cluster YAML names this file through
+`initial.realm.config` on each per-server `- realm:` entry (see above), so `tibftlserver` seeds the
+realm from it at startup. Upload manually only to push a *hand-edited* `ftlserver.json` to a realm that
+is already running:
+
+```sh
+tibrealmadmin --server localhost:5600 --realm _default_realm upload-realm ftlserver.json
+```
+
+In DR mode, each cluster has `dr_enabled: true` and two persistence sets: `_setA` (primary) and `_DRset` (DR replicas).
+
+### `kof.broker.N.properties`
+
+One file per FTL Server (N is 1-based). Contains only properties that pass the FSK broker properties whitelist: listener/security keys in the section 1 allowlist, plus general broker/topic/tuning keys. Listener keys appear first, followed by remaining properties in their original order.
+
+Every file carries a `node.id`, because the FTL Server refuses to start without one
+(`kof.broker.properties: node.id is required and must be a non-negative integer`). The tool
+guarantees it, and the `# Node ID:` header says where the value came from:
+
+| Input | `# Node ID:` header | Notes |
+|---|---|---|
+| `node.id=N` (KRaft) | `# Node ID: N` | used as-is |
+| `broker.id=N` (ZooKeeper mode) | `# Node ID: N (from broker.id; FSK reads the KRaft spelling node.id)` | renamed in place, keeping its position in the file; `broker.id` is *not* written to `unsupported.properties`, since its value was used |
+| neither, or a negative id such as `broker.id=-1` | `# Node ID: N (assigned by the tool; the source named no usable node.id)` | the tool assigns the lowest id not already taken by another input file |
+
+If both `node.id` and `broker.id` are present, `node.id` wins and `broker.id` is dropped as unsupported.
+
+### `unsupported.properties`
+
+Written when any input properties are not in the FSK whitelist. Contains KRaft cluster-control keys (`process.roles`, `controller.*`, etc.), ZooKeeper-mode keys (`zookeeper.*` — FSK holds cluster membership and metadata in FTL rather than ZooKeeper), and security-domain keys not on the section 1 allowlist (passwords, JAAS configs, handler classes, etc.). Kept for reference — the FTL Server does not load this file.
+
+---
+
 ## Resolving INVALID output
 
 When the tool cannot fully convert a setting it writes a `RESOLVE-REQUIRED` block in
@@ -2004,3 +2379,384 @@ either, so none of them makes the file INVALID.
 Settings with no FSK equivalent (Kerberos families, delegation tokens, per-IP
 connection limits) are written to `unsupported.properties` for reference and do not
 cause an INVALID status.
+
+---
+
+## Example configurations
+
+Each example is a directory under `examples/` holding one `server-N.properties` per Apache Kafka broker plus a checked-in `output/`. **One input file becomes one FTL Server**, so pass every broker's properties file — the tool has no flag for the FTL Server count.
+
+Each command below is written to be run from inside its own example directory, with `--output-dir output`, which is how the checked-in `output/` was produced. Run it that way and you reproduce the checked-in files (the generated YAML embeds the output directory as a relative path, so a different `--output-dir` changes the result). `examples/regen-examples.sh` runs exactly these commands for every example at once.
+
+---
+
+### 01 — Single node, PLAINTEXT
+
+**Apache Kafka config:** 1 node, KRaft (broker+controller), PLAINTEXT, no security. Suitable for local development.
+
+Generated reference output: [`examples/01-single-node-plaintext/output/`](examples/01-single-node-plaintext/output/)
+
+```sh
+cd examples/01-single-node-plaintext
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5663 \
+  --output-dir output \
+  server-1.properties
+```
+
+**Output:** `tibftlserver-standalone.yaml` (1 SRV + 1 FTL Server), `ftlserver.json`, `kof.broker.1.properties`, `unsupported.properties`
+
+---
+
+### 02 — 3-broker, PLAINTEXT
+
+**Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT listeners, no security.
+
+Generated reference output: [`examples/02-3broker-plaintext/output/`](examples/02-3broker-plaintext/output/)
+
+```sh
+cd examples/02-3broker-plaintext
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5600,SRV2=localhost:5601,SRV3=localhost:5602 \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties
+```
+
+**Output:** `tibftlserver-cluster.yaml`, `ftlserver.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+
+---
+
+### 03 — Single node, ZooKeeper mode, PLAINTEXT
+
+**Apache Kafka config:** 1 node in ZooKeeper mode (Apache Kafka 3.9 or earlier — 4.x removed ZooKeeper), single PLAINTEXT listener, no security.
+
+Two things distinguish a ZooKeeper-mode input from the KRaft examples above:
+
+- The broker identifies itself with `broker.id`, the key KRaft later renamed to `node.id`. FSK reads `node.id` only, so the tool renames it in place and notes the rename in the `# Node ID:` header of the generated `kof.broker.N.properties`. Without this, the FTL Server refuses to start with `kof.broker.properties: node.id is required and must be a non-negative integer`.
+- The `zookeeper.*` keys go to `unsupported.properties`. FSK has no ZooKeeper; the cluster membership and metadata ZooKeeper holds for Apache Kafka are FTL-native.
+
+Generated reference output: [`examples/03-zk-single-node-plaintext/output/`](examples/03-zk-single-node-plaintext/output/)
+
+```sh
+cd examples/03-zk-single-node-plaintext
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5664 \
+  --output-dir output \
+  server-1.properties
+```
+
+**Output:** `tibftlserver-standalone.yaml` (1 SRV + 1 FTL Server), `ftlserver.json`, `kof.broker.1.properties` (`node.id=0`, from `broker.id=0`), `unsupported.properties`
+
+---
+
+### 04 — 3-broker, ZooKeeper mode, PLAINTEXT
+
+**Apache Kafka config:** 3 nodes in ZooKeeper mode sharing one ZooKeeper ensemble, PLAINTEXT listeners, no security. Same `broker.id` → `node.id` rename as example 03, applied per broker.
+
+Generated reference output: [`examples/04-zk-3broker-plaintext/output/`](examples/04-zk-3broker-plaintext/output/)
+
+```sh
+cd examples/04-zk-3broker-plaintext
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5610,SRV2=localhost:5611,SRV3=localhost:5612 \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties
+```
+
+**Output:** `tibftlserver-cluster.yaml`, `ftlserver.json`, `kof.broker.{1,2,3}.properties` (`node.id=1/2/3`, from `broker.id`), `unsupported.properties`
+
+---
+
+### 05 — Single node, SASL_SSL PLAIN
+
+**Apache Kafka config:** 1 node, KRaft, SASL_SSL PLAIN on broker listener, SSL on controller.
+
+Generated reference output: [`examples/05-single-node-sasl/output/`](examples/05-single-node-sasl/output/)
+
+```sh
+cd examples/05-single-node-sasl
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5689 \
+  --tls-cert /etc/ftl/certs/server.pem \
+  --auth-users-file /etc/ftl/users.txt \
+  --output-dir output \
+  server-1.properties
+```
+
+**Output:** `tibftlserver-standalone.yaml`, `tibftlserver-standalone-secure.yaml` (auth mode: file-auth+tls), `ftlserver.json`, `kof.broker.1.properties`, `unsupported.properties`
+
+---
+
+### 06 — Single node, OAuth2
+
+**Apache Kafka config:** 1 node, KRaft, SASL_SSL OAUTHBEARER on broker listener, SSL on controller.
+
+Generated reference output: [`examples/06-single-node-oauth/output/`](examples/06-single-node-oauth/output/)
+
+```sh
+cd examples/06-single-node-oauth
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5663 \
+  --oauth-token-url https://auth.example.com/oauth/token \
+  --oauth-jwks-url file:/etc/ftl/oauth.json \
+  --oauth-ui-auth-url https://auth.example.com/oauth/authorize \
+  --oauth-ui-token-url https://auth.example.com/oauth/token \
+  --oauth-ui-logout-url https://auth.example.com/oauth/logout \
+  --oauth-ui-client-id ftl-ui \
+  --oauth-ui-client-secret env:OAUTH_UI_CLIENT_SECRET \
+  --output-dir output \
+  server-1.properties
+```
+
+**Output:** `tibftlserver-standalone.yaml`, `tibftlserver-standalone-secure.yaml` (auth mode: oauth2), `ftlserver.json`, `kof.broker.1.properties`, `unsupported.properties`
+
+---
+
+### 07 — 3-broker, SASL_SSL PLAIN
+
+**Apache Kafka config:** 3 nodes, KRaft, SASL_SSL PLAIN on broker listener, SSL on controller listener.
+
+Generated reference output: [`examples/07-3broker-sasl/output/`](examples/07-3broker-sasl/output/)
+
+```sh
+cd examples/07-3broker-sasl
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5695,SRV2=localhost:5641,SRV3=localhost:5693 \
+  --tls-cert /etc/ftl/certs/server.pem \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties
+```
+
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: file-auth+tls), `ftlserver.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+
+---
+
+### 08 — 3-broker, TLS-only (no SASL)
+
+**Apache Kafka config:** 3 nodes, KRaft, SSL listener with `ssl.client.auth=none` — wire encryption only, no authentication mechanism.
+
+Generated reference output: [`examples/08-3broker-tls-only/output/`](examples/08-3broker-tls-only/output/)
+
+```sh
+cd examples/08-3broker-tls-only
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5680,SRV2=localhost:5626,SRV3=localhost:5616 \
+  --tls-cert /etc/ftl/certs/server.pem \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties
+```
+
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: tls-only), `ftlserver.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+
+---
+
+### 09 — 3-broker, multi-SASL (PLAIN + OAuth2 + mTLS)
+
+**Apache Kafka config:** 3 nodes, KRaft, four listeners: BASIC_AUTH (SASL_SSL PLAIN), OAUTH (SASL_SSL OAUTHBEARER), MTLS (SSL mutual TLS), CONTROLLER (SSL).
+
+Generated reference output: [`examples/09-3broker-multi-sasl/output/`](examples/09-3broker-multi-sasl/output/)
+
+```sh
+cd examples/09-3broker-multi-sasl
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5686,SRV2=localhost:5696,SRV3=localhost:5622 \
+  --oauth-token-url https://auth.example.com/oauth/token \
+  --oauth-jwks-url file:/etc/ftl/oauth.json \
+  --oauth-ui-auth-url https://auth.example.com/oauth/authorize \
+  --oauth-ui-token-url https://auth.example.com/oauth/token \
+  --oauth-ui-logout-url https://auth.example.com/oauth/logout \
+  --oauth-ui-client-id ftl-ui \
+  --oauth-ui-client-secret env:OAUTH_UI_CLIENT_SECRET \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties
+```
+
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS props), `ftlserver.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+
+---
+
+### 10 — 3-broker, multi-listener (PLAIN + OAuth2 + per-listener mTLS)
+
+**Apache Kafka config:** 3 nodes, KRaft, four listeners: BASIC_AUTH (SASL_SSL PLAIN), OAUTH (SASL_SSL OAUTHBEARER), MTLS (SSL, `listener.name.mtls.ssl.client.auth=required`), CONTROLLER (SSL).
+
+Generated reference output: [`examples/10-3broker-multi-listener/output/`](examples/10-3broker-multi-listener/output/)
+
+```sh
+cd examples/10-3broker-multi-listener
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5695,SRV2=localhost:5654,SRV3=localhost:5616 \
+  --oauth-token-url https://auth.example.com/oauth/token \
+  --oauth-jwks-url file:/etc/ftl/oauth.json \
+  --oauth-ui-auth-url https://auth.example.com/oauth/authorize \
+  --oauth-ui-token-url https://auth.example.com/oauth/token \
+  --oauth-ui-logout-url https://auth.example.com/oauth/logout \
+  --oauth-ui-client-id ftl-ui \
+  --oauth-ui-client-secret env:OAUTH_UI_CLIENT_SECRET \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties
+```
+
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2; includes all mTLS FTL properties), `ftlserver.json`, `kof.broker.{1,2,3}.properties`, `unsupported.properties`
+
+---
+
+### 11 — 9-broker scale-out (3 shards)
+
+**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller, nodes 4–9 are broker-only; SASL_SSL PLAIN + OAuth2 + mTLS listeners. The 9 input files map to 9 FTL Servers across 3 FSK shards (`kof.cluster.0` / `.1` / `.2`).
+
+The inputs declare secured Apache Kafka listeners, but **no FTL security flags are passed on the command line on purpose**: this example is about the sharding split, so the output stays minimal. That is why there is no `tibftlserver-cluster-secure.yaml` here — only an `ftl-users.txt` derived from the SASL PLAIN users in the inputs. [Example 12](#12--9-broker-full-security-stack-3-shards) is the same nine inputs *with* the security flags supplied, and that is where the secure YAML appears.
+
+Generated reference output: [`examples/11-9broker-scale/output/`](examples/11-9broker-scale/output/)
+
+```sh
+cd examples/11-9broker-scale
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5619,SRV2=localhost:5698,SRV3=localhost:5635 \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties \
+  server-4.properties server-5.properties server-6.properties \
+  server-7.properties server-8.properties server-9.properties
+```
+
+**Output:** `tibftlserver-cluster.yaml` (SRV1–9, pserver1–9), `ftlserver.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `ftl-users.txt`, `unsupported.properties`
+
+All nine FTL Servers are in the one YAML: `globals.core.servers` lists SRV1–3, the first shard, and SRV4–9 each carry their own `ftl: server:` address. See [File layout](#file-layout).
+
+The three shards are the default [`-replication-factor`](#core-flags--h-core) of 3. Adding `--replication-factor 1` to the same nine inputs gives nine unreplicated shards, `kof.cluster.0` through `.8`, with the YAML unchanged.
+
+---
+
+### 12 — 9-broker, full security stack (3 shards)
+
+**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–9 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). The 9 input files map to 9 FTL Servers across 3 FSK shards. Same inputs as example 11, with the FTL security flags supplied.
+
+Generated reference output: [`examples/12-9broker-secure/output/`](examples/12-9broker-secure/output/)
+
+```sh
+cd examples/12-9broker-secure
+tibftlimportconfig \
+  --core-servers SRV1=localhost:5601,SRV2=localhost:5602,SRV3=localhost:5603 \
+  --tls-cert /etc/ftl/certs/server.pem \
+  --tls-server-trust /etc/ftl/certs/client-ca.pem \
+  --tls-client-cert /etc/ftl/certs/client.pem \
+  --tls-client-key /etc/ftl/certs/client.key \
+  --oauth-token-url https://auth.example.com/oauth/token \
+  --oauth-jwks-url file:/etc/ftl/oauth.json \
+  --oauth-ui-auth-url https://auth.example.com/oauth/authorize \
+  --oauth-ui-token-url https://auth.example.com/oauth/token \
+  --oauth-ui-logout-url https://auth.example.com/oauth/logout \
+  --oauth-ui-client-id ftl-ui \
+  --oauth-ui-client-secret env:OAUTH_UI_CLIENT_SECRET \
+  --oauth-client-id ftl-server \
+  --oauth-client-secret env:OAUTH_CLIENT_SECRET \
+  --oauth-provider-trust /etc/ftl/certs/oauth-provider.pem \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties \
+  server-4.properties server-5.properties server-6.properties \
+  server-7.properties server-8.properties server-9.properties
+```
+
+**Output:** `tibftlserver-cluster.yaml`, `tibftlserver-cluster-secure.yaml` (auth mode: oauth2 + mTLS), `ftlserver.json` (3 clusters), `kof.broker.{1–9}.properties`, `unsupported.properties`
+
+As in example 11, the three shards come from the default [`-replication-factor`](#core-flags--h-core) of 3, and both YAMLs carry all nine FTL Servers. Run the secure one instead of the plain one — it is the same cluster with the TLS and OAuth settings added.
+
+---
+
+### 13 — 3-broker, PLAINTEXT + DR
+
+**Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT. Primary servers named `primary1/2/3`; DR servers named `drserver1/2/3`. Mirrors the layout of the FTL `dr-simple` sample cluster configuration.
+
+Generated reference output: [`examples/13-3broker-dr/output/`](examples/13-3broker-dr/output/)
+
+```sh
+cd examples/13-3broker-dr
+tibftlimportconfig \
+  --core-servers primary1=primary-host-1:8585,primary2=primary-host-2:8686,primary3=primary-host-3:8787 \
+  --dr-servers drserver1=localhost:9585,drserver2=localhost:9686,drserver3=localhost:9787 \
+  --output-dir output \
+  server-1.properties server-2.properties server-3.properties
+```
+
+**Output:**
+
+`tibftlserver-cluster.yaml` — primary cluster (start with `tibftlserver -c tibftlserver-cluster.yaml -n primary1`):
+```yaml
+globals:
+  core.servers:
+    primary1: primary-host-1:8585
+    primary2: primary-host-2:8686
+    primary3: primary-host-3:8787
+  dr: drserver1@localhost:9585|drserver2@localhost:9686|drserver3@localhost:9787
+  auto.init.primary.on.first.startup: true
+servers:
+  primary1:
+  - realm:
+      label: PRIMARY_SERVER
+  - persistence:
+      name: pserver1  ...
+```
+
+Note the `servers:` keys are the `-core-servers` names, not a fixed `SRV1/2/3`. These servers carry
+no `ftl:` block, so `tibftlserver` resolves each one's listen address by matching `-n` against
+`globals.core.servers` — the two name lists have to agree.
+
+`tibftlserver-cluster-dr.yaml` — DR replica cluster (start with `tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver1`):
+```yaml
+globals:
+  core.servers:
+    drserver1: localhost:9585
+    drserver2: localhost:9686
+    drserver3: localhost:9787
+  dr: primary1@primary-host-1:8585|primary2@primary-host-2:8686|primary3@primary-host-3:8787
+servers:
+  drserver1:
+  - realm:
+      label: DR_SERVER
+  - persistence:
+      name: drpserver1  ...
+```
+
+`ftlserver.json` — `kof.cluster.N` with `dr_enabled: true`, `_setA` (pserver1–3) + `_DRset` (drpserver1–3)
+
+---
+
+### All example directories
+
+| Directory | Nodes | Auth | FTL Servers |
+|---|---|---|---|
+| `examples/01-single-node-plaintext/` | 1 (broker+controller) | PLAINTEXT | 1 |
+| `examples/02-3broker-plaintext/` | 3 (broker+controller) | PLAINTEXT | 3 |
+| `examples/03-zk-single-node-plaintext/` | 1 (ZooKeeper mode) | PLAINTEXT | 1 |
+| `examples/04-zk-3broker-plaintext/` | 3 (ZooKeeper mode) | PLAINTEXT | 3 |
+| `examples/05-single-node-sasl/` | 1 (broker+controller) | SASL_SSL PLAIN | 1 |
+| `examples/06-single-node-oauth/` | 1 (broker+controller) | SASL_SSL OAUTHBEARER | 1 |
+| `examples/07-3broker-sasl/` | 3 (broker+controller) | SASL_SSL PLAIN | 3 |
+| `examples/08-3broker-tls-only/` | 3 (broker+controller) | SSL only (no SASL) | 3 |
+| `examples/09-3broker-multi-sasl/` | 3 (broker+controller) | PLAIN + OAuth2 + mTLS | 3 |
+| `examples/10-3broker-multi-listener/` | 3 (broker+controller) | PLAIN + OAuth2 + mTLS (per-listener client auth) | 3 |
+| `examples/11-9broker-scale/` | 9 (nodes 1–3 controller) | SASL_SSL PLAIN + OAuth2 + mTLS (no FTL security flags passed) | 9 (3 shards) |
+| `examples/12-9broker-secure/` | 9 (nodes 1–3 controller) | PLAIN + OAuth2 + mTLS (full stack) | 9 (3 shards) |
+| `examples/13-3broker-dr/` | 3 (broker+controller) | PLAINTEXT + DR | 3 |
+| `examples/14-3broker-sasl-basic/` | 3 (broker+controller) | SASL_SSL PLAIN (single listener) | 3 |
+| `examples/15-3broker-mtls/` | 3 (broker+controller) | SSL mTLS only (`ssl.client.auth=required`) | 3 |
+| `examples/16-3broker-oauth2/` | 3 (broker+controller) | SASL_SSL OAUTHBEARER (single listener) | 3 |
+| `examples/17-3broker-sasl+mtls/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS | 3 |
+| `examples/18-3broker-sasl+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SASL_SSL OAUTHBEARER | 3 |
+| `examples/19-3broker-mtls+oauth2/` | 3 (broker+controller) | SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
+| `examples/20-3broker-sasl+mtls+oauth2/` | 3 (broker+controller) | SASL_SSL PLAIN + SSL mTLS + SASL_SSL OAUTHBEARER | 3 |
+| `examples/21-single-node-tibschemad/` | 1 (broker+controller) | PLAINTEXT + `-tibschemad` | 1 |
+| `examples/22-3broker-tibschemad/` | 3 (broker+controller) | PLAINTEXT + `-tibschemad` | 3 |
+
+Every example ships a checked-in `output/` directory, regenerated by
+`examples/regen-examples.sh`.
+
+Examples 21 and 22 take the same inputs as 01 and 02 and add only `-tibschemad`, so diffing
+their outputs shows exactly what the flag contributes — the standalone case at `cluster.size: 1`
+and the cluster case at `cluster.size: 3`:
+
+```bash
+diff examples/01-single-node-plaintext/output/tibftlserver-standalone.yaml \
+     examples/21-single-node-tibschemad/output/tibftlserver-standalone.yaml
+diff examples/02-3broker-plaintext/output/tibftlserver-cluster.yaml \
+     examples/22-3broker-tibschemad/output/tibftlserver-cluster.yaml
+```

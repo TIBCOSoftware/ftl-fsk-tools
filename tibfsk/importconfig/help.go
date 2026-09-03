@@ -196,7 +196,7 @@ func writeOverview(w io.Writer) {
 	fmt.Fprintln(w, "  kof.broker.N.properties           Per-pserver broker properties (N is 1-based)")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "A single-broker conversion produces one pserver -- a standalone server rather than a")
-	fmt.Fprintln(w, "cluster -- so its YAMLs are named tibftlserver_standalone.yaml, -secure.yaml, -dr.yaml.")
+	fmt.Fprintln(w, "cluster -- so its YAMLs are named tibftlserver-standalone.yaml, -secure.yaml, -dr.yaml.")
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Common flags:")

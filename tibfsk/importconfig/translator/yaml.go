@@ -85,7 +85,7 @@ func (o ClusterOpts) RF() int {
 // its own stem. n is the primary pserver count (min3 of the broker count).
 func clusterYAMLStem(n int) string {
 	if n <= 1 {
-		return "tibftlserver_standalone"
+		return "tibftlserver-standalone"
 	}
 	return "tibftlserver-cluster"
 }
@@ -155,7 +155,7 @@ func buildDRString(servers []CoreServer) string {
 // WriteKOFClusterYAML generates the one tibftlserver YAML that configures every FTL
 // Server, however many shards they are divided into. When drOpts.Enabled(), also
 // generates <stem>-dr.yaml. The stem is tibftlserver-cluster, or
-// tibftlserver_standalone for a single pserver (see clusterYAMLStem).
+// tibftlserver-standalone for a single pserver (see clusterYAMLStem).
 //
 // The layout follows samples/yaml/kof/scaling: globals.core.servers names only the
 // first shard, every server carries its own "- realm:" block, and the servers beyond

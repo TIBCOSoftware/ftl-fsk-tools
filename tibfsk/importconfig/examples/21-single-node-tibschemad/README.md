@@ -17,7 +17,7 @@ tibftlimportconfig \
 ## What the flag adds
 
 A single broker is a standalone server rather than a cluster, so the YAML is named
-`tibftlserver_standalone.yaml` and the schema daemon is sized `cluster.size: 1`:
+`tibftlserver-standalone.yaml` and the schema daemon is sized `cluster.size: 1`:
 
 ```yaml
 servers:
@@ -54,7 +54,7 @@ The only hunk is the five lines above; `ftlserver.json`, `kof.broker.1.propertie
 ## Start
 
 ```bash
-tibftlserver -c output/tibftlserver_standalone.yaml -n SRV1
+tibftlserver -c output/tibftlserver-standalone.yaml -n SRV1
 ```
 
 ## Notes

@@ -12,7 +12,7 @@
 //	kof.broker.N.properties           — Per-pserver broker properties (one file per input, N is 1-based)
 //
 // A single-broker conversion produces one pserver, which is a standalone server
-// rather than a cluster, so those YAMLs are named tibftlserver_standalone*.yaml.
+// rather than a cluster, so those YAMLs are named tibftlserver-standalone*.yaml.
 //
 // Usage:
 //
