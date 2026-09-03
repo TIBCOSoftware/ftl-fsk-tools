@@ -787,6 +787,33 @@ Kafka uses JKS/PKCS12 keystores; FSK reads PEM. The tool rewrites `ssl.keystore.
 commands that create that file — creating it is a real conversion, not a rename, and it
 is the one step below (Step 2) that the tool leaves to you.
 
+### The certificates this scenario needs
+
+Two separate sets of certificates are in play, and mixing them up is the usual reason this
+scenario stalls.
+
+**The Kafka side — you create these.** A keystore holding the broker's certificate and its
+private key, and a truststore holding the certificate authority that signed it. They have to be
+JKS or PKCS12, because that is all Apache Kafka reads, and the certificate's subject alternative
+name must cover the advertised host (`localhost` here) or clients reject the connection during the
+handshake. The three passwords have to match `ssl.keystore.password`, `ssl.key.password` and
+`ssl.truststore.password` in Step 1. FSK reads PEM rather than JKS, so Step 2 converts the same
+material a second time — same certificate and key, different container.
+
+**The FTL side — already on disk.** The FTL Server's own TLS material and its user accounts come
+from the installed samples in `/opt/tibco/ftl/current-version/samples/yaml/tls-user`, so there is
+nothing to generate for the realm service.
+
+| | Apache Kafka reads | FSK reads | Where it comes from |
+|---|---|---|---|
+| Broker certificate + private key | `server.keystore.jks` | `server.keystore.pem` | you create it; Step 2 converts it |
+| Trust anchor for that certificate | `kafka.truststore.jks` | `kafka.truststore.pem` | you create it; Step 2 converts it |
+| FTL Server certificate, key, CA | — | `server_cert.pem`, `server_key.pem`, `client_trust.pem` | shipped in `samples/yaml/tls-user` |
+| FTL realm user accounts | — | `users.txt` | shipped in `samples/yaml/tls-user` |
+
+No keystores yet? [Creating self-signed Kafka certificates](#creating-self-signed-kafka-certificates)
+produces the two this scenario names, with the passwords Step 1 expects.
+
 :::tip Already running a secured single-node broker?
 Steps 1 and 3 only build and start the example broker. If you already have a running Kafka
 broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
@@ -810,11 +837,11 @@ listener.security.protocol.map=CONTROLLER:SSL,BROKER:SASL_SSL
 
 # TLS — JKS keystores (the tool rewrites these to PEM and gives you the commands)
 ssl.keystore.type=JKS
-ssl.keystore.location=/etc/kafka/certs/server.keystore.jks
+ssl.keystore.location=/var/tmp/kafka/scenario5/certs/server.keystore.jks
 ssl.keystore.password=keystorePassword123
 ssl.key.password=keyPassword123
 ssl.truststore.type=JKS
-ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
+ssl.truststore.location=/var/tmp/kafka/scenario5/certs/kafka.truststore.jks
 ssl.truststore.password=truststorePassword123
 
 # SASL/PLAIN on the BROKER listener, used for client and inter-broker traffic alike
@@ -831,6 +858,9 @@ transaction.state.log.replication.factor=1
 transaction.state.log.min.isr=1
 ```
 
+Save this as **server-1.properties** in your working directory — the commands below name that
+file.
+
 ### Step 2 — Convert keystores to PEM
 
 The generated `kof.broker.1.properties` already names the `.pem` files; these are the
@@ -840,18 +870,23 @@ of the run, that actually create them. For JKS:
 ```bash
 # Convert keystore
 keytool -importkeystore \
-  -srckeystore /etc/kafka/certs/server.keystore.jks -srcstoretype JKS \
-  -destkeystore /etc/kafka/certs/server.keystore.p12 -deststoretype PKCS12
-openssl pkcs12 -in /etc/kafka/certs/server.keystore.p12 -nodes \
-  -out /etc/kafka/certs/server.keystore.pem
+  -srckeystore /var/tmp/kafka/scenario5/certs/server.keystore.jks -srcstoretype JKS \
+  -destkeystore /var/tmp/kafka/scenario5/certs/server.keystore.p12 -deststoretype PKCS12
+openssl pkcs12 -in /var/tmp/kafka/scenario5/certs/server.keystore.p12 -nodes \
+  -out /var/tmp/kafka/scenario5/certs/server.keystore.pem
 
 # Convert truststore
 keytool -importkeystore \
-  -srckeystore /etc/kafka/certs/kafka.truststore.jks -srcstoretype JKS \
-  -destkeystore /etc/kafka/certs/kafka.truststore.p12 -deststoretype PKCS12
-openssl pkcs12 -in /etc/kafka/certs/kafka.truststore.p12 -nodes -nokeys \
-  -out /etc/kafka/certs/kafka.truststore.pem
+  -srckeystore /var/tmp/kafka/scenario5/certs/kafka.truststore.jks -srcstoretype JKS \
+  -destkeystore /var/tmp/kafka/scenario5/certs/kafka.truststore.p12 -deststoretype PKCS12
+openssl pkcs12 -in /var/tmp/kafka/scenario5/certs/kafka.truststore.p12 -nodes -nokeys \
+  -out /var/tmp/kafka/scenario5/certs/kafka.truststore.pem
 ```
+
+Both `keytool` commands prompt for the source and destination store passwords; add
+`-srcstorepass`, `-srckeypass` and `-deststorepass` to run them unattended. A truststore holding
+only a trusted certificate — no private key — cannot be run through `keytool -importkeystore` on
+every JDK; `keytool -exportcert -rfc` writes the same PEM directly, as the appendix shows.
 
 Alternatively, run with `--auto` and the tool performs the conversion for you
 (requires `keytool` and `openssl` on `PATH`).
@@ -870,8 +905,30 @@ KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
 "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
 ```
 
-A plain `kafka-topics.sh --list` will not reach a SASL_SSL listener; verify with a client
-properties file carrying the truststore and JAAS settings, or just check the broker log.
+A plain `kafka-topics.sh --list` will not reach a SASL_SSL listener — every Kafka CLI needs the
+truststore and the SASL credentials before it can complete the handshake. Save this as
+**client.properties**:
+
+```properties
+security.protocol=SASL_SSL
+sasl.mechanism=PLAIN
+sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required \
+  username="admin" password="admin-secret";
+ssl.truststore.type=JKS
+ssl.truststore.location=/var/tmp/kafka/scenario5/certs/kafka.truststore.jks
+ssl.truststore.password=truststorePassword123
+```
+
+Then:
+
+```bash
+"$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
+  --bootstrap-server localhost:9092 --command-config client.properties
+```
+
+A line beginning `localhost:9092 (id: 1 rack: null …) ->` means the broker is up and the
+certificates are good. Keep the file: the same one reaches FSK on port 9092 after Step 6, which is
+the most direct proof the converted PEMs took over.
 
 ### Step 4 — Stop Apache Kafka
 
@@ -884,19 +941,39 @@ The FTL Server that replaces the broker binds port 9092, so the broker has to gi
 ### Step 5 — Run the config migration tool
 
 ```bash
+export FTL_SAMPLES=/opt/tibco/ftl/current-version/samples/yaml/tls-user
+
 tibftlimportconfig \
   --output-dir ./kof-output \
   --data-dir /var/tmp/kof/scenario5/data \
-  --tls-cert /etc/kafka/certs/server.keystore.pem \
-  --tls-key  /etc/kafka/certs/server.keystore.pem \
-  --tls-ca   /etc/kafka/certs/kafka.truststore.pem \
-  --auth-users-file /etc/ftl/users.txt \
+  --tls-cert $FTL_SAMPLES/server_cert.pem \
+  --tls-key  $FTL_SAMPLES/server_key.pem \
+  --tls-key-password password \
+  --tls-ca   $FTL_SAMPLES/client_trust.pem \
+  --auth-users-file $FTL_SAMPLES/users.txt \
   server-1.properties
 ```
 
-The `--auth-users-file` points to an FTL users file that maps usernames extracted
-from the inline JAAS config. The tool writes a `tibftlserver-cluster-secure.yaml` alongside
-the main cluster YAML when TLS or auth flags are supplied.
+These four flags configure the **FTL** side — the realm service's own TLS and the accounts that
+may log in to it. They have nothing to do with the Kafka listener, which FSK serves using the PEMs
+converted in Step 2 and named in `kof.broker.1.properties`. Taking them from the installed
+`tls-user` sample means the only certificates you create in this scenario are the Kafka ones.
+`--tls-key-password` is required here because the sample `server_key.pem` is encrypted with the
+passphrase `password`.
+
+`--auth-users-file` supplies the FTL realm's own users file — the sample grants `admin` the
+`ftl-admin` role and `internal` the `ftl-internal` role, which is what the generated
+`ftlserver.properties` logs in as. The Kafka clients from the inline JAAS config are a separate
+list: the tool extracts them into `kafka-users.txt` in the output directory and layers both files
+into `auth.providers`. The tool writes a `tibftlserver-standalone-secure.yaml` alongside the plain
+standalone YAML whenever TLS or auth flags are supplied.
+
+:::note The `SEVERE WARNING` about missing `.pem` files
+The run ends with `SEVERE WARNING -- … WILL NOT RUN WITH FSK AS IT STANDS` and a claim that the
+converted `.pem` files do not exist. The tool only tracks conversions it performed itself, under
+`--auto`, so the warning fires even when you did Step 2 by hand and the files are there. Confirm
+with `ls /var/tmp/kafka/scenario5/certs/*.pem`; if both exist, carry on.
+:::
 
 `--tls-ca` writes `tls.client.trust.file`, the trust anchor the FTL Server's own internal
 client uses to verify the certificate the server presents to it. Omit it and the server
@@ -922,14 +999,15 @@ Stop the FTL Server before the next scenario. The `-secure` YAML puts TLS and au
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone-secure.yaml)"
 
-tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -x
+tibftladmin --ftlserver "$FTLS" --tls.trust.file $FTL_SAMPLES/client_trust.pem \
+  -u admin -pw admin-pw -x
 ```
 
 `-x` (`--shutdown`) stops the FTL Server process.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
-`admin` is whichever account your `--auth-users-file` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `-te` trusts any certificate the server presents — use `--tls.trust.file <ca.pem>` where that is too loose.
+`admin`/`admin-pw` is the account the sample `users.txt` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `--tls.trust.file` names the CA that signed the certificate the server presents — the same `client_trust.pem` given to `--tls-ca` in Step 5. `-te` in its place trusts any certificate at all, which is quicker and looser.
 
 **→ Continue to [Scenario 6](#scenario-6--single-node-oauth2) to replace SASL/PLAIN with OAuth2,
 or jump to [Scenario 7](#scenario-7--3-node-sasl-plain-cluster) for a 3-node SASL cluster.**
@@ -2664,3 +2742,84 @@ diff examples/01-single-node-plaintext/output/tibftlserver-standalone.yaml \
 diff examples/02-3broker-plaintext/output/tibftlserver-cluster.yaml \
      examples/22-3broker-tibschemad/output/tibftlserver-cluster.yaml
 ```
+
+---
+
+## Creating self-signed Kafka certificates
+
+[Scenario 5](#scenario-5--single-node-sasl-plain-over-tls) and the secured scenarios after it
+need a Kafka keystore and truststore that you supply. If you have none, these commands produce
+the pair those scenarios name, with the passwords their `server.properties` expects. This is a
+demo PKI — one self-signed certificate acting as its own authority, no CA hierarchy, no
+revocation. Do not model a production deployment on it.
+
+### 1. The broker keystore
+
+```bash
+mkdir -p /var/tmp/kafka/scenario5/certs
+
+keytool -genkeypair -alias kafka-server \
+  -keyalg RSA -keysize 2048 -validity 365 \
+  -dname "CN=localhost, OU=FSK, O=Example, L=Palo Alto, ST=CA, C=US" \
+  -ext "SAN=DNS:localhost,IP:127.0.0.1" \
+  -keystore /var/tmp/kafka/scenario5/certs/server.keystore.jks -storetype JKS \
+  -storepass keystorePassword123 -keypass keyPassword123
+```
+
+`SAN` is the part that matters and the part most often left out: a Kafka client verifies the
+hostname it dialled against the certificate's subject alternative name, not against `CN`. The
+scenarios advertise `localhost`, so `DNS:localhost` has to be in there. Advertising a real
+hostname means naming that hostname instead.
+
+`-storepass` and `-keypass` become `ssl.keystore.password` and `ssl.key.password` in Step 1.
+Modern JDKs print a warning that JKS is a proprietary format and suggest migrating to PKCS12 —
+harmless here, since Step 2 converts the store anyway.
+
+### 2. The truststore
+
+A self-signed certificate is its own authority, so the truststore holds that same certificate:
+
+```bash
+keytool -exportcert -alias kafka-server -rfc \
+  -keystore /var/tmp/kafka/scenario5/certs/server.keystore.jks \
+  -storepass keystorePassword123 \
+  -file /var/tmp/kafka/scenario5/certs/server.cer
+
+keytool -importcert -noprompt -alias kafka-server \
+  -file /var/tmp/kafka/scenario5/certs/server.cer \
+  -keystore /var/tmp/kafka/scenario5/certs/kafka.truststore.jks -storetype JKS \
+  -storepass truststorePassword123
+```
+
+`-storepass` here is `ssl.truststore.password` in Step 1. Kafka clients need this truststore too —
+it is what `ssl.truststore.location` points at in the `client.properties` of Step 3.
+
+### 3. The PEM copies FSK reads
+
+Apache Kafka reads the JKS stores above; FSK reads PEM. This is Step 2 of the scenario, with the
+passwords filled in so nothing prompts:
+
+```bash
+keytool -importkeystore -alias kafka-server \
+  -srckeystore /var/tmp/kafka/scenario5/certs/server.keystore.jks -srcstoretype JKS \
+  -srcstorepass keystorePassword123 -srckeypass keyPassword123 \
+  -destkeystore /var/tmp/kafka/scenario5/certs/server.keystore.p12 -deststoretype PKCS12 \
+  -deststorepass keystorePassword123 -destkeypass keystorePassword123
+
+openssl pkcs12 -in /var/tmp/kafka/scenario5/certs/server.keystore.p12 \
+  -passin pass:keystorePassword123 -nodes \
+  -out /var/tmp/kafka/scenario5/certs/server.keystore.pem
+
+cp /var/tmp/kafka/scenario5/certs/server.cer \
+   /var/tmp/kafka/scenario5/certs/kafka.truststore.pem
+```
+
+Two details differ from the generic commands the tool prints. `keytool -importkeystore` refuses
+`-srckeypass`/`-destkeypass` unless `-alias` names a single entry, so the alias is given
+explicitly. And the truststore needs no conversion at all: it holds one trusted certificate and no
+private key, which `keytool -importkeystore` declines to migrate on several JDKs — the
+`-exportcert -rfc` output from step 2 above already *is* the PEM, so it is simply copied.
+
+Check that the FTL installation's `openssl` is the one on your `PATH`, or call `/usr/bin/openssl`
+explicitly; a mismatched shared library gives `Library not loaded: libssl.3.dylib` rather than a
+useful error.
