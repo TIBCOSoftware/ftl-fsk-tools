@@ -26,10 +26,10 @@ advance as your environment requires.
 
 ## Before you start
 
-Every scenario runs end to end: bring up the Apache Kafka brokers the `server.properties` describes,
-convert the configuration, then start the FTL Servers on the result. Each scenario is a numbered
-sequence of steps, so *Scenario 5, Step 2* means the second step of the SASL/PLAIN-over-TLS
-walkthrough. Nine things hold for all twelve scenarios.
+Every scenario runs end to end: bring up the Apache Kafka brokers the `server.properties`
+describes, stop them, convert the configuration, then start the FTL Servers on the result. Each
+scenario is a numbered sequence of steps, so *Scenario 5, Step 2* means the second step of the
+SASL/PLAIN-over-TLS walkthrough. Three things hold for all twelve.
 
 **`tibftlimportconfig`.** Every `tibftlimportconfig` command below is the binary checked in at
 [`bin/tibftlimportconfig`](bin/) (linux/amd64, statically linked) — a clone needs no Go toolchain
@@ -39,168 +39,22 @@ and no build step. Put it on your `PATH`, or invoke it by path:
 export PATH=/path/to/ftl-fsk-tools/tibfsk/importconfig/bin:$PATH
 ```
 
-Building from source is only necessary on a platform other than linux/amd64, or when changing the
-tool. It requires Go 1.25+ (`toolchain go1.25.6` is pinned in `go.mod`), from the directory holding
-`go.mod`:
-
-```bash
-go build .
-```
-
-Inside a Go workspace that lists this module it can also be built by module path from the workspace
-root, `go build tibco.com/ftl-support/tibftlimportconfig`. To refresh the checked-in binary after
-changing the sources, run `./build-artifacts.sh` at the repository root and commit the result.
-
-**`KAFKA_HOME`.** The Kafka commands assume a Kafka 4.x installation:
+**`KAFKA_HOME`.** The Kafka commands assume a Kafka 4.x installation. Scenarios 3 and 4 are the
+exception: they run Kafka in ZooKeeper mode, which 4.x removed, so those two need `KAFKA_HOME`
+pointed at Kafka 3.9 or earlier.
 
 ```bash
 export KAFKA_HOME=/opt/kafka
 ```
 
-Scenarios 3 and 4 are the exception: they run Kafka in ZooKeeper mode, which 4.x removed, so those
-two need `KAFKA_HOME` pointed at Kafka 3.9 or earlier.
-
-**Each scenario owns its directories.** Every path a scenario writes to carries its own number —
-Kafka's `log.dirs` and `LOG_DIR` under `/var/tmp/kafka/scenarioN/`, ZooKeeper's `dataDir` under
-`/var/tmp/zookeeper/scenarioN/`, and the FTL Servers' `--data-dir` under `/var/tmp/kof/scenarioN/`.
-So nothing has to be cleaned up between scenarios, and a scenario can be reset on its own:
-
-```bash
-rm -rf /var/tmp/kafka/scenario1 /var/tmp/kof/scenario1
-```
-
 **Clear any inherited `CLASSPATH`.** `kafka-run-class.sh` *appends* Kafka's own `libs/` to whatever
 `CLASSPATH` your shell already exports, so those jars are searched first and can shadow the ones
-Kafka ships. Kafka 4.x configures logging from a YAML file, which pulls in `jackson-dataformat-yaml`
-and `snakeyaml`, so an older copy of either is enough to kill the broker before it reads a single
-line of your `server.properties`:
-
-```
-Exception in thread "main" java.lang.NoSuchMethodError: 'void
-org.yaml.snakeyaml.parser.ParserImpl.<init>(org.yaml.snakeyaml.reader.StreamReader,
-org.yaml.snakeyaml.LoaderOptions)'
-    at com.fasterxml.jackson.dataformat.yaml.YAMLParser.<init>(YAMLParser.java:204)
-    ...
-    at kafka.Kafka.main(Kafka.scala)
-```
-
-The failure is in a static initializer, which is why the trace bottoms out in `kafka.Kafka` with no
-Kafka code of your own on it. Start Kafka from a shell where the variable is unset:
+Kafka ships — an older `snakeyaml` or `jackson-dataformat-yaml` is enough to kill the broker before
+it reads a line of your `server.properties`. Start Kafka from a shell where the variable is unset:
 
 ```bash
 unset CLASSPATH
 ```
-
-`-daemon` hides this. It sends stdout and stderr to `$LOG_DIR/kafkaServer.out`, so a broker that
-dies this way looks like one that simply never came up — drop `-daemon` whenever a broker fails to
-start and the reason is not obvious.
-
-**Every broker needs an `inter.broker.listener.name`.** Kafka defaults it to a listener called
-`PLAINTEXT`, and none of the KRaft configurations here has one, so leaving it out stops the broker
-before it opens a port:
-
-```
-java.lang.IllegalArgumentException: requirement failed: inter.broker.listener.name must be
-a listener name defined in advertised.listeners.
-```
-
-Which listener to name matters to the translation. FSK carries inter-broker traffic over FTL, so
-the tool treats the named listener as internal and drops it from the generated broker properties —
-but only when another client listener remains. Where a scenario has a single client listener it points
-`inter.broker.listener.name` at that listener and the listener survives; where a scenario has two, it
-adds a separate `INTERNAL` listener for inter-broker traffic so that both client listeners come
-through. Either way the key itself is reported in `unsupported.properties`.
-
-**Stop Kafka before starting FSK.** The tool translates the client-facing listeners faithfully, so
-the FTL Servers bind the *same* ports the brokers were just using — 9092 in the single-node scenarios,
-9092/9102/9112 across the three brokers below, plus 9094/9104/9114 or 9095/9105/9115 wherever a
-second client listener is configured. Every 3-node scenario follows that convention: broker *n* takes
-each of broker 1's ports plus `10 × (n − 1)`. On one host the two cannot run at once:
-
-```bash
-"$KAFKA_HOME/bin/kafka-server-stop.sh"
-```
-
-Running the brokers first is not required to convert a file — it proves the `server.properties` is
-a valid Kafka configuration before you translate it.
-
-**And stop the FTL Servers before the next scenario.** The same collision runs the other way: the scenarios
-reuse the same ports, so a server left over from Scenario 1 is what makes Scenario 2 fail to bind. Nothing
-carries from one scenario to the next, so each ends with a *Shut down the FTL Server(s)* section —
-`tibftladmin -x` for the single-node scenarios, `-xc` for the clusters.
-
-**Start `tibftlserver` from the directory you ran `tibftlimportconfig` in.** The generated YAML
-records `initial.realm.config` and `kof.broker.properties` exactly as they were passed —
-`kof-output/ftlserver.json` for `--output-dir ./kof-output` — so those paths resolve against the working
-directory, not against the YAML's own location. `cd kof-output` first and the server will not find
-its realm. Pass an absolute `--output-dir` if you would rather not care.
-
-**Checking that something is up.** `kafka-topics.sh --list` prints nothing on a cluster with no
-topics, so a healthy broker and an absent one look identical apart from the error. Ask for
-something that always has a value:
-
-```bash
-"$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
-  --bootstrap-server localhost:9092 | grep 'id:'
-```
-
-```
-localhost:9092 (id: 1 rack: null isFenced: false) -> (
-```
-
-One line per broker that answered, so the same command is also the membership check in the 3-node
-scenarios. `kafka-cluster.sh cluster-id --bootstrap-server localhost:9092` is a shorter alternative
-when a plain yes will do. Both work unchanged against FSK once it is running — the FTL Servers speak
-the Kafka protocol on the very ports the brokers had — which makes them the most direct proof that
-the conversion took over.
-
-For the FTL side, use `tibftladmin`. It talks to the realm service, not to the Kafka port, and
-that address is the `core.servers` entry of the generated YAML:
-
-```yaml
-globals:
-  core.servers:
-    SRV1: localhost:5663
-```
-
-Do not copy that port. Unless you pass `--core-servers`, the tool derives one per server in the
-5600–5699 range by hashing the cluster, so yours will differ — read it out of your own YAML:
-
-```bash
-FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone.yaml)"
-
-tibftladmin --ftlserver "$FTLS" --available
-tibftladmin --ftlserver "$FTLS" --status
-```
-
-`--available` is the one-line health check — it prints `FTLserver is available` and exits 0.
-`--status` prints the server's `Mode:` and, under *Cluster Members*, one block per FTL Server
-carrying its `Status:` and naming the `Leader:`; that is the check to use in the 3-node scenarios.
-`--server_status` is the same without the cluster section.
-
-How you reach the realm service depends on the scenario, because the tool's policy is that securing a
-Kafka listener secures the FTL Servers too. Scenarios 1–4 configure no security, so the realm service
-is plain `http://` and takes no credentials — that is the form shown above. Scenarios 5–12 pass
-`--tls-cert`, which puts TLS on the realm service as well, so those need `https://` and either
-`--tls.trust.file <ca.pem>` or `-te` to trust the certificate. They also pass `--tls-ca`, without
-which the FTL Server cannot verify the certificate it presents to its own internal client and
-exits about twenty seconds after startup — see Scenario 5, Step 5. And they authenticate the
-caller, by whichever mechanism the scenario gave the FTL Servers:
-
-| Scenario | Realm authenticates you by | `tibftladmin` flags |
-|---|---|---|
-| 1–4 | nothing | — |
-| 5, 7, 9, 10, 12 | password, from `--auth-users-file` | `-u <user> -pw <password>` |
-| 6, 11 | OAuth2 token | `--oauth2.token <token>` |
-| 8 | client certificate | `--tls.client.cert` + `--tls.client.private.key` |
-
-Two traps here. Authentication is not authorization: an account that exists but holds no role
-authenticates and is then refused with *403 Forbidden*, so the user you administer with must carry
-the `ftl-admin` role. And when you pass `--auth-users-file`, that file is entirely yours to get
-right — the tool only writes its own `ftl-users.txt` (`admin: ftl-admin-pw, ftl-admin` and
-`internal: internal-pw, ftl-internal`) when you do *not* pass one. A users file with no roles at
-all stops the FTL Server from starting, with *Authentication is required, but this server has no
-way to authenticate itself to other servers*.
 
 ---
 
@@ -1059,7 +913,7 @@ want the same topology without security.
 
 ### Step 7 — Shut down the FTL Server
 
-Stop the FTL Server before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+Stop the FTL Server before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone-secure.yaml)"
@@ -1315,7 +1169,7 @@ generation time, so keep them where the tool wrote them.
 
 ### Step 6 — Shut down the FTL Servers
 
-Stop the FTL Servers before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+Stop the FTL Servers before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
@@ -1614,7 +1468,7 @@ to fetch the JWKS shows up in the startup log rather than at first client connec
 
 ### Step 7 — Shut down the FTL Servers
 
-Stop the FTL Servers before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+Stop the FTL Servers before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
@@ -1748,7 +1602,7 @@ username/password or a certificate, depending on which port it connects to — 9
 
 ### Step 7 — Shut down the FTL Servers
 
-Stop the FTL Servers before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role — see *Before you start*.
+Stop the FTL Servers before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
@@ -2030,8 +1884,7 @@ active at once, so a client that authenticates by any one of them is accepted.
 
 The last scenario, so nothing follows this cluster — but leaving it running keeps three Kafka ports
 and a realm port occupied. The `-secure` YAML puts TLS and authentication on the realm service,
-so stopping it needs `https://`, a trust flag and an account holding the `ftl-admin` role — see
-*Before you start*.
+so stopping it needs `https://`, a trust flag and an account holding the `ftl-admin` role.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
