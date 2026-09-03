@@ -178,6 +178,10 @@ start, named for the single entry under `servers:`:
 tibftlserver -c kof-output/tibftlserver-standalone.yaml -n SRV1
 ```
 
+Run this from the directory you ran `tibftlimportconfig` in: the YAML records `--output-dir` exactly
+as it was passed, so `kof-output/ftlserver.json` resolves against the working directory and not
+against the YAML's own location — `cd kof-output` first and the server will not find its realm.
+
 No realm upload step: the YAML points `initial.realm.config` at the generated `ftlserver.json`, so the
 server seeds the realm itself on first startup. Kafka clients can now connect to `localhost:9092`
 as before.
