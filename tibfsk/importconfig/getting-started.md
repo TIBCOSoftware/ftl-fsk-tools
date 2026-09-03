@@ -2091,7 +2091,7 @@ use `--`, the tables below use `-`.
 | `-data-dir` | `/var/tmp/kof/data` | FSK data directory path on FTL Server hosts |
 | `-core-servers` | _(auto)_ | Comma-separated `NAME=host:port` list for `globals.core.servers`<br/>e.g. `SRV1=host1:5600,SRV2=host2:5601,SRV3=host3:5602`<br/>If omitted, ports are derived from the cluster in range 5600–5699 — the same brokers always yield the same ports, so re-running the tool does not move them |
 | `-transport-type` | `auto` | Transport type for all FTL Server connections in `ftlserver.json`: `auto` or `dtcp`<br/>`auto` leaves the choice to the realm server, which resolves each connection at deployment time — dynamic TCP for client and intra-cluster transports, static TCP for inter-cluster and DR transports<br/>`dtcp` pins every transport to dynamic TCP |
-| `-replication-factor` | `3` | FTL Servers per FSK shard (`kof.cluster.N`): `1`, `3` or `5`. The number of input `server.properties` files must be an exact multiple of it — 9 files at `3` give three shards, 6 give two, 5 files at `5` give one. The FTL realm keeps its own 3 servers either way.<br/>The accepted values are odd because a shard needs a majority quorum, so **2 input files are refused**; use `-replication-factor 1` for one unreplicated shard per broker. With a single input file the default is `1` — a standalone server is explicitly unreplicated. See [Multi-cluster split](#multi-cluster-split) |
+| `-replication-factor` | `3` | FTL Servers per FSK shard (`kof.cluster.N`): `1`, `3` or `5`. The number of input `server.properties` files must be an exact multiple of it — 9 files at `3` give three shards, 6 give two, 5 files at `5` give one. The FTL realm keeps its own 3 servers either way.<br/>The accepted values are odd because a shard needs a majority quorum, so **2 input files are refused**; use `-replication-factor 1` for one unreplicated shard per broker. With a single input file the default is `1` — a standalone server is explicitly unreplicated. |
 | `-disk-persistence` | `async` | `disk_persistence` for the generated `kof.cluster.N`: `async`, `sync` or `in-memory`<br/>`async` writes are buffered for an eventual flush to disk; `sync` flushes every write before acknowledging it; `in-memory` writes nothing to disk and turns off the cluster's `disk_index` and `disk_compact`, which require disk persistence<br/>The data store stays `async` and the sync and meta stores `sync` whichever the cluster is — except under `in-memory`, where the stores are in-memory too (see [`ftlserver.json`](#ftlserverjson)) |
 | `-ftl-loglevel` | `connections:info;kof:info;durables:info;store:info` | `loglevel` written into each generated FTL Server. This is the *output* FTL Servers' logging, not this tool's. |
 | `-migration-config` | `false` | Write `kafka-to-kof.properties` to the output directory (configuration for the `tibftlfskimportdata` data migration tool) |
@@ -2160,38 +2160,6 @@ Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` lis
 
 ---
 
-## Multi-cluster split
-
-The number of FTL Servers is the number of `server.properties` files passed on the command line; how they are grouped into shards is [`-replication-factor`](#core-flags--h-core). Every *replication factor* input files → 1 FSK cluster (shard), and the file count must be an exact multiple of it, so no shard is ever short of servers.
-
-```
-9 input files → tibftlserver-cluster.yaml  (SRV1–9, pserver1–9)
-                ftlserver.json             (kof.cluster.0, kof.cluster.1, kof.cluster.2)
-```
-
-### Accepted input-file counts
-
-| `-replication-factor` | Input files | Shards |
-|---|---|---|
-| _(omitted)_ | 1 | one server, unreplicated — a standalone, not a cluster |
-| _(omitted)_ or `3` | 3, 6, 9 | one, two or three shards of 3 |
-| `5` | 5 | one shard of 5 |
-| `1` | 1–9 | one unreplicated shard per broker |
-
-Any other count is refused. In particular **2 input files are refused**: FTL runs 1, 3 or 5 servers, and two have no majority quorum, so losing either one stalls the shard. Use `-replication-factor 1` if you really want two independent unreplicated shards. Counts such as 4, 7 and 8 are refused for the same reason — they would leave a short final shard.
-
-### File layout
-
-There is **one** `tibftlserver-cluster.yaml` however many servers and shards there are — the layout of `samples/yaml/kof/scaling` in the FTL installation. Each server is one entry under `servers:`, started with `tibftlserver -c tibftlserver-cluster.yaml -n SRV<n>`:
-
-- `globals.core.servers` lists **only the first shard**, since it is the bootstrap address list for the FTL backend. The servers beyond it state their own address in an `ftl: server:` block of their own.
-- **Every** server gets a `realm:` block with its own data directory, `<-data-dir>/srv<n>` — two realm services on one host cannot share a directory. Its pserver keeps the separate `<-data-dir>/pserver<n>`.
-- With `-tibschemad`, the schema daemon stays on the first 3 servers whatever the server count: it is its own small cluster and does not scale with the pservers.
-
-Shard membership is settled entirely in `ftlserver.json`, not by the YAML — the YAML says which FTL Servers exist, `ftlserver.json` says which `kof.cluster.N` each one belongs to.
-
----
-
 ## Disaster recovery mode
 
 When `-dr-servers` is provided, DR mode is activated for all output files:
@@ -2250,7 +2218,7 @@ Combine the flags of [example 12](#12--9-broker-full-security-stack-3-shards) wi
 
 ### `tibftlserver-cluster.yaml`
 
-Every FTL Server, in one file — see [File layout](#file-layout). Names and ports for the first
+Every FTL Server, in one file. Names and ports for the first
 shard's servers come from `-core-servers`; if that flag is omitted the names default to `SRV1–SRV3`
 and the ports are derived from the cluster in 5600–5699. Servers past the first shard are named
 `SRV4`, `SRV5`, … and take their ports from 5700–5799. The `-n` argument is the `servers:` key:
@@ -2699,7 +2667,7 @@ tibftlimportconfig \
 
 **Output:** `tibftlserver-cluster.yaml` (SRV1–9, pserver1–9), `ftlserver.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `ftl-users.txt`, `unsupported.properties`
 
-All nine FTL Servers are in the one YAML: `globals.core.servers` lists SRV1–3, the first shard, and SRV4–9 each carry their own `ftl: server:` address. See [File layout](#file-layout).
+All nine FTL Servers are in the one YAML: `globals.core.servers` lists SRV1–3, the first shard, and SRV4–9 each carry their own `ftl: server:` address.
 
 The three shards are the default [`-replication-factor`](#core-flags--h-core) of 3. Adding `--replication-factor 1` to the same nine inputs gives nine unreplicated shards, `kof.cluster.0` through `.8`, with the YAML unchanged.
 
