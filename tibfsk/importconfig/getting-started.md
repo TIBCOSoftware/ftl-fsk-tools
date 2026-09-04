@@ -1020,6 +1020,37 @@ Replaces username/password authentication with OAuth 2.0 bearer tokens. Kafka cl
 present a JWT; the tool wires the OAUTHBEARER mechanism through to FSK's OAuth2
 provider.
 
+### What you must supply — OAuth2
+
+This is the first scenario that cannot run entirely on material that ships with the product. An
+OAuth2 deployment needs an authorization server, and only you know where yours is. The list is
+short, and everything not on it comes from the installed samples:
+
+1. **The Kafka keystore and truststore**, exactly as in Scenario 5 — JKS or PKCS12, SAN covering
+   `localhost`, placed in `/var/tmp/kafka/scenario6/certs`.
+   [Creating self-signed Kafka certificates](#creating-self-signed-kafka-certificates) makes them.
+2. **The token endpoint URL** of your authorization server — `--oauth-token-url`, and the same URL
+   in the broker's JAAS line in Step 1.
+3. **The JWKS URL**, or a local validation key file — `--oauth-jwks-url`. FSK validates incoming
+   tokens against this; it accepts a `file:` path as well as a URL.
+4. **A client ID and secret for FSK itself** — `--oauth-client-id` and `--oauth-client-secret`.
+   This is how the FTL Servers get their own tokens for server-to-server traffic.
+5. **A client ID and secret for the Kafka broker** — only for Step 1, and only until the broker is
+   retired at the end of the scenario.
+6. **The Strimzi OAuth callback jars**, on the broker's classpath in Step 2. Apache Kafka has no
+   built-in OAUTHBEARER validator; FSK does, and needs no jar.
+
+Three more flags matter if your authorization server does not use the defaults the tool assumes:
+`--oauth-audience` (default `ftl`), `--oauth-claim-roles` (default `group`) and
+`--oauth-claim-username` (default `preferred_username`). If tokens are rejected with the roles
+empty, one of those three is usually why. `--oauth-provider-trust` names a CA PEM when the
+authorization server presents a certificate your host does not already trust.
+
+Everything on the FTL side — the realm service's own certificate, key, CA and user accounts —
+comes from `/opt/tibco/ftl/current-version/samples/yaml/tls-user`, as in Scenario 5. No
+authorization server to hand? Run [Scenario 5](#scenario-5--single-node-sasl-plain-over-tls)
+instead; it needs nothing but the two keystores.
+
 :::tip Already running a single-node broker with OAuth2?
 Steps 1 and 2 only build and start the example broker. If you already have a running Kafka
 broker or brokers, skip them and start at **Step 3 — Stop Apache Kafka**, then hand your own
@@ -1040,11 +1071,11 @@ controller.listener.names=CONTROLLER
 listener.security.protocol.map=CONTROLLER:SSL,OAUTH:SASL_SSL
 
 ssl.keystore.type=JKS
-ssl.keystore.location=/etc/kafka/certs/server.keystore.jks
+ssl.keystore.location=/var/tmp/kafka/scenario6/certs/server.keystore.jks
 ssl.keystore.password=keystorePassword123
 ssl.key.password=keyPassword123
 ssl.truststore.type=JKS
-ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
+ssl.truststore.location=/var/tmp/kafka/scenario6/certs/kafka.truststore.jks
 ssl.truststore.password=truststorePassword123
 
 sasl.mechanism.inter.broker.protocol=OAUTHBEARER
@@ -1092,18 +1123,33 @@ The FTL Server that replaces the broker binds port 9092, so the broker has to gi
 ### Step 4 — Run the config migration tool
 
 ```bash
+export FTL_SAMPLES=/opt/tibco/ftl/current-version/samples/yaml/tls-user
+
 tibftlimportconfig \
   --output-dir ./kof-output \
   --data-dir /var/tmp/kof/scenario6/data \
-  --tls-cert /etc/kafka/certs/server.pem \
-  --tls-key  /etc/kafka/certs/server.key \
-  --tls-ca   /etc/kafka/certs/ca.pem \
+  --tls-cert $FTL_SAMPLES/server_cert.pem \
+  --tls-key  $FTL_SAMPLES/server_key.pem \
+  --tls-key-password password \
+  --tls-ca   $FTL_SAMPLES/client_trust.pem \
+  --auth-users-file $FTL_SAMPLES/users.txt \
   --oauth-token-url    https://auth.example.com/oauth/token \
   --oauth-jwks-url     https://auth.example.com/.well-known/jwks.json \
   --oauth-client-id    kof-server \
   --oauth-client-secret <secret> \
   server-1.properties
 ```
+
+The four TLS and auth flags come from the installed sample, exactly as in Scenario 5 — they
+configure the realm service, not the Kafka listener. The four `--oauth-*` flags are the values
+from the list above.
+
+`--auth-users-file` is not strictly required here, and the scenario would work without it: FSK
+would then validate every caller, administrators included, by OAuth2 token. Passing it costs
+nothing and writes `auth.providers: file:…,oauth2`, so Kafka clients still authenticate by token
+while `tibftladmin` can use the sample's `admin`/`admin-pw` account — which is one fewer token to
+mint every time you want to look at the server. Drop the flag if you would rather prove the
+token path end to end.
 
 The tool detects the `OAUTHBEARER` mechanism and maps the custom callback handler
 class to the `oauth` backend automatically. If the handler class is unrecognized, a
@@ -1122,19 +1168,25 @@ tokens are rejected.
 
 ### Step 6 — Shut down the FTL Server
 
-Stop the FTL Server before the next scenario. This scenario gave the FTL Server no users file, so the realm service authenticates callers by OAuth2 token rather than by password.
+Stop the FTL Server before the next scenario. Step 4 passed the sample users file alongside the
+OAuth2 configuration, so the realm service accepts either an account or a token here.
+
+```bash
+tibftladmin --ftlserver "$FTLS" --tls.trust.file $FTL_SAMPLES/client_trust.pem \
+  -u admin -pw admin-pw -x
+```
+
+where `FTLS` is the address the server prints at startup:
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone-secure.yaml)"
-
-tibftladmin --ftlserver "$FTLS" -te --oauth2.token <token> -x
 ```
 
 `-x` (`--shutdown`) stops the FTL Server process.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
-The token must come from the same issuer the scenario configured with `--oauth-token-url`, and the account behind it needs the `ftl-admin` role.
+Without `--auth-users-file` the same call becomes `--oauth2.token <token>` in place of `-u`/`-pw`. The token must come from the same issuer the scenario configured with `--oauth-token-url`, and the claim named by `--oauth-claim-roles` has to carry `ftl-admin`. (The tool would also generate `kof-output/ftl-users.txt` with an `admin: ftl-admin-pw` in it — usable, but a generated password is not a thing to leave in place.)
 
 **→ Continue to [Scenario 8](#scenario-8--3-node-mutual-tls-mtls) for mTLS, or
 [Scenario 9](#scenario-9--3-node-sasl-plain--oauth2-dual-listener) for a dual SASL+OAuth2 setup.**
@@ -1147,6 +1199,21 @@ Add SASL/PLAIN + TLS to a 3-node cluster. Every broker carries the Scenario 5 li
 configuration unchanged — the TLS keystores, the `BROKER` listener at `SASL_SSL`,
 `inter.broker.listener.name=BROKER`, `sasl.mechanism.inter.broker.protocol=PLAIN`, and the inline
 JAAS users.
+
+### What you must supply — SASL/PLAIN
+
+One item, and it is the one you already made:
+
+1. **The Kafka keystore and truststore.** All three brokers are `localhost`, so the single
+   certificate pair from [Scenario 5](#scenario-5--single-node-sasl-plain-over-tls) serves the
+   whole cluster — keep `/var/tmp/kafka/scenario5/certs` in the `ssl.*` lines of all three files,
+   including the `.pem` copies. Starting fresh?
+   [Creating self-signed Kafka certificates](#creating-self-signed-kafka-certificates) makes them.
+
+The FTL Servers' own certificate, key, CA and user accounts come from
+`/opt/tibco/ftl/current-version/samples/yaml/tls-user`, so there is nothing else to create. A
+cluster spread over real hosts is the one case that needs more: either a certificate per host, or
+one certificate whose SAN lists every advertised name.
 
 :::tip Already running a 3-node SASL/PLAIN cluster?
 Steps 1 and 2 only describe and start the three example brokers. If you already have a running
@@ -1205,8 +1272,17 @@ done
 ```
 
 The keystores and truststore named in the properties files must exist before the brokers will
-start. The listeners are SASL_SSL, so the plain `kafka-topics.sh --list` check does not apply here;
-check the broker logs under `$KAFKA_HOME/logs` instead.
+start. The listeners are SASL_SSL, so the plain `kafka-topics.sh --list` check does not apply
+here — reuse the `client.properties` written in
+[Scenario 5](#scenario-5--single-node-sasl-plain-over-tls), Step 3, which already carries the
+truststore and the `admin`/`admin-secret` JAAS line, and point it at each broker in turn:
+
+```bash
+for port in 9092 9102 9112; do
+  "$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
+    --bootstrap-server "localhost:$port" --command-config client.properties | head -1
+done
+```
 
 ### Step 3 — Stop Apache Kafka
 
@@ -1221,21 +1297,28 @@ One call stops all three — it signals every broker JVM on the host.
 ### Step 4 — Run the config migration tool
 
 ```bash
+export FTL_SAMPLES=/opt/tibco/ftl/current-version/samples/yaml/tls-user
+
 tibftlimportconfig \
   --output-dir ./kof-output \
   --data-dir /var/tmp/kof/scenario7/data \
-  --tls-cert /etc/kafka/certs/server.pem \
-  --tls-key  /etc/kafka/certs/server.key \
-  --tls-ca   /etc/kafka/certs/ca.pem \
-  --auth-users-file /etc/ftl/users.txt \
+  --tls-cert $FTL_SAMPLES/server_cert.pem \
+  --tls-key  $FTL_SAMPLES/server_key.pem \
+  --tls-key-password password \
+  --tls-ca   $FTL_SAMPLES/client_trust.pem \
+  --auth-users-file $FTL_SAMPLES/users.txt \
   server-1.properties \
   server-2.properties \
   server-3.properties
 ```
 
-The tool reads the inline JAAS `user_X` entries from each broker's properties and
-writes them to `ftl-users.txt` (FTL Server-to-server auth) and `kafka-users.txt`
-(Kafka client principals), both in `--output-dir`.
+Identical to Scenario 5's invocation but for the data directory and the three properties files —
+the FTL side does not change with the size of the cluster.
+
+The tool reads the inline JAAS `user_X` entries from each broker's properties and writes them to
+`kafka-users.txt` in `--output-dir`, which `auth.providers` lists after the sample `users.txt` —
+Kafka client principals in one file, FTL accounts in the other. Leave `--auth-users-file` out and
+the tool generates a third file, `ftl-users.txt`, to give the servers accounts of their own.
 
 ### Step 5 — Start the FTL Servers
 
@@ -1246,8 +1329,8 @@ tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
 ```
 
 Three shells, one per server. The `-secure` YAML is the one that carries the certificate paths and
-`auth.providers`; the two generated users files are referenced from it by the paths they had at
-generation time, so keep them where the tool wrote them.
+`auth.providers`; the users files are referenced from it by the paths they had at generation time,
+so keep `kafka-users.txt` where the tool wrote it and leave the sample directory alone.
 
 ### Step 6 — Shut down the FTL Servers
 
@@ -1256,14 +1339,15 @@ Stop the FTL Servers before the next scenario. The `-secure` YAML puts TLS and a
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
 
-tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
+tibftladmin --ftlserver "$FTLS" --tls.trust.file $FTL_SAMPLES/client_trust.pem \
+  -u admin -pw admin-pw -xc
 ```
 
 `-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
-`admin` is whichever account your `--auth-users-file` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `-te` trusts any certificate the server presents — use `--tls.trust.file <ca.pem>` where that is too loose.
+`admin`/`admin-pw` is the account the sample `users.txt` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `--tls.trust.file` names the CA that signed the certificate the server presents — the same one given to `--tls-ca` when the configuration was generated. `-te` in its place trusts any certificate at all, which is quicker and looser.
 
 **→ Continue to [Scenario 8](#scenario-8--3-node-mutual-tls-mtls) to add client certificate
 authentication.**
@@ -1275,6 +1359,31 @@ authentication.**
 Client certificates replace username/password. The Kafka `SSL` listener with
 `ssl.client.auth=required` maps to FSK's `tls-only` auth mode with
 `tls.server.trust.file`.
+
+### What you must supply — mTLS
+
+Still one item, because FTL ships a complete mTLS sample:
+
+1. **The Kafka keystore and truststore.** Same pair as Scenario 5, reused unchanged — with
+   `ssl.client.auth=required` the truststore takes on a second job, since it is now also the CA
+   against which the broker verifies *client* certificates. A self-signed pair works for this
+   scenario because the same certificate signs both sides.
+
+The FTL side comes from `/opt/tibco/ftl/current-version/samples/yaml/mtls` rather than
+`tls-user` — mTLS needs two more files than the earlier scenarios, and that directory has them:
+
+| Sample file | Flag | What it is |
+|---|---|---|
+| `server_cert.pem`, `server_key.pem` | `--tls-cert`, `--tls-key` | what the realm service presents (`CN=server`, key passphrase `password`) |
+| `client_trust.pem` | `--tls-ca` | CA the server's own client verifies against |
+| `server_trust.pem` | `--tls-server-trust` | CA used to verify *inbound* client certificates |
+| `internal_cert.pem`, `internal_key.pem` | `--tls-client-cert`, `--tls-client-key` | what each server presents to the others (`CN=internal:ftl-internal`) |
+| `admin_cert.pem`, `admin_key.pem` | `tibftladmin` in Step 7 | an administrator certificate (`CN=admin:ftl-admin`) |
+
+With mTLS there is no users file: the certificate *is* the account. FTL takes the user and its
+roles from the certificate's common name, which is why the sample CNs read
+`internal:ftl-internal` and `admin:ftl-admin`. A certificate whose CN carries no role
+authenticates and is then refused everything.
 
 :::tip Already running a 3-node mTLS cluster?
 Steps 1–3 only describe and start the three example brokers. If you already have a running
@@ -1293,7 +1402,7 @@ listener.security.protocol.map=CONTROLLER:SSL,MTLS:SSL
 # Require client certificates on the MTLS listener
 listener.name.mtls.ssl.client.auth=required
 listener.name.mtls.ssl.truststore.type=JKS
-listener.name.mtls.ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
+listener.name.mtls.ssl.truststore.location=/var/tmp/kafka/scenario5/certs/kafka.truststore.jks
 listener.name.mtls.ssl.truststore.password=truststorePassword123
 ```
 
@@ -1355,19 +1464,26 @@ One call stops all three — it signals every broker JVM on the host.
 ### Step 5 — Run the config migration tool
 
 ```bash
+export FTL_MTLS=/opt/tibco/ftl/current-version/samples/yaml/mtls
+
 tibftlimportconfig \
   --output-dir ./kof-output \
   --data-dir /var/tmp/kof/scenario8/data \
-  --tls-cert         /etc/kafka/certs/server.pem \
-  --tls-key          /etc/kafka/certs/server.key \
-  --tls-ca           /etc/kafka/certs/ca.pem \
-  --tls-server-trust /etc/kafka/certs/ca.pem \
-  --tls-client-cert  /etc/kafka/certs/client.pem \
-  --tls-client-key   /etc/kafka/certs/client.key \
+  --tls-cert                $FTL_MTLS/server_cert.pem \
+  --tls-key                 $FTL_MTLS/server_key.pem \
+  --tls-key-password        password \
+  --tls-ca                  $FTL_MTLS/client_trust.pem \
+  --tls-server-trust        $FTL_MTLS/server_trust.pem \
+  --tls-client-cert         $FTL_MTLS/internal_cert.pem \
+  --tls-client-key          $FTL_MTLS/internal_key.pem \
+  --tls-client-key-password password \
   server-1.properties \
   server-2.properties \
   server-3.properties
 ```
+
+Both sample keys are encrypted with the passphrase `password`, so both password flags are
+required; omitting either leaves the server unable to read its own key at startup.
 
 `--tls-server-trust` sets `tls.server.trust.file` (the CA that signs client
 certificates). `--tls-client-cert` and `--tls-client-key` are used for
@@ -1376,9 +1492,11 @@ server-to-server connections.
 The two trust files are different things: `--tls-server-trust`
 (`tls.server.trust.file`) is the CA that signs *inbound* client certificates, while
 `--tls-ca` (`tls.client.trust.file`) is what the server's own client verifies the
-certificates it *connects to* against — see Scenario 5, Step 5. One CA signs everything
-in this example PKI, so both flags name the same `ca.pem`; with separate CAs they would
-not.
+certificates it *connects to* against — see Scenario 5, Step 5. The sample keeps them genuinely
+separate: `CN=client_trust` signed `server_cert.pem`, `CN=server_trust` signed the client
+certificates, and neither verifies the other's. Swapping the two flags therefore fails outright
+rather than quietly working, which is the useful way round. Where one CA really does sign
+everything, name the same file twice.
 
 ### Step 6 — Start the FTL Servers
 
@@ -1395,21 +1513,24 @@ plaintext listener in this configuration to translate. The servers present
 
 ### Step 7 — Shut down the FTL Servers
 
-Stop the FTL Servers before the next scenario. This scenario gave the FTL Servers no users file, so the realm service authenticates callers by client certificate.
+Stop the FTL Servers before the next scenario. This scenario passed no `--auth-users-file`, so the natural way in is the client certificate.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
 
-tibftladmin --ftlserver "$FTLS" -te \
-  --tls.client.cert /etc/kafka/certs/client.pem \
-  --tls.client.private.key /etc/kafka/certs/client.key -xc
+tibftladmin --ftlserver "$FTLS" --tls.trust.file $FTL_MTLS/client_trust.pem \
+  --tls.client.cert $FTL_MTLS/admin_cert.pem \
+  --tls.client.private.key $FTL_MTLS/admin_key.pem \
+  --tls.client.private.key.password password -xc
 ```
 
 `-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
-The certificate is the one `--tls-client-cert` named when the config was generated; the realm service checks it against `tls.server.trust.file`.
+`admin_cert.pem` is used rather than the `internal_cert.pem` the servers use between themselves: its common name is `admin:ftl-admin`, and `ftl-admin` is the role a shutdown needs. The realm service checks the certificate against `tls.server.trust.file` — `server_trust.pem`, the CA that signed it — and `--tls.trust.file` is the other direction, this command verifying the server.
+
+With no users file of your own, the tool writes one: `kof-output/ftl-users.txt`, holding the accounts the servers use between themselves and an `admin: ftl-admin-pw, ftl-admin`. So `-u admin -pw ftl-admin-pw` in place of the three client-certificate flags also works — change that password before the configuration goes anywhere real.
 
 **→ Continue to [Scenario 9](#scenario-9--3-node-sasl-plain--oauth2-dual-listener) for a
 dual-protocol setup, or [Scenario 10](#scenario-10--3-node-sasl-plain--mtls) to combine SASL
@@ -1421,6 +1542,21 @@ and mTLS on separate listeners.**
 
 Two client-facing listeners on the same cluster: legacy clients use SASL/PLAIN; modern
 clients use OAUTHBEARER. FSK runs both auth providers concurrently.
+
+### What you must supply — SASL/PLAIN + OAuth2
+
+Scenario 7's list plus Scenario 6's, with nothing new of its own:
+
+1. **The Kafka keystore and truststore** — Scenario 5's pair, reused unchanged.
+2. **The authorization server values** — token endpoint, JWKS URL, and a client ID and secret for
+   FSK, exactly as itemised under
+   [Scenario 6](#what-you-must-supply--oauth2). The broker additionally needs its own client
+   credentials and the Strimzi callback jars.
+
+The FTL Servers' certificate, key, CA and user accounts come from
+`/opt/tibco/ftl/current-version/samples/yaml/tls-user`. This scenario is the one where the users
+file earns its place regardless of preference: SASL/PLAIN clients authenticate against it, so it
+is not optional here the way it is in Scenario 6.
 
 :::tip Already running a 3-node SASL/PLAIN + OAuth2 cluster?
 Steps 1–3 only describe and start the three example brokers. If you already have a running
@@ -1517,24 +1653,30 @@ One call stops all three — it signals every broker JVM on the host.
 ### Step 5 — Run the config migration tool
 
 ```bash
+export FTL_SAMPLES=/opt/tibco/ftl/current-version/samples/yaml/tls-user
+
 tibftlimportconfig \
   --output-dir ./kof-output \
   --data-dir /var/tmp/kof/scenario9/data \
-  --tls-cert           /etc/kafka/certs/server.pem \
-  --tls-key            /etc/kafka/certs/server.key \
-  --tls-ca             /etc/kafka/certs/ca.pem \
-  --auth-users-file    /etc/ftl/users.txt \
-  --oauth-token-url    https://auth.example.com/oauth/token \
-  --oauth-jwks-url     https://auth.example.com/.well-known/jwks.json \
-  --oauth-client-id    kof-server \
+  --tls-cert            $FTL_SAMPLES/server_cert.pem \
+  --tls-key             $FTL_SAMPLES/server_key.pem \
+  --tls-key-password    password \
+  --tls-ca              $FTL_SAMPLES/client_trust.pem \
+  --auth-users-file     $FTL_SAMPLES/users.txt \
+  --oauth-token-url     https://auth.example.com/oauth/token \
+  --oauth-jwks-url      https://auth.example.com/.well-known/jwks.json \
+  --oauth-client-id     kof-server \
   --oauth-client-secret <secret> \
   server-1.properties \
   server-2.properties \
   server-3.properties
 ```
 
-The secure YAML sets `auth.providers: file:/etc/ftl/users.txt,oauth2` so both
-authentication paths are active simultaneously.
+The four `--tls-*` and `--auth-users-file` values come from the shipped sample and need no editing;
+the four `--oauth-*` values are yours. The secure YAML ends up with
+`auth.providers: file:<samples>/users.txt,file:kof-output/kafka-users.txt,oauth2`, so both
+authentication paths are active at once — a SASL/PLAIN client on 9092 is checked against the files,
+a bearer token on 9095 against the JWKS.
 
 ### Step 6 — Start the FTL Servers
 
@@ -1555,14 +1697,15 @@ Stop the FTL Servers before the next scenario. The `-secure` YAML puts TLS and a
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
 
-tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
+tibftladmin --ftlserver "$FTLS" --tls.trust.file $FTL_SAMPLES/client_trust.pem \
+  -u admin -pw admin-pw -xc
 ```
 
 `-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
-`admin` is whichever account your `--auth-users-file` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `-te` trusts any certificate the server presents — use `--tls.trust.file <ca.pem>` where that is too loose.
+`admin`/`admin-pw` is the account the sample `users.txt` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `--tls.trust.file` names the CA that signed the certificate the server presents — the same one given to `--tls-ca` when the configuration was generated. `-te` in its place trusts any certificate at all, which is quicker and looser.
 
 **→ Continue to [Scenario 10](#scenario-10--3-node-sasl-plain--mtls) to combine SASL and mTLS.**
 
@@ -1573,6 +1716,26 @@ The command is asynchronous: it returns as soon as the server accepts the reques
 Two listeners on separate ports: one for SASL/PLAIN clients, one for mTLS clients.
 Both share the same server certificate; `ssl.client.auth=required` applies only to the
 mTLS listener.
+
+### What you must supply — SASL/PLAIN + mTLS
+
+One item, the same as Scenario 8:
+
+1. **The Kafka keystore and truststore** — Scenario 5's pair, reused unchanged. The truststore is
+   what the `MTLS` listener checks Kafka clients against, so in a real deployment it holds the CA
+   that issued their certificates rather than the broker's own.
+
+Everything on the FTL side is shipped. This scenario draws on **both** sample directories, because
+`samples/yaml/mtls` has the six certificates the mTLS flags need but no users file, and
+`samples/yaml/tls-user` has the users file the SASL/PLAIN listener authenticates against:
+
+| Flag | File |
+|---|---|
+| `--tls-cert`, `--tls-key` | `$FTL_MTLS/server_cert.pem`, `$FTL_MTLS/server_key.pem` |
+| `--tls-ca` | `$FTL_MTLS/client_trust.pem` |
+| `--tls-server-trust` | `$FTL_MTLS/server_trust.pem` |
+| `--tls-client-cert`, `--tls-client-key` | `$FTL_MTLS/internal_cert.pem`, `$FTL_MTLS/internal_key.pem` |
+| `--auth-users-file` | `$FTL_SAMPLES/users.txt` |
 
 :::tip Already running a 3-node SASL/PLAIN + mTLS cluster?
 Steps 1–3 only describe and start the three example brokers. If you already have a running
@@ -1594,7 +1757,7 @@ listener.name.sasl_auth.plain.sasl.jaas.config=org.apache.kafka.common.security.
 
 listener.name.mtls.ssl.client.auth=required
 listener.name.mtls.ssl.truststore.type=JKS
-listener.name.mtls.ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
+listener.name.mtls.ssl.truststore.location=/var/tmp/kafka/scenario5/certs/kafka.truststore.jks
 listener.name.mtls.ssl.truststore.password=truststorePassword123
 ```
 
@@ -1656,20 +1819,30 @@ One call stops all three — it signals every broker JVM on the host.
 ### Step 5 — Run the config migration tool
 
 ```bash
+export FTL_MTLS=/opt/tibco/ftl/current-version/samples/yaml/mtls
+export FTL_SAMPLES=/opt/tibco/ftl/current-version/samples/yaml/tls-user
+
 tibftlimportconfig \
   --output-dir ./kof-output \
   --data-dir /var/tmp/kof/scenario10/data \
-  --tls-cert         /etc/kafka/certs/server.pem \
-  --tls-key          /etc/kafka/certs/server.key \
-  --tls-ca           /etc/kafka/certs/ca.pem \
-  --tls-server-trust /etc/kafka/certs/ca.pem \
-  --tls-client-cert  /etc/kafka/certs/client.pem \
-  --tls-client-key   /etc/kafka/certs/client.key \
-  --auth-users-file  /etc/ftl/users.txt \
+  --tls-cert                $FTL_MTLS/server_cert.pem \
+  --tls-key                 $FTL_MTLS/server_key.pem \
+  --tls-key-password        password \
+  --tls-ca                  $FTL_MTLS/client_trust.pem \
+  --tls-server-trust        $FTL_MTLS/server_trust.pem \
+  --tls-client-cert         $FTL_MTLS/internal_cert.pem \
+  --tls-client-key          $FTL_MTLS/internal_key.pem \
+  --tls-client-key-password password \
+  --auth-users-file         $FTL_SAMPLES/users.txt \
   server-1.properties \
   server-2.properties \
   server-3.properties
 ```
+
+Both key passwords are `password` — every private key in the two sample directories is encrypted
+with that passphrase. `--tls-ca` and `--tls-server-trust` are two different CAs and are not
+interchangeable: `client_trust.pem` signed the server certificate, `server_trust.pem` signed the
+client ones. See [Scenario 8](#what-you-must-supply--mtls) for what each of the six certificates is.
 
 ### Step 6 — Start the FTL Servers
 
@@ -1689,14 +1862,15 @@ Stop the FTL Servers before the next scenario. The `-secure` YAML puts TLS and a
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
 
-tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
+tibftladmin --ftlserver "$FTLS" --tls.trust.file $FTL_MTLS/client_trust.pem \
+  -u admin -pw admin-pw -xc
 ```
 
 `-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
-`admin` is whichever account your `--auth-users-file` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `-te` trusts any certificate the server presents — use `--tls.trust.file <ca.pem>` where that is too loose.
+`admin`/`admin-pw` is the account the sample `users.txt` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `--tls.trust.file` is `client_trust.pem` from the **mtls** sample here, not the `tls-user` one — it has to be the CA that signed the certificate the server presents, which is the file this scenario gave to `--tls-ca`. The certificate route works too, since `auth.providers` also lists `mtls`: add the three `--tls.client.*` flags from [Scenario 8](#scenario-8--3-node-mutual-tls-mtls), Step 7, and drop `-u`/`-pw`.
 
 ---
 
@@ -1704,6 +1878,18 @@ The command is asynchronous: it returns as soon as the server accepts the reques
 
 The most secure multi-protocol configuration: mTLS for certificate-bearing clients,
 OAUTHBEARER for token-bearing clients.
+
+### What you must supply — mTLS + OAuth2
+
+1. **The Kafka keystore and truststore** — Scenario 5's pair, reused unchanged.
+2. **The authorization server values** — token endpoint, JWKS URL, and a client ID and secret for
+   FSK, as itemised under [Scenario 6](#what-you-must-supply--oauth2). The broker needs its own
+   client credentials and the Strimzi callback jars on top of that.
+
+The six FTL-side certificates come from `/opt/tibco/ftl/current-version/samples/yaml/mtls`, listed
+in [Scenario 8](#what-you-must-supply--mtls). No users file is passed: the tool generates
+`kof-output/ftl-users.txt` for the FTL Servers' own accounts, and that file also carries an
+`admin`, so administering the cluster needs no token minted by hand.
 
 :::tip Already running a 3-node mTLS + OAuth2 cluster?
 Steps 1–3 only describe and start the three example brokers. If you already have a running
@@ -1721,7 +1907,7 @@ listener.security.protocol.map=CONTROLLER:SSL,MTLS:SSL,OAUTH:SASL_SSL,INTERNAL:S
 
 listener.name.mtls.ssl.client.auth=required
 listener.name.mtls.ssl.truststore.type=JKS
-listener.name.mtls.ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
+listener.name.mtls.ssl.truststore.location=/var/tmp/kafka/scenario5/certs/kafka.truststore.jks
 listener.name.mtls.ssl.truststore.password=truststorePassword123
 
 listener.name.oauth.sasl.enabled.mechanisms=OAUTHBEARER
@@ -1790,23 +1976,31 @@ One call stops all three — it signals every broker JVM on the host.
 ### Step 5 — Run the config migration tool
 
 ```bash
+export FTL_MTLS=/opt/tibco/ftl/current-version/samples/yaml/mtls
+
 tibftlimportconfig \
   --output-dir ./kof-output \
   --data-dir /var/tmp/kof/scenario11/data \
-  --tls-cert           /etc/kafka/certs/server.pem \
-  --tls-key            /etc/kafka/certs/server.key \
-  --tls-ca             /etc/kafka/certs/ca.pem \
-  --tls-server-trust   /etc/kafka/certs/ca.pem \
-  --tls-client-cert    /etc/kafka/certs/client.pem \
-  --tls-client-key     /etc/kafka/certs/client.key \
-  --oauth-token-url    https://auth.example.com/oauth/token \
-  --oauth-jwks-url     https://auth.example.com/.well-known/jwks.json \
-  --oauth-client-id    kof-server \
-  --oauth-client-secret <secret> \
+  --tls-cert                $FTL_MTLS/server_cert.pem \
+  --tls-key                 $FTL_MTLS/server_key.pem \
+  --tls-key-password        password \
+  --tls-ca                  $FTL_MTLS/client_trust.pem \
+  --tls-server-trust        $FTL_MTLS/server_trust.pem \
+  --tls-client-cert         $FTL_MTLS/internal_cert.pem \
+  --tls-client-key          $FTL_MTLS/internal_key.pem \
+  --tls-client-key-password password \
+  --oauth-token-url         https://auth.example.com/oauth/token \
+  --oauth-jwks-url          https://auth.example.com/.well-known/jwks.json \
+  --oauth-client-id         kof-server \
+  --oauth-client-secret     <secret> \
   server-1.properties \
   server-2.properties \
   server-3.properties
 ```
+
+The eight `--tls-*` values are the sample files as shipped; the four `--oauth-*` values are the only
+ones to edit. Add `--oauth-provider-trust <ca.pem>` if the authorization server presents a
+certificate the system trust store does not already carry.
 
 ### Step 6 — Start the FTL Servers
 
@@ -1816,26 +2010,30 @@ tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV2
 tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
 ```
 
-There is no `--auth-users-file` here, so the servers do not carry an internal username and
-password. They authenticate to each other as OAuth2 clients instead, fetching a token from
-`--oauth-token-url` with `--oauth-client-id` and `--oauth-client-secret` — which the secure YAML
-writes as `oauth2.svr.client.id` and `oauth2.svr.client.secret`.
+There is no `--auth-users-file` here, so the tool supplies one of its own:
+`kof-output/ftl-users.txt`, holding `internal`, `admin`, `all` and `monitoring` with generated
+passwords, and `auth.providers` reads `file:kof-output/ftl-users.txt,mtls,oauth2`. Change those
+passwords before the configuration goes anywhere real. The servers also authenticate to the
+authorization server as OAuth2 clients, fetching a token from `--oauth-token-url` with
+`--oauth-client-id` and `--oauth-client-secret` — written into the YAML as `oauth2.svr.client.id`
+and `oauth2.svr.client.secret`.
 
 ### Step 7 — Shut down the FTL Servers
 
-Stop the FTL Servers before the next scenario. This scenario gave the FTL Servers no users file, so the realm service authenticates callers by OAuth2 token rather than by password.
+Stop the FTL Servers before the next scenario. All three of this configuration's authentication routes can carry the call; the shortest is the `admin` account in the generated users file.
 
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
 
-tibftladmin --ftlserver "$FTLS" -te --oauth2.token <token> -xc
+tibftladmin --ftlserver "$FTLS" --tls.trust.file $FTL_MTLS/client_trust.pem \
+  -u admin -pw ftl-admin-pw -xc
 ```
 
 `-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
-The token must come from the same issuer the scenario configured with `--oauth-token-url`, and the account behind it needs the `ftl-admin` role.
+`ftl-admin-pw` is the password the tool wrote into `kof-output/ftl-users.txt` for `admin`; read the file rather than trusting this page if a later release changes it. The two alternatives are the sample certificate — the three `--tls.client.*` flags of [Scenario 8](#scenario-8--3-node-mutual-tls-mtls), Step 7, whose `admin_cert.pem` carries the common name `admin:ftl-admin` — and a bearer token, `tibftladmin --ftlserver "$FTLS" -te --oauth2.token <token> -xc`, which must come from the issuer named by `--oauth-token-url` and whose account needs the `ftl-admin` role.
 
 ---
 
@@ -1844,6 +2042,19 @@ The token must come from the same issuer the scenario configured with `--oauth-t
 All three auth providers active simultaneously. Each client-facing listener uses a
 different mechanism; FSK's `auth.providers` list in the secure YAML activates all of
 them.
+
+### What you must supply — SASL/PLAIN + mTLS + OAuth2
+
+The union of Scenarios 7, 8 and 6, and still only two things of your own:
+
+1. **The Kafka keystore and truststore** — Scenario 5's pair, reused unchanged.
+2. **The authorization server values** — token endpoint, JWKS URL, and a client ID and secret for
+   FSK, as itemised under [Scenario 6](#what-you-must-supply--oauth2), plus the broker's own client
+   credentials and the Strimzi callback jars.
+
+The FTL side needs both sample directories, as in Scenario 10: the six certificates from
+`samples/yaml/mtls` for the mTLS flags, and `users.txt` from `samples/yaml/tls-user` for the
+SASL/PLAIN listener.
 
 :::tip Already running a 3-node SASL/PLAIN + mTLS + OAuth2 cluster?
 Steps 1–3 only describe and start the three example brokers. If you already have a running
@@ -1865,7 +2076,7 @@ listener.name.sasl_auth.plain.sasl.jaas.config=org.apache.kafka.common.security.
 
 listener.name.mtls.ssl.client.auth=required
 listener.name.mtls.ssl.truststore.type=JKS
-listener.name.mtls.ssl.truststore.location=/etc/kafka/certs/kafka.truststore.jks
+listener.name.mtls.ssl.truststore.location=/var/tmp/kafka/scenario5/certs/kafka.truststore.jks
 listener.name.mtls.ssl.truststore.password=truststorePassword123
 
 listener.name.oauth.sasl.enabled.mechanisms=OAUTHBEARER
@@ -1930,24 +2141,33 @@ One call stops all three — it signals every broker JVM on the host.
 ### Step 5 — Run the config migration tool
 
 ```bash
+export FTL_MTLS=/opt/tibco/ftl/current-version/samples/yaml/mtls
+export FTL_SAMPLES=/opt/tibco/ftl/current-version/samples/yaml/tls-user
+
 tibftlimportconfig \
   --output-dir ./kof-output \
   --data-dir /var/tmp/kof/scenario12/data \
-  --tls-cert           /etc/kafka/certs/server.pem \
-  --tls-key            /etc/kafka/certs/server.key \
-  --tls-ca             /etc/kafka/certs/ca.pem \
-  --tls-server-trust   /etc/kafka/certs/ca.pem \
-  --tls-client-cert    /etc/kafka/certs/client.pem \
-  --tls-client-key     /etc/kafka/certs/client.key \
-  --auth-users-file    /etc/ftl/users.txt \
-  --oauth-token-url    https://auth.example.com/oauth/token \
-  --oauth-jwks-url     https://auth.example.com/.well-known/jwks.json \
-  --oauth-client-id    kof-server \
-  --oauth-client-secret <secret> \
+  --tls-cert                $FTL_MTLS/server_cert.pem \
+  --tls-key                 $FTL_MTLS/server_key.pem \
+  --tls-key-password        password \
+  --tls-ca                  $FTL_MTLS/client_trust.pem \
+  --tls-server-trust        $FTL_MTLS/server_trust.pem \
+  --tls-client-cert         $FTL_MTLS/internal_cert.pem \
+  --tls-client-key          $FTL_MTLS/internal_key.pem \
+  --tls-client-key-password password \
+  --auth-users-file         $FTL_SAMPLES/users.txt \
+  --oauth-token-url         https://auth.example.com/oauth/token \
+  --oauth-jwks-url          https://auth.example.com/.well-known/jwks.json \
+  --oauth-client-id         kof-server \
+  --oauth-client-secret     <secret> \
   server-1.properties \
   server-2.properties \
   server-3.properties
 ```
+
+Everything but the four `--oauth-*` values is a shipped sample path. This is the longest command
+line in the guide, and every flag in it earns its place: eight for the two certificate directions,
+one for the users file, four for the authorization server.
 
 ### Step 6 — Start the FTL Servers
 
@@ -1957,10 +2177,9 @@ tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV2
 tibftlserver -c kof-output/tibftlserver-cluster-secure.yaml -n SRV3
 ```
 
-Check the `auth.providers` line at the top of the secure YAML before starting: it should read
-`file:/etc/ftl/users.txt,mtls,oauth2` (plus a second `file:` entry for the generated
-`kafka-users.txt` when the broker properties carried inline JAAS users). All three providers are
-active at once, so a client that authenticates by any one of them is accepted.
+Check the `auth.providers` line at the top of the secure YAML before starting: it should name the
+sample `users.txt`, then the generated `kof-output/kafka-users.txt`, then `mtls` and `oauth2`. All
+three mechanisms are active at once, so a client that authenticates by any one of them is accepted.
 
 ### Step 7 — Shut down the FTL Servers
 
@@ -1971,14 +2190,15 @@ so stopping it needs `https://`, a trust flag and an account holding the `ftl-ad
 ```bash
 FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster-secure.yaml)"
 
-tibftladmin --ftlserver "$FTLS" -te -u admin -pw <password> -xc
+tibftladmin --ftlserver "$FTLS" --tls.trust.file $FTL_MTLS/client_trust.pem \
+  -u admin -pw admin-pw -xc
 ```
 
 `-xc` (`--shutdown_cluster`) stops every FTL Server in the cluster, so it does not matter which member you address — one call replaces three Ctrl-C's.
 
 The command is asynchronous: it returns as soon as the server accepts the request, not when the process is gone. `--status` is how you confirm — it fails to connect once the server is down.
 
-`admin` is whichever account your `--auth-users-file` grants `ftl-admin` to; a user without that role authenticates and is then refused with *403 Forbidden*. `-te` trusts any certificate the server presents — use `--tls.trust.file <ca.pem>` where that is too loose.
+Any of the three mechanisms can carry this call, since all three are active: `admin`/`admin-pw` from the sample `users.txt`, the `--tls.client.*` flags of [Scenario 8](#scenario-8--3-node-mutual-tls-mtls), Step 7, or `--oauth2.token <token>`. All three need the `ftl-admin` role — without it the caller authenticates and is then refused with *403 Forbidden*. `--tls.trust.file` is unrelated to the choice: it names the CA that signed the certificate the server presents, the file given to `--tls-ca`, which in this scenario is the **mtls** sample's `client_trust.pem`.
 
 ---
 
