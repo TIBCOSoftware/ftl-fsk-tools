@@ -126,9 +126,8 @@ run 10-3broker-multi-listener \
   server-1.properties server-2.properties server-3.properties
 
 # ── 11: 9-broker scale-out (3 shards) ─────────────────────────────────────
-# The inputs declare SASL_SSL + mTLS listeners, but no FTL security flags are
-# passed here on purpose: the output then isolates the sharding behaviour.
-# Example 12 is the same nine inputs with the security flags supplied.
+# PLAINTEXT inputs and no security flags, so the output isolates the sharding
+# behaviour. Example 12 is the same nine-node layout, secured.
 run 11-9broker-scale \
   --core-servers "SRV1=localhost:5619,SRV2=localhost:5698,SRV3=localhost:5635" \
   server-1.properties server-2.properties server-3.properties \

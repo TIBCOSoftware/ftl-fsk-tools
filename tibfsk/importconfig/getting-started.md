@@ -2804,9 +2804,9 @@ tibftlimportconfig \
 
 ### 11 — 9-broker scale-out (3 shards)
 
-**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller, nodes 4–9 are broker-only; SASL_SSL PLAIN + OAuth2 + mTLS listeners. The 9 input files map to 9 FTL Servers across 3 FSK shards (`kof.cluster.0` / `.1` / `.2`).
+**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller, nodes 4–9 are broker-only; one PLAINTEXT `CLIENT` listener each. The 9 input files map to 9 FTL Servers across 3 FSK shards (`kof.cluster.0` / `.1` / `.2`).
 
-The inputs declare secured Apache Kafka listeners, but **no FTL security flags are passed on the command line on purpose**: this example is about the sharding split, so the output stays minimal. That is why there is no `tibftlserver-cluster-secure.yaml` here — only an `ftl-users.txt` derived from the SASL PLAIN users in the inputs. [Example 12](#12--9-broker-full-security-stack-3-shards) is the same nine inputs *with* the security flags supplied, and that is where the secure YAML appears.
+This example is about the sharding split and nothing else, so both the inputs and the command line are plain: no TLS, no SASL, no OAuth2, and therefore no `tibftlserver-cluster-secure.yaml` in the output. [Example 12](#12--9-broker-full-security-stack-3-shards) is the same nine-node layout with SASL/PLAIN, OAuth2 and mTLS listeners and the matching FTL security flags — compare the two to see what security adds and what it leaves alone.
 
 Generated reference output: [`examples/11-9broker-scale/output/`](examples/11-9broker-scale/output/)
 
@@ -2820,7 +2820,7 @@ tibftlimportconfig \
   server-7.properties server-8.properties server-9.properties
 ```
 
-**Output:** `tibftlserver-cluster.yaml` (SRV1–9, pserver1–9), `ftlserver.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `ftl-users.txt`, `unsupported.properties`
+**Output:** `tibftlserver-cluster.yaml` (SRV1–9, pserver1–9), `ftlserver.json` (3 clusters: `kof.cluster.0/1/2`), `kof.broker.{1–9}.properties`, `unsupported.properties`
 
 All nine FTL Servers are in the one YAML: `globals.core.servers` lists SRV1–3, the first shard, and SRV4–9 each carry their own `ftl: server:` address.
 
@@ -2830,7 +2830,7 @@ The three shards are the default [`-replication-factor`](#core-flags--h-core) of
 
 ### 12 — 9-broker, full security stack (3 shards)
 
-**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–9 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). The 9 input files map to 9 FTL Servers across 3 FSK shards. Same inputs as example 11, with the FTL security flags supplied.
+**Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–9 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). The 9 input files map to 9 FTL Servers across 3 FSK shards — the same node layout as example 11, secured.
 
 Generated reference output: [`examples/12-9broker-secure/output/`](examples/12-9broker-secure/output/)
 
@@ -2936,7 +2936,7 @@ servers:
 | `examples/08-3broker-tls-only/` | 3 (broker+controller) | SSL only (no SASL) | 3 |
 | `examples/09-3broker-multi-sasl/` | 3 (broker+controller) | PLAIN + OAuth2 + mTLS | 3 |
 | `examples/10-3broker-multi-listener/` | 3 (broker+controller) | PLAIN + OAuth2 + mTLS (per-listener client auth) | 3 |
-| `examples/11-9broker-scale/` | 9 (nodes 1–3 controller) | SASL_SSL PLAIN + OAuth2 + mTLS (no FTL security flags passed) | 9 (3 shards) |
+| `examples/11-9broker-scale/` | 9 (nodes 1–3 controller) | PLAINTEXT | 9 (3 shards) |
 | `examples/12-9broker-secure/` | 9 (nodes 1–3 controller) | PLAIN + OAuth2 + mTLS (full stack) | 9 (3 shards) |
 | `examples/13-3broker-dr/` | 3 (broker+controller) | PLAINTEXT + DR | 3 |
 | `examples/14-3broker-sasl-basic/` | 3 (broker+controller) | SASL_SSL PLAIN (single listener) | 3 |

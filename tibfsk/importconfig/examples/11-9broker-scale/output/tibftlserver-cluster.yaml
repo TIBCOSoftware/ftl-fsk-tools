@@ -19,7 +19,6 @@ globals:
     SRV1: localhost:5619
     SRV2: localhost:5698
     SRV3: localhost:5635
-  auth.providers: file:output/ftl-users.txt
 
 servers:
   SRV1:
@@ -27,8 +26,6 @@ servers:
       data: /var/tmp/kof/data/srv1
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
-      user: internal
-      password: internal-pw
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV1.log
       #max.log.size: 10240000
@@ -44,8 +41,6 @@ servers:
       data: /var/tmp/kof/data/srv2
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
-      user: internal
-      password: internal-pw
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV2.log
       #max.log.size: 10240000
@@ -61,8 +56,6 @@ servers:
       data: /var/tmp/kof/data/srv3
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
-      user: internal
-      password: internal-pw
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV3.log
       #max.log.size: 10240000
@@ -75,13 +68,11 @@ servers:
 
   SRV4:
   - ftl:
-      server: localhost:5760
+      server: localhost:5788
   - realm:
       data: /var/tmp/kof/data/srv4
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
-      user: internal
-      password: internal-pw
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV4.log
       #max.log.size: 10240000
@@ -94,13 +85,11 @@ servers:
 
   SRV5:
   - ftl:
-      server: localhost:5756
+      server: localhost:5778
   - realm:
       data: /var/tmp/kof/data/srv5
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
-      user: internal
-      password: internal-pw
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV5.log
       #max.log.size: 10240000
@@ -113,13 +102,11 @@ servers:
 
   SRV6:
   - ftl:
-      server: localhost:5781
+      server: localhost:5780
   - realm:
       data: /var/tmp/kof/data/srv6
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
-      user: internal
-      password: internal-pw
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV6.log
       #max.log.size: 10240000
@@ -132,13 +119,11 @@ servers:
 
   SRV7:
   - ftl:
-      server: localhost:5786
+      server: localhost:5741
   - realm:
       data: /var/tmp/kof/data/srv7
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
-      user: internal
-      password: internal-pw
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV7.log
       #max.log.size: 10240000
@@ -151,13 +136,11 @@ servers:
 
   SRV8:
   - ftl:
-      server: localhost:5771
+      server: localhost:5762
   - realm:
       data: /var/tmp/kof/data/srv8
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
-      user: internal
-      password: internal-pw
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV8.log
       #max.log.size: 10240000
@@ -170,13 +153,11 @@ servers:
 
   SRV9:
   - ftl:
-      server: localhost:5725
+      server: localhost:5753
   - realm:
       data: /var/tmp/kof/data/srv9
       initial.realm.config: output/ftlserver.json
   - ftlserver.properties:
-      user: internal
-      password: internal-pw
       loglevel: info
       #logfile: /var/tmp/kof/data/SRV9.log
       #max.log.size: 10240000
