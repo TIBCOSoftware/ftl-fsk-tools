@@ -2369,9 +2369,95 @@ Combine the flags of [example 12](#12--9-broker-full-security-stack-3-shards) wi
 
 ---
 
-## Output details
+## Creating self-signed Kafka certificates
 
-### `tibftlserver-cluster.yaml`
+[Scenario 5](#scenario-5--single-node-sasl-plain-over-tls) and the secured scenarios after it
+need a Kafka keystore and truststore that you supply. If you have none, these commands produce
+the pair those scenarios name, with the passwords their `server.properties` expects. This is a
+demo PKI — one self-signed certificate acting as its own authority, no CA hierarchy, no
+revocation. Do not model a production deployment on it.
+
+### 1. The broker keystore
+
+```bash
+mkdir -p /var/tmp/kafka/scenario5/certs
+
+keytool -genkeypair -alias kafka-server \
+  -keyalg RSA -keysize 2048 -validity 365 \
+  -dname "CN=localhost, OU=FSK, O=Example, L=Palo Alto, ST=CA, C=US" \
+  -ext "SAN=DNS:localhost,IP:127.0.0.1" \
+  -keystore /var/tmp/kafka/scenario5/certs/server.keystore.jks -storetype JKS \
+  -storepass keystorePassword123 -keypass keyPassword123
+```
+
+`SAN` is the part that matters and the part most often left out: a Kafka client verifies the
+hostname it dialled against the certificate's subject alternative name, not against `CN`. The
+scenarios advertise `localhost`, so `DNS:localhost` has to be in there. Advertising a real
+hostname means naming that hostname instead.
+
+`-storepass` and `-keypass` become `ssl.keystore.password` and `ssl.key.password` in Step 1.
+Modern JDKs print a warning that JKS is a proprietary format and suggest migrating to PKCS12 —
+harmless here, since Step 2 converts the store anyway.
+
+### 2. The truststore
+
+A self-signed certificate is its own authority, so the truststore holds that same certificate:
+
+```bash
+keytool -exportcert -alias kafka-server -rfc \
+  -keystore /var/tmp/kafka/scenario5/certs/server.keystore.jks \
+  -storepass keystorePassword123 \
+  -file /var/tmp/kafka/scenario5/certs/server.cer
+
+keytool -importcert -noprompt -alias kafka-server \
+  -file /var/tmp/kafka/scenario5/certs/server.cer \
+  -keystore /var/tmp/kafka/scenario5/certs/kafka.truststore.jks -storetype JKS \
+  -storepass truststorePassword123
+```
+
+`-storepass` here is `ssl.truststore.password` in Step 1. Kafka clients need this truststore too —
+it is what `ssl.truststore.location` points at in the `client.properties` of Step 3.
+
+### 3. The PEM copies FSK reads
+
+Apache Kafka reads the JKS stores above; FSK reads PEM. This is Step 2 of the scenario, with the
+passwords filled in so nothing prompts:
+
+```bash
+keytool -importkeystore -alias kafka-server \
+  -srckeystore /var/tmp/kafka/scenario5/certs/server.keystore.jks -srcstoretype JKS \
+  -srcstorepass keystorePassword123 -srckeypass keyPassword123 \
+  -destkeystore /var/tmp/kafka/scenario5/certs/server.keystore.p12 -deststoretype PKCS12 \
+  -deststorepass keystorePassword123 -destkeypass keystorePassword123
+
+openssl pkcs12 -in /var/tmp/kafka/scenario5/certs/server.keystore.p12 \
+  -passin pass:keystorePassword123 -nodes \
+  -out /var/tmp/kafka/scenario5/certs/server.keystore.pem
+
+cp /var/tmp/kafka/scenario5/certs/server.cer \
+   /var/tmp/kafka/scenario5/certs/kafka.truststore.pem
+```
+
+Two details differ from the generic commands the tool prints. `keytool -importkeystore` refuses
+`-srckeypass`/`-destkeypass` unless `-alias` names a single entry, so the alias is given
+explicitly. And the truststore needs no conversion at all: it holds one trusted certificate and no
+private key, which `keytool -importkeystore` declines to migrate on several JDKs — the
+`-exportcert -rfc` output from step 2 above already *is* the PEM, so it is simply copied.
+
+Check that the FTL installation's `openssl` is the one on your `PATH`, or call `/usr/bin/openssl`
+explicitly; a mismatched shared library gives `Library not loaded: libssl.3.dylib` rather than a
+useful error.
+
+---
+
+## Appendix
+
+Reference material for the scenarios above: what each generated file contains, what to do when the
+tool reports `INVALID`, and the full set of worked example configurations shipped in `examples/`.
+
+### Output details
+
+#### `tibftlserver-cluster.yaml`
 
 Every FTL Server, in one file. Names and ports for the first
 shard's servers come from `-core-servers`; if that flag is omitted the names default to `SRV1–SRV3`
@@ -2456,7 +2542,7 @@ schema daemon on SRV1–3 only. The block is written to the plain and secure YAM
 covered yet. `auth.type` is always `none` for now; OAuth options for `tibschemad` are a later
 addition.
 
-### `tibftlserver-cluster-dr.yaml`
+#### `tibftlserver-cluster-dr.yaml`
 
 DR replica cluster, laid out like the plain YAML and likewise covering every server. Start on the
 DR hosts using the DR server names from `-dr-servers`:
@@ -2467,7 +2553,7 @@ tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver2
 tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver3
 ```
 
-### `tibftlserver-cluster-secure.yaml`
+#### `tibftlserver-cluster-secure.yaml`
 
 The same servers as `tibftlserver-cluster.yaml` — run one file or the other, not both — with each `ftlserver.properties` block extended by TLS and auth settings, above the logging settings every cluster YAML already carries. Auth mode is determined by the Apache Kafka listener types:
 
@@ -2482,7 +2568,7 @@ When mTLS flags are provided alongside OAuth, the secure YAML includes both sets
 In oauth2 mode the realm credentials (`-realm-service-user` / `-realm-service-password`) are written
 onto each per-server `- realm:` entry, since there is no shared `services:` block to hold them.
 
-### `ftlserver.json`
+#### `ftlserver.json`
 
 Contains `kof.cluster.N` clusters (`kof_enabled: true`), three stores per cluster (`kof.data.store.N`, `kof.sync.store.N`, `kof.meta.store.N`), and FTL Servers distributed across clusters.
 
@@ -2512,7 +2598,7 @@ tibrealmadmin --server localhost:5600 --realm _default_realm upload-realm ftlser
 
 In DR mode, each cluster has `dr_enabled: true` and two persistence sets: `_setA` (primary) and `_DRset` (DR replicas).
 
-### `kof.broker.N.properties`
+#### `kof.broker.N.properties`
 
 One file per FTL Server (N is 1-based). Contains only properties that pass the FSK broker properties whitelist: listener/security keys in the section 1 allowlist, plus general broker/topic/tuning keys. Listener keys appear first, followed by remaining properties in their original order.
 
@@ -2528,13 +2614,13 @@ guarantees it, and the `# Node ID:` header says where the value came from:
 
 If both `node.id` and `broker.id` are present, `node.id` wins and `broker.id` is dropped as unsupported.
 
-### `unsupported.properties`
+#### `unsupported.properties`
 
 Written when any input properties are not in the FSK whitelist. Contains KRaft cluster-control keys (`process.roles`, `controller.*`, etc.), ZooKeeper-mode keys (`zookeeper.*` — FSK holds cluster membership and metadata in FTL rather than ZooKeeper), and security-domain keys not on the section 1 allowlist (passwords, JAAS configs, handler classes, etc.). Kept for reference — the FTL Server does not load this file.
 
 ---
 
-## Resolving INVALID output
+### Resolving INVALID output
 
 When the tool cannot fully convert a setting it writes a `RESOLVE-REQUIRED` block in
 the generated `kof.broker.N.properties` and exits with code 2. Common causes:
@@ -2553,7 +2639,7 @@ every run; once all blocks are resolved the exit code is 0 and output shows:
 All kof.broker.*.properties files are processed successfully.
 ```
 
-### Keystores: ACCEPTED but not yet runnable
+#### Keystores: ACCEPTED but not yet runnable
 
 PEM is FSK's keystore format, so a JKS/PKCS12 keystore is translated rather than refused:
 the type becomes `PEM`, the location is repointed at the `.pem`, and the file is stamped
@@ -2571,7 +2657,7 @@ file carries above each setting. Run them, or re-run with `--auto` on a host tha
 `.jks`, and the warning disappears. When `--auto` cannot do a conversion it says so per
 keystore and the SEVERE WARNING still stands.
 
-### Settings that are present but doing nothing
+#### Settings that are present but doing nothing
 
 These are commented out with a reason, not flagged. An empty `authorizer.class.name`, a
 `sasl.enabled.mechanisms` list on a broker where no listener speaks SASL, an
@@ -2584,7 +2670,7 @@ cause an INVALID status.
 
 ---
 
-## Example configurations
+### Example configurations
 
 Each example is a directory under `examples/` holding one `server-N.properties` per Apache Kafka broker plus a checked-in `output/`. **One input file becomes one FTL Server**, so pass every broker's properties file — the tool has no flag for the FTL Server count.
 
@@ -2592,7 +2678,7 @@ Each command below is written to be run from inside its own example directory, w
 
 ---
 
-### 01 — Single node, PLAINTEXT
+#### 01 — Single node, PLAINTEXT
 
 **Apache Kafka config:** 1 node, KRaft (broker+controller), PLAINTEXT, no security. Suitable for local development.
 
@@ -2610,7 +2696,7 @@ tibftlimportconfig \
 
 ---
 
-### 02 — 3-broker, PLAINTEXT
+#### 02 — 3-broker, PLAINTEXT
 
 **Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT listeners, no security.
 
@@ -2628,7 +2714,7 @@ tibftlimportconfig \
 
 ---
 
-### 03 — Single node, ZooKeeper mode, PLAINTEXT
+#### 03 — Single node, ZooKeeper mode, PLAINTEXT
 
 **Apache Kafka config:** 1 node in ZooKeeper mode (Apache Kafka 3.9 or earlier — 4.x removed ZooKeeper), single PLAINTEXT listener, no security.
 
@@ -2651,7 +2737,7 @@ tibftlimportconfig \
 
 ---
 
-### 04 — 3-broker, ZooKeeper mode, PLAINTEXT
+#### 04 — 3-broker, ZooKeeper mode, PLAINTEXT
 
 **Apache Kafka config:** 3 nodes in ZooKeeper mode sharing one ZooKeeper ensemble, PLAINTEXT listeners, no security. Same `broker.id` → `node.id` rename as example 03, applied per broker.
 
@@ -2669,7 +2755,7 @@ tibftlimportconfig \
 
 ---
 
-### 05 — Single node, SASL_SSL PLAIN
+#### 05 — Single node, SASL_SSL PLAIN
 
 **Apache Kafka config:** 1 node, KRaft, SASL_SSL PLAIN on broker listener, SSL on controller.
 
@@ -2689,7 +2775,7 @@ tibftlimportconfig \
 
 ---
 
-### 06 — Single node, OAuth2
+#### 06 — Single node, OAuth2
 
 **Apache Kafka config:** 1 node, KRaft, SASL_SSL OAUTHBEARER on broker listener, SSL on controller.
 
@@ -2714,7 +2800,7 @@ tibftlimportconfig \
 
 ---
 
-### 07 — 3-broker, SASL_SSL PLAIN
+#### 07 — 3-broker, SASL_SSL PLAIN
 
 **Apache Kafka config:** 3 nodes, KRaft, SASL_SSL PLAIN on broker listener, SSL on controller listener.
 
@@ -2733,7 +2819,7 @@ tibftlimportconfig \
 
 ---
 
-### 08 — 3-broker, TLS-only (no SASL)
+#### 08 — 3-broker, TLS-only (no SASL)
 
 **Apache Kafka config:** 3 nodes, KRaft, SSL listener with `ssl.client.auth=none` — wire encryption only, no authentication mechanism.
 
@@ -2752,7 +2838,7 @@ tibftlimportconfig \
 
 ---
 
-### 09 — 3-broker, multi-SASL (PLAIN + OAuth2 + mTLS)
+#### 09 — 3-broker, multi-SASL (PLAIN + OAuth2 + mTLS)
 
 **Apache Kafka config:** 3 nodes, KRaft, four listeners: BASIC_AUTH (SASL_SSL PLAIN), OAUTH (SASL_SSL OAUTHBEARER), MTLS (SSL mutual TLS), CONTROLLER (SSL).
 
@@ -2777,7 +2863,7 @@ tibftlimportconfig \
 
 ---
 
-### 10 — 3-broker, multi-listener (PLAIN + OAuth2 + per-listener mTLS)
+#### 10 — 3-broker, multi-listener (PLAIN + OAuth2 + per-listener mTLS)
 
 **Apache Kafka config:** 3 nodes, KRaft, four listeners: BASIC_AUTH (SASL_SSL PLAIN), OAUTH (SASL_SSL OAUTHBEARER), MTLS (SSL, `listener.name.mtls.ssl.client.auth=required`), CONTROLLER (SSL).
 
@@ -2802,7 +2888,7 @@ tibftlimportconfig \
 
 ---
 
-### 11 — 9-broker scale-out (3 shards)
+#### 11 — 9-broker scale-out (3 shards)
 
 **Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller, nodes 4–9 are broker-only; one PLAINTEXT `CLIENT` listener each. The 9 input files map to 9 FTL Servers across 3 FSK shards (`kof.cluster.0` / `.1` / `.2`).
 
@@ -2828,7 +2914,7 @@ The three shards are the default [`-replication-factor`](#core-flags--h-core) of
 
 ---
 
-### 12 — 9-broker, full security stack (3 shards)
+#### 12 — 9-broker, full security stack (3 shards)
 
 **Apache Kafka config:** 9 nodes — nodes 1–3 are broker+controller (4 listeners: BASIC_AUTH + OAUTH + MTLS + CONTROLLER), nodes 4–9 are broker-only (3 listeners: BASIC_AUTH + OAUTH + MTLS). The 9 input files map to 9 FTL Servers across 3 FSK shards — the same node layout as example 11, secured.
 
@@ -2864,7 +2950,7 @@ As in example 11, the three shards come from the default [`-replication-factor`]
 
 ---
 
-### 13 — 3-broker, PLAINTEXT + DR
+#### 13 — 3-broker, PLAINTEXT + DR
 
 **Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT. Primary servers named `primary1/2/3`; DR servers named `drserver1/2/3`. Mirrors the layout of the FTL `dr-simple` sample cluster configuration.
 
@@ -2922,7 +3008,7 @@ servers:
 
 ---
 
-### All example directories
+#### All example directories
 
 | Directory | Nodes | Auth | FTL Servers |
 |---|---|---|---|
@@ -2962,84 +3048,3 @@ diff examples/01-single-node-plaintext/output/tibftlserver-standalone.yaml \
 diff examples/02-3broker-plaintext/output/tibftlserver-cluster.yaml \
      examples/22-3broker-tibschemad/output/tibftlserver-cluster.yaml
 ```
-
----
-
-## Creating self-signed Kafka certificates
-
-[Scenario 5](#scenario-5--single-node-sasl-plain-over-tls) and the secured scenarios after it
-need a Kafka keystore and truststore that you supply. If you have none, these commands produce
-the pair those scenarios name, with the passwords their `server.properties` expects. This is a
-demo PKI — one self-signed certificate acting as its own authority, no CA hierarchy, no
-revocation. Do not model a production deployment on it.
-
-### 1. The broker keystore
-
-```bash
-mkdir -p /var/tmp/kafka/scenario5/certs
-
-keytool -genkeypair -alias kafka-server \
-  -keyalg RSA -keysize 2048 -validity 365 \
-  -dname "CN=localhost, OU=FSK, O=Example, L=Palo Alto, ST=CA, C=US" \
-  -ext "SAN=DNS:localhost,IP:127.0.0.1" \
-  -keystore /var/tmp/kafka/scenario5/certs/server.keystore.jks -storetype JKS \
-  -storepass keystorePassword123 -keypass keyPassword123
-```
-
-`SAN` is the part that matters and the part most often left out: a Kafka client verifies the
-hostname it dialled against the certificate's subject alternative name, not against `CN`. The
-scenarios advertise `localhost`, so `DNS:localhost` has to be in there. Advertising a real
-hostname means naming that hostname instead.
-
-`-storepass` and `-keypass` become `ssl.keystore.password` and `ssl.key.password` in Step 1.
-Modern JDKs print a warning that JKS is a proprietary format and suggest migrating to PKCS12 —
-harmless here, since Step 2 converts the store anyway.
-
-### 2. The truststore
-
-A self-signed certificate is its own authority, so the truststore holds that same certificate:
-
-```bash
-keytool -exportcert -alias kafka-server -rfc \
-  -keystore /var/tmp/kafka/scenario5/certs/server.keystore.jks \
-  -storepass keystorePassword123 \
-  -file /var/tmp/kafka/scenario5/certs/server.cer
-
-keytool -importcert -noprompt -alias kafka-server \
-  -file /var/tmp/kafka/scenario5/certs/server.cer \
-  -keystore /var/tmp/kafka/scenario5/certs/kafka.truststore.jks -storetype JKS \
-  -storepass truststorePassword123
-```
-
-`-storepass` here is `ssl.truststore.password` in Step 1. Kafka clients need this truststore too —
-it is what `ssl.truststore.location` points at in the `client.properties` of Step 3.
-
-### 3. The PEM copies FSK reads
-
-Apache Kafka reads the JKS stores above; FSK reads PEM. This is Step 2 of the scenario, with the
-passwords filled in so nothing prompts:
-
-```bash
-keytool -importkeystore -alias kafka-server \
-  -srckeystore /var/tmp/kafka/scenario5/certs/server.keystore.jks -srcstoretype JKS \
-  -srcstorepass keystorePassword123 -srckeypass keyPassword123 \
-  -destkeystore /var/tmp/kafka/scenario5/certs/server.keystore.p12 -deststoretype PKCS12 \
-  -deststorepass keystorePassword123 -destkeypass keystorePassword123
-
-openssl pkcs12 -in /var/tmp/kafka/scenario5/certs/server.keystore.p12 \
-  -passin pass:keystorePassword123 -nodes \
-  -out /var/tmp/kafka/scenario5/certs/server.keystore.pem
-
-cp /var/tmp/kafka/scenario5/certs/server.cer \
-   /var/tmp/kafka/scenario5/certs/kafka.truststore.pem
-```
-
-Two details differ from the generic commands the tool prints. `keytool -importkeystore` refuses
-`-srckeypass`/`-destkeypass` unless `-alias` names a single entry, so the alias is given
-explicitly. And the truststore needs no conversion at all: it holds one trusted certificate and no
-private key, which `keytool -importkeystore` declines to migrate on several JDKs — the
-`-exportcert -rfc` output from step 2 above already *is* the PEM, so it is simply copied.
-
-Check that the FTL installation's `openssl` is the one on your `PATH`, or call `/usr/bin/openssl`
-explicitly; a mismatched shared library gives `Library not loaded: libssl.3.dylib` rather than a
-useful error.
