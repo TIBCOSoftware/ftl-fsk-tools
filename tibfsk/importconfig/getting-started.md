@@ -32,16 +32,16 @@ scenario is a numbered sequence of steps, so *Scenario 5, Step 2* means the seco
 SASL/PLAIN-over-TLS walkthrough. Three things hold for all twelve.
 
 **`tibftlimportconfig`.** Every `tibftlimportconfig` command below is the binary checked in at
-[`bin/tibftlimportconfig`](bin/) (linux/amd64, statically linked) — a clone needs no Go toolchain
-and no build step. Put it on your `PATH`, or invoke it by path:
+[`bin/tibftlimportconfig`](bin/) (linux/amd64, statically linked). Cloning the repository therefore
+requires no Go toolchain and no build step. Put it on your `PATH`, or invoke it by path:
 
 ```bash
 export PATH=/path/to/ftl-fsk-tools/tibfsk/importconfig/bin:$PATH
 ```
 
 **`KAFKA_HOME`.** The Kafka commands assume a Kafka 4.x installation. Scenarios 3 and 4 are the
-exception: they run Kafka in ZooKeeper mode, which 4.x removed, so those two need `KAFKA_HOME`
-pointed at Kafka 3.9 or earlier.
+exception: they run Kafka in ZooKeeper mode, which was removed in Kafka 4.x. Those two therefore
+require `KAFKA_HOME` to point at a Kafka 3.9 or earlier installation.
 
 ```bash
 export KAFKA_HOME=/opt/kafka
@@ -64,7 +64,7 @@ The simplest possible configuration: one broker, no authentication, no TLS. Use 
 for local development and tool exploration only.
 
 :::tip Already running a single-node KRaft broker?
-Steps 1 and 2 only build and start the example broker. If you already have a running Kafka
+Steps 1 and 2 only set up and start the example broker. If you already have a running Kafka
 broker or brokers, skip them and start at **Step 3 — Stop Apache Kafka**, then hand your own
 `server.properties` to the tool in Step 4 instead of `server-1.properties`. The tool reads the
 file; it never contacts the running broker.
@@ -109,8 +109,14 @@ KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
 "$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted --standalone \
   -t "$KAFKA_CLUSTER_ID" -c server-1.properties
 
-"$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
+LOG_DIR="/var/tmp/kafka/scenario1/logs/broker-1" \
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
 ```
+
+`LOG_DIR` sends the broker's own `server.log` somewhere you can write. Without it Kafka puts it
+under `$KAFKA_HOME/logs`, which needs write access to the installation directory. `-daemon` is a
+plain `nohup ... &` with no PID file; stdout and stderr land in `$LOG_DIR/kafkaServer.out`, which
+is the first place to look if the broker does not come up.
 
 Confirm it is up:
 
@@ -229,7 +235,7 @@ Scale out to a 3-broker KRaft cluster. Pass one `server.properties` file per bro
 the tool derives the FTL Server count from the file count.
 
 :::tip Already running a 3-node KRaft cluster?
-Steps 1–3 only build and start the three example brokers. If you already have a running Kafka
+Steps 1–3 only set up and start the three example brokers. If you already have a running Kafka
 broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
 three `server.properties` files to the tool in Step 5. The tool reads the files; it never
 contacts the running brokers.
@@ -463,7 +469,7 @@ older release.
 :::
 
 :::tip Already running a single-node ZooKeeper broker?
-Steps 1 and 2 only build and start the example broker and its ZooKeeper. If you already have a
+Steps 1 and 2 only set up and start the example broker and its ZooKeeper. If you already have a
 running Kafka broker or brokers, skip them and start at **Step 3 — Stop Apache Kafka and
 ZooKeeper**, then hand your own `server.properties` to the tool in Step 4. Only starting the
 example broker needs Kafka 3.9 or earlier; the conversion itself works whatever version you run.
@@ -512,13 +518,17 @@ maxClientCnxns=0
 admin.enableServer=false
 EOF
 
-"$KAFKA_HOME/bin/zookeeper-server-start.sh" -daemon zookeeper.properties
+LOG_DIR="/var/tmp/kafka/scenario3/logs/zookeeper" \
+  "$KAFKA_HOME/bin/zookeeper-server-start.sh" -daemon zookeeper.properties
 
-"$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
+LOG_DIR="/var/tmp/kafka/scenario3/logs/broker-1" \
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
 ```
 
 `admin.enableServer=false` turns off the ZooKeeper AdminServer, which otherwise binds port 8080
-and collides with whatever else on the host wants it. Confirm the broker is up:
+and collides with whatever else on the host wants it. The two `LOG_DIR` settings keep ZooKeeper and
+the broker out of each other's log files, and both out of `$KAFKA_HOME/logs`, which needs write
+access to the installation directory. Confirm the broker is up:
 
 ```bash
 "$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
@@ -619,7 +629,7 @@ in `broker.id`, listener port and `log.dirs`.
 Kafka 3.9 or earlier is required here too, for the same reason as Scenario 3.
 
 :::tip Already running a 3-node ZooKeeper cluster?
-Steps 1–3 only build and start ZooKeeper and the three example brokers. If you already have a
+Steps 1–3 only set up and start ZooKeeper and the three example brokers. If you already have a
 running Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka and
 ZooKeeper**, then hand your own three `server.properties` files to the tool in Step 5.
 :::
@@ -687,7 +697,8 @@ maxClientCnxns=0
 admin.enableServer=false
 EOF
 
-"$KAFKA_HOME/bin/zookeeper-server-start.sh" -daemon zookeeper.properties
+LOG_DIR="/var/tmp/kafka/scenario4/logs/zookeeper" \
+  "$KAFKA_HOME/bin/zookeeper-server-start.sh" -daemon zookeeper.properties
 
 for n in 1 2 3; do
   LOG_DIR="/var/tmp/kafka/scenario4/logs/broker-$n" \
@@ -696,8 +707,8 @@ done
 ```
 
 Give ZooKeeper a moment to accept connections on 2181 before starting the brokers; one that
-starts first will retry, but noisily. `LOG_DIR` keeps the three brokers from writing over each
-other's `server.log`, which they otherwise all place under `$KAFKA_HOME/logs`. Confirm all
+starts first will retry, but noisily. `LOG_DIR` keeps ZooKeeper and the three brokers from writing
+over each other's `server.log`, which they otherwise all place under `$KAFKA_HOME/logs`. Confirm all
 three registered:
 
 ```bash
@@ -815,7 +826,7 @@ No keystores yet? [Creating self-signed Kafka certificates](#creating-self-signe
 produces the two this scenario names, with the passwords Step 1 expects.
 
 :::tip Already running a secured single-node broker?
-Steps 1 and 3 only build and start the example broker. If you already have a running Kafka
+Steps 1 and 3 only set up and start the example broker. If you already have a running Kafka
 broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
 `server.properties` to the tool in Step 5. **Step 2 still applies**: FSK reads PEM, so the `.pem`
 files have to exist before the FTL Server starts, even though your brokers are already running
@@ -888,9 +899,6 @@ Both `keytool` commands prompt for the source and destination store passwords; a
 only a trusted certificate — no private key — cannot be run through `keytool -importkeystore` on
 every JDK; `keytool -exportcert -rfc` writes the same PEM directly, as the appendix shows.
 
-Alternatively, run with `--auto` and the tool performs the conversion for you
-(requires `keytool` and `openssl` on `PATH`).
-
 ### Step 3 — Start Apache Kafka (KRaft)
 
 Same sequence as Scenario 1. The broker reads the JKS keystores named in its `server.properties`, so
@@ -902,7 +910,8 @@ KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
 "$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted --standalone \
   -t "$KAFKA_CLUSTER_ID" -c server-1.properties
 
-"$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
+LOG_DIR="/var/tmp/kafka/scenario5/logs/broker-1" \
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
 ```
 
 A plain `kafka-topics.sh --list` will not reach a SASL_SSL listener — every Kafka CLI needs the
@@ -970,9 +979,9 @@ standalone YAML whenever TLS or auth flags are supplied.
 
 :::note The `SEVERE WARNING` about missing `.pem` files
 The run ends with `SEVERE WARNING -- … WILL NOT RUN WITH FSK AS IT STANDS` and a claim that the
-converted `.pem` files do not exist. The tool only tracks conversions it performed itself, under
-`--auto`, so the warning fires even when you did Step 2 by hand and the files are there. Confirm
-with `ls /var/tmp/kafka/scenario5/certs/*.pem`; if both exist, carry on.
+converted `.pem` files do not exist. The tool only tracks conversions it performed itself, so the
+warning fires even when you did Step 2 by hand and the files are there. Confirm with
+`ls /var/tmp/kafka/scenario5/certs/*.pem`; if both exist, carry on.
 :::
 
 `--tls-ca` writes `tls.client.trust.file`, the trust anchor the FTL Server's own internal
@@ -1052,7 +1061,7 @@ authorization server to hand? Run [Scenario 5](#scenario-5--single-node-sasl-pla
 instead; it needs nothing but the two keystores.
 
 :::tip Already running a single-node broker with OAuth2?
-Steps 1 and 2 only build and start the example broker. If you already have a running Kafka
+Steps 1 and 2 only set up and start the example broker. If you already have a running Kafka
 broker or brokers, skip them and start at **Step 3 — Stop Apache Kafka**, then hand your own
 `server.properties` to the tool in Step 4.
 :::
@@ -1106,7 +1115,8 @@ KAFKA_CLUSTER_ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
 "$KAFKA_HOME/bin/kafka-storage.sh" format --ignore-formatted --standalone \
   -t "$KAFKA_CLUSTER_ID" -c server-1.properties
 
-"$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
+LOG_DIR="/var/tmp/kafka/scenario6/logs/broker-1" \
+  "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
 ```
 
 FSK has its own OAuth2 provider and needs no such jar — the handler class is a Kafka-side detail
@@ -2305,13 +2315,12 @@ Used when the input config has any `tls`, `mtls`, `sasl_tls`, or `oauth_tls` lis
 | `-dr-servers` | _(none)_ | Comma-separated `DRSRV1=host:port,DRSRV2=host:port,...` DR server list.<br/>Providing this flag enables DR mode for all generated files. |
 | `-dr-data-dir` | `<data-dir>/dr` | Data directory for DR FTL Servers on DR hosts |
 
-### Inspection and conversion flags (`-h info`)
+### Inspection flags (`-h info`)
 
 | Flag | Default | Description |
 |---|---|---|
 | `-list-properties` | `false` | Print how each Apache Kafka listener/security property is treated, then exit |
 | `-color` | `auto` | Colorize `-list-properties` output: `auto`, `always`, or `never` |
-| `-auto` | `false` | Actually run the keystore conversions (JKS/PKCS12 → PEM via `keytool`/`openssl`) rather than only printing the commands. The generated config names the `.pem` either way; items needing a human decision stay `RESOLVE-REQUIRED` |
 
 ---
 
@@ -2653,9 +2662,8 @@ tibftlserver will fail at startup on the missing file. Create them first:
 ```
 
 followed by the `keytool`/`openssl` commands for each one — the same commands the generated
-file carries above each setting. Run them, or re-run with `--auto` on a host that holds the
-`.jks`, and the warning disappears. When `--auto` cannot do a conversion it says so per
-keystore and the SEVERE WARNING still stands.
+file carries above each setting. Run them on a host that holds the `.jks`, then re-run the
+conversion and the warning disappears.
 
 #### Settings that are present but doing nothing
 
@@ -2675,6 +2683,8 @@ cause an INVALID status.
 Each example is a directory under `examples/` holding one `server-N.properties` per Apache Kafka broker plus a checked-in `output/`. **One input file becomes one FTL Server**, so pass every broker's properties file — the tool has no flag for the FTL Server count.
 
 Each command below is written to be run from inside its own example directory, with `--output-dir output`, which is how the checked-in `output/` was produced. Run it that way and you reproduce the checked-in files (the generated YAML embeds the output directory as a relative path, so a different `--output-dir` changes the result). `examples/regen-examples.sh` runs exactly these commands for every example at once.
+
+There are 22 examples; the walkthroughs below cover 01–13, the ones that introduce something new. Examples 14–22 are further combinations of the same flags — every one is listed in [All example directories](#all-example-directories), and all 22 ship a checked-in `output/` that `regen-examples.sh` produces, whether or not there is a walkthrough for it here.
 
 ---
 
@@ -3038,9 +3048,10 @@ servers:
 Every example ships a checked-in `output/` directory, regenerated by
 `examples/regen-examples.sh`.
 
-Examples 21 and 22 take the same inputs as 01 and 02 and add only `-tibschemad`, so diffing
-their outputs shows exactly what the flag contributes — the standalone case at `cluster.size: 1`
-and the cluster case at `cluster.size: 3`:
+Examples 21 and 22 take the same inputs as 01 and 02 and add only `-tibschemad`. Their outputs are
+checked in like every other example's, so diffing them against 01 and 02 shows exactly what the
+flag contributes — the standalone case at `cluster.size: 1` and the cluster case at
+`cluster.size: 3`:
 
 ```bash
 diff examples/01-single-node-plaintext/output/tibftlserver-standalone.yaml \

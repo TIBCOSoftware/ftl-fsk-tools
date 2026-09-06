@@ -99,6 +99,9 @@ func main() {
 	// Documentation flag: print the line-by-line listener/security property account and exit.
 	listProps := flag.Bool("list-properties", false, "print how each Kafka listener/security property is treated, then exit")
 	colorMode := flag.String("color", "auto", "colorize --list-properties output: auto|always|never")
+	// Hidden: -auto still works if typed, but it is deliberately absent from every group
+	// in help.go, so no help output names it and nothing the tool prints suggests it. The
+	// implementation stays in translator/auto.go for when we decide to expose it again.
 	autoMode := flag.Bool("auto", false, "run the mechanical conversions automatically (JKS/PKCS12 keystores -> PEM via keytool/openssl); items needing a human stay RESOLVE-REQUIRED")
 
 	// DR flags
@@ -427,7 +430,7 @@ func main() {
 	for i, status := range statuses {
 		if status == translator.StatusInvalid {
 			anyInvalid = true
-			printResolveSummary(os.Stderr, translator.Summarize(cfgs[i]), *outputDir, *autoMode, i+1)
+			printResolveSummary(os.Stderr, translator.Summarize(cfgs[i]), *outputDir, i+1)
 		}
 	}
 	// A keystore rewritten to PEM is settled as far as the config goes, so it does
@@ -438,7 +441,7 @@ func main() {
 		if len(translator.PendingKeystores(cfg)) > 0 {
 			anyPendingKeystore = true
 		}
-		printKeystoreWarning(os.Stderr, cfg, *outputDir, *autoMode, i+1)
+		printKeystoreWarning(os.Stderr, cfg, *outputDir, i+1)
 	}
 	if anyInvalid {
 		os.Exit(2)
@@ -459,7 +462,7 @@ func main() {
 // files that do not exist, so tibftlserver will not start on it. That is severe enough
 // to say in those words, and it is the one thing standing between this output and a
 // working FSK server.
-func printKeystoreWarning(w io.Writer, cfg *translator.BrokerConfig, outputDir string, autoRan bool, n int) {
+func printKeystoreWarning(w io.Writer, cfg *translator.BrokerConfig, outputDir string, n int) {
 	pending := translator.PendingKeystores(cfg)
 	if len(pending) == 0 {
 		return
@@ -467,9 +470,6 @@ func printKeystoreWarning(w io.Writer, cfg *translator.BrokerConfig, outputDir s
 	brokerPath := filepath.Join(outputDir, fmt.Sprintf("kof.broker.%d.properties", n))
 	fmt.Fprintf(w, "\n*** SEVERE WARNING -- %s WILL NOT RUN WITH FSK AS IT STANDS ***\n", brokerPath)
 	fmt.Fprintf(w, "%d Java keystore(s) were rewritten to PEM, but the .pem file(s) do not exist.\n", len(pending))
-	if autoRan {
-		fmt.Fprintln(w, "--auto could not create them here -- see the warnings above.")
-	}
 	fmt.Fprintln(w, "tibftlserver will fail at startup on the missing file. Create them first:")
 	for i, kc := range pending {
 		fmt.Fprintf(w, "\n  %d. %s\n", i+1, kc.TypeKey)
@@ -477,29 +477,25 @@ func printKeystoreWarning(w io.Writer, cfg *translator.BrokerConfig, outputDir s
 			fmt.Fprintf(w, "       %s\n", cmd)
 		}
 	}
-	if !autoRan {
-		fmt.Fprintf(w, "\nOr re-run with --auto, on a host that has %s, to run these for you.\n",
-			pending[0].FromLoc)
-	}
+	fmt.Fprintf(w, "\nRun them on a host that has %s.\n", pending[0].FromLoc)
 }
 
 // printResolveSummary prints, after an INVALID run, a numbered list of the
 // unresolved settings -- each as "line N: key = value" with what's wrong and the
-// fix -- then points --auto at the lines it can fix and lists the lines that need a
-// human. The operator runs --auto and/or edits the >>>>>>> blocks, then re-runs.
-func printResolveSummary(w io.Writer, s translator.ResolveSummary, outputDir string, autoRan bool, n int) {
+// fix -- then lists the lines the operator has to attend to. They edit the >>>>>>>
+// blocks (or run the keystore commands the file carries), then re-run.
+func printResolveSummary(w io.Writer, s translator.ResolveSummary, outputDir string, n int) {
 	brokerPath := filepath.Join(outputDir, fmt.Sprintf("kof.broker.%d.properties", n))
 	fmt.Fprintf(w, "\nINVALID -- %d setting(s) TIBCO FTL(R) Service for Kafka (FSK) cannot use, in %s:\n",
 		s.Total(), brokerPath)
 
-	var autoLines, youLines []int
-	autoAny, youAny := false, false
+	var youLines []int
 	for i, it := range s.Items {
 		val := it.Value
 		if it.Note != "" {
 			val += "   (file: " + it.Note + ")"
 		}
-		what, fix, autoFixable := resolveExplain(it.Kind, autoRan)
+		what, fix := resolveExplain(it.Kind)
 		// A config fetched over the Admin API has no source file, so there is no
 		// line to cite; naming one would just be wrong.
 		if it.Line > 0 {
@@ -509,62 +505,44 @@ func printResolveSummary(w io.Writer, s translator.ResolveSummary, outputDir str
 		}
 		fmt.Fprintf(w, "        %s\n", what)
 		fmt.Fprintf(w, "        %s\n", fix)
-		if autoFixable && !autoRan {
-			autoAny = true
-			if it.Line > 0 {
-				autoLines = append(autoLines, it.Line)
-			}
-		} else {
-			youAny = true
-			if it.Line > 0 {
-				youLines = append(youLines, it.Line)
-			}
+		if it.Line > 0 {
+			youLines = append(youLines, it.Line)
 		}
 	}
 
 	fmt.Fprintln(w)
-	if autoAny {
-		if len(autoLines) > 0 {
-			fmt.Fprintf(w, "Run with --auto to convert line(s) %s for you (keystore -> PEM).\n", joinInts(autoLines))
-		} else {
-			fmt.Fprintln(w, "Run with --auto to convert the keystore(s) to PEM for you.")
-		}
-	}
-	if youAny {
+	if len(s.Items) > 0 {
 		if len(youLines) > 0 {
-			fmt.Fprintf(w, "Line(s) needing you: %s -- edit the >>>>>>> block in the file.\n", joinInts(youLines))
+			fmt.Fprintf(w, "Line(s) needing you: %s -- follow the Fix line for each, above.\n", joinInts(youLines))
 		} else {
-			fmt.Fprintln(w, "Edit the >>>>>>> block(s) in the file for the setting(s) above.")
+			fmt.Fprintln(w, "Follow the Fix line for each setting above.")
 		}
 	}
 	fmt.Fprintf(w, "Then re-run the same command:\n  tibftlimportconfig -output-dir %s %s\n", outputDir, brokerPath)
 }
 
-// resolveExplain returns, for a resolve kind, a one-line "what's wrong", a one-line
-// "fix", and whether --auto can do it. autoRan tweaks the keystore wording (--auto
-// already tried but the .jks wasn't on this host).
-func resolveExplain(kind translator.ResolveKind, autoRan bool) (what, fix string, autoFixable bool) {
+// resolveExplain returns, for a resolve kind, a one-line "what's wrong" and a
+// one-line "fix". Every kind is the operator's to settle: a keystore by running the
+// keytool/openssl commands the file carries, the rest by editing its >>>>>>> block.
+func resolveExplain(kind translator.ResolveKind) (what, fix string) {
 	switch kind {
 	case translator.KindKeystore:
-		what = "a Java keystore (JKS/PKCS12); FSK reads PEM only."
-		if autoRan {
-			return what, "Fix: --auto couldn't here (file not on this host). Run --auto where the .jks is, or use the commands in the block.", true
-		}
-		return what, "Fix: run with --auto to convert it, or run the keytool/openssl commands in the block.", true
+		return "a Java keystore (JKS/PKCS12); FSK reads PEM only.",
+			"Fix: run the keytool/openssl commands in the block to create the .pem."
 	case translator.KindHandler:
 		return "a custom Java callback class FSK can't run.",
-			"Fix: in the block, set a backend (oauth/file/inline) and fill its params.", false
+			"Fix: in the block, set a backend (oauth/file/inline) and fill its params."
 	case translator.KindBackendParams:
 		return "a backend is selected but its params are missing.",
-			"Fix: in the block, fill the params (oauth: jwks url + issuer + audience; inline: jaas users).", false
+			"Fix: in the block, fill the params (oauth: jwks url + issuer + audience; inline: jaas users)."
 	case translator.KindMechanism:
 		return "a SASL mechanism FSK can't serve (it serves PLAIN and OAUTHBEARER only).",
-			"Fix: in the block, switch this listener to PLAIN or OAUTHBEARER.", false
+			"Fix: in the block, switch this listener to PLAIN or OAUTHBEARER."
 	case translator.KindAuthorizer:
 		return "a custom authorizer; FSK supports the standard one.",
-			"Fix: in the block, set the value to: " + translator.AuthorizerCanonical + ".", false
+			"Fix: in the block, set the value to: " + translator.AuthorizerCanonical + "."
 	}
-	return "", "", false
+	return "", ""
 }
 
 // joinInts formats line numbers as "45, 49".

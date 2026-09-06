@@ -263,7 +263,7 @@ func emitKeystoreConversion(f *os.File, cfg *BrokerConfig, k string) {
 	fmt.Fprintf(f, "# FSK reads PEM, not a %s %s, so this and %s were rewritten below.\n",
 		kc.FromType, kc.Kind, kc.LocKey)
 	fmt.Fprintf(f, "# Creating the .pem is a real conversion, NOT a rename. Run it before starting\n")
-	fmt.Fprintf(f, "# tibftlserver (or re-run tibftlimportconfig with --auto to run it for you):\n")
+	fmt.Fprintf(f, "# tibftlserver:\n")
 	for _, cmd := range kc.Commands() {
 		fmt.Fprintf(f, "#   %s\n", cmd)
 	}

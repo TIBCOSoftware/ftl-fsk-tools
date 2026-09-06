@@ -13,6 +13,11 @@ import (
 	"strings"
 )
 
+// The -auto flag is currently hidden: it is still registered in main.go and still works
+// if typed, but it appears in no flag group in help.go and nothing the tool prints
+// suggests it. This file is kept intact for when we expose it again. See main.go where
+// the flag is declared.
+//
 // --auto runs only the deterministic, mechanical conversions: it converts JKS/PKCS12
 // keystores to PEM via keytool/openssl, so the .pem the config already names really
 // exists. It does NOT make judgment calls -- it never picks a handler backend (the

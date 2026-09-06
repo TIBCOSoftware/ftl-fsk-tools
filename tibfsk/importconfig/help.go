@@ -102,12 +102,11 @@ var flagGroups = []flagGroup{
 	},
 	{
 		name:  "info",
-		title: "Inspection and conversion flags",
-		blurb: "property listing, colorization, automatic keystore conversion",
+		title: "Inspection flags",
+		blurb: "property listing and its colorization",
 		flags: []string{
 			"list-properties",
 			"color",
-			"auto",
 		},
 	},
 }
@@ -118,7 +117,6 @@ var commonFlags = []string{
 	"output-dir",
 	"data-dir",
 	"core-servers",
-	"auto",
 	"list-properties",
 }
 

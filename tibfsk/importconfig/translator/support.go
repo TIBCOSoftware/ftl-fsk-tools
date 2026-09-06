@@ -92,7 +92,7 @@ var propSections = []struct {
 			{"ssl.keystore.type", DispTranslate,
 				"PEM is accepted directly. A Java keystore (JKS or PKCS12) is rewritten to PEM, along with " +
 					"ssl.keystore.location, and the generated file carries the keytool/openssl commands that " +
-					"produce the .pem -- run those (or use --auto) before starting tibftlserver."},
+					"produce the .pem -- run those before starting tibftlserver."},
 			{"ssl.truststore.location", DispAccept,
 				"CA bundle used to verify inbound client certificates when the listener is mutual-TLS. Honored."},
 			{"ssl.truststore.password", DispAccept,
