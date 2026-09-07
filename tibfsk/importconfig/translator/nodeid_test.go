@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// A ZooKeeper-mode broker (Kafka 3.9 and earlier) names its identity broker.id.
+// A ZooKeeper-mode broker (Apache Kafka 3.9 and earlier) names its identity broker.id.
 // FSK reads node.id and refuses to start without it, so the key has to be renamed
 // on the way through -- and must not also turn up in unsupported.properties.
 func TestBrokerIDBecomesNodeID(t *testing.T) {
@@ -57,7 +57,7 @@ func TestNodeIDWinsOverBrokerID(t *testing.T) {
 	}
 }
 
-// The pserver rejects a missing or negative node.id. Kafka permits both -- a KRaft
+// The pserver rejects a missing or negative node.id. Apache Kafka permits both -- a KRaft
 // file can leave the id to `kafka-storage format`, and broker.id=-1 asks a
 // ZooKeeper broker to generate one -- so the tool fills them in, without colliding
 // with an id another broker already holds.

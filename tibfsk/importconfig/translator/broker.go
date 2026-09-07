@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// ListenerDef represents one named Kafka listener (bind side + advertised side).
+// ListenerDef represents one named Apache Kafka listener (bind side + advertised side).
 type ListenerDef struct {
 	Name         string // canonical upper-case name, e.g. PLAINTEXT, BROKER, CONTROLLER
 	BindAddr     string // bind address (0.0.0.0 or specific IP)
@@ -78,7 +78,7 @@ type BrokerConfig struct {
 	KeystoreConversions []KeystoreConversion
 }
 
-// ParseBrokerConfig reads a Kafka broker server.properties file.
+// ParseBrokerConfig reads an Apache Kafka broker server.properties file.
 func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -134,14 +134,14 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 	// controller.listener.names from listeners, advertised.listeners, and
 	// listener.security.protocol.map before cfg.Listeners is built, so
 	// cfg.Listeners and its derived fields (IsSecure, KOFHost/KOFPort) hold
-	// only the listeners Kafka clients connect to. Removed entries are
+	// only the listeners Apache Kafka clients connect to. Removed entries are
 	// recorded on cfg for the unsupported.properties report.
 	internalListeners := map[string]bool{}
 	for n := range controllerSet {
 		internalListeners[n] = true
 	}
 	// Unlike a controller listener, the inter-broker listener is a normal entry in
-	// listeners that Kafka clients may also connect to, and pointing
+	// listeners that Apache Kafka clients may also connect to, and pointing
 	// inter.broker.listener.name at the only client listener is a common setup.
 	// Treat it as internal only when another client listener remains; otherwise
 	// stripping it would leave cfg.Listeners empty and silently clear IsSecure.
@@ -249,7 +249,7 @@ func ParseBrokerConfig(path string) (*BrokerConfig, error) {
 // renameBrokerID moves a ZooKeeper-era broker.id onto node.id, in place, and
 // reports whether it did.
 //
-// A ZooKeeper-mode broker (Kafka 3.9 and earlier) names its identity broker.id;
+// A ZooKeeper-mode broker (Apache Kafka 3.9 and earlier) names its identity broker.id;
 // KRaft renamed the key to node.id, and node.id is the only spelling the FSK
 // pserver accepts -- without it tibftlserver refuses to start with
 // "kof.broker.properties: node.id is required and must be a non-negative integer".
@@ -288,7 +288,7 @@ func renameBrokerID(raw map[string]string, orderedKeys []string, lines map[strin
 // written.
 //
 // The FSK pserver rejects a broker properties file with no node.id, and rejects a
-// negative one. Kafka allows both: a KRaft server.properties may omit the key when
+// negative one. Apache Kafka allows both: a KRaft server.properties may omit the key when
 // the id is passed to `kafka-storage format` instead, and a ZooKeeper one may set
 // broker.id=-1 to ask the broker to generate its own. Either way the generated file
 // would not boot, so each such broker is given the lowest positive id no other
@@ -515,7 +515,7 @@ func parsePerListenerClientAuth(raw map[string]string) map[string]bool {
 	return m
 }
 
-// deriveAuthMethod maps Kafka protocol + SASL mechanism + client-auth flag to an AuthMethod string.
+// deriveAuthMethod maps Apache Kafka protocol + SASL mechanism + client-auth flag to an AuthMethod string.
 // hasOtherClientListener reports whether listeners declares a non-controller
 // listener other than exclude.
 func hasOtherClientListener(listeners string, controllerSet map[string]bool, exclude string) bool {

@@ -6,7 +6,7 @@ sidebar_label: Getting Started
 
 # Getting Started with `tibftlimportconfig`
 
-`tibftlimportconfig` converts Kafka broker `server.properties` files into the FTL artifacts
+`tibftlimportconfig` converts Apache Kafka broker `server.properties` files into the FTL artifacts
 needed to run a FSK-enabled FTL Server cluster. Pass one properties file per broker; the
 tool generates:
 
@@ -39,18 +39,18 @@ requires no Go toolchain and no build step. Put it on your `PATH`, or invoke it 
 export PATH=/path/to/ftl-fsk-tools/tibfsk/importconfig/bin:$PATH
 ```
 
-**`KAFKA_HOME`.** The Kafka commands assume a Kafka 4.x installation. Scenarios 3 and 4 are the
-exception: they run Kafka in ZooKeeper mode, which was removed in Kafka 4.x. Those two therefore
-require `KAFKA_HOME` to point at a Kafka 3.9 or earlier installation.
+**`KAFKA_HOME`.** The Apache Kafka commands assume an Apache Kafka 4.x installation. Scenarios 3 and 4 are the
+exception: they run Apache Kafka in ZooKeeper mode, which was removed in Apache Kafka 4.x. Those two therefore
+require `KAFKA_HOME` to point at an Apache Kafka 3.9 or earlier installation.
 
 ```bash
 export KAFKA_HOME=/opt/kafka
 ```
 
-**Clear any inherited `CLASSPATH`.** `kafka-run-class.sh` *appends* Kafka's own `libs/` to whatever
+**Clear any inherited `CLASSPATH`.** `kafka-run-class.sh` *appends* Apache Kafka's own `libs/` to whatever
 `CLASSPATH` your shell already exports, so those jars are searched first and can shadow the ones
-Kafka ships — an older `snakeyaml` or `jackson-dataformat-yaml` is enough to kill the broker before
-it reads a line of your `server.properties`. Start Kafka from a shell where the variable is unset:
+Apache Kafka ships — an older `snakeyaml` or `jackson-dataformat-yaml` is enough to kill the broker before
+it reads a line of your `server.properties`. Start Apache Kafka from a shell where the variable is unset:
 
 ```bash
 unset CLASSPATH
@@ -64,13 +64,13 @@ The simplest possible configuration: one broker, no authentication, no TLS. Use 
 for local development and tool exploration only.
 
 :::tip Already running a single-node KRaft broker?
-Steps 1 and 2 only set up and start the example broker. If you already have a running Kafka
+Steps 1 and 2 only set up and start the example broker. If you already have a running Apache Kafka
 broker or brokers, skip them and start at **Step 3 — Stop Apache Kafka**, then hand your own
 `server.properties` to the tool in Step 4 instead of `server-1.properties`. The tool reads the
 file; it never contacts the running broker.
 :::
 
-### Step 1 — Kafka server.properties
+### Step 1 — Apache Kafka server.properties
 
 Save this as **`server-1.properties`**, in the directory you will work from. Step 2 formats and
 starts the broker with it, and Step 4 passes that same file to `tibftlimportconfig` by name.
@@ -113,7 +113,7 @@ LOG_DIR="/var/tmp/kafka/scenario1/logs/broker-1" \
   "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
 ```
 
-`LOG_DIR` sends the broker's own `server.log` somewhere you can write. Without it Kafka puts it
+`LOG_DIR` sends the broker's own `server.log` somewhere you can write. Without it Apache Kafka puts it
 under `$KAFKA_HOME/logs`, which needs write access to the installation directory. `-daemon` is a
 plain `nohup ... &` with no PID file; stdout and stderr land in `$LOG_DIR/kafkaServer.out`, which
 is the first place to look if the broker does not come up.
@@ -189,10 +189,10 @@ as it was passed, so `kof-output/ftlserver.json` resolves against the working di
 against the YAML's own location — `cd kof-output` first and the server will not find its realm.
 
 No realm upload step: the YAML points `initial.realm.config` at the generated `ftlserver.json`, so the
-server seeds the realm itself on first startup. Kafka clients can now connect to `localhost:9092`
+server seeds the realm itself on first startup. Apache Kafka clients can now connect to `localhost:9092`
 as before.
 
-Confirm both halves are up — the FTL Server, then the Kafka port it now serves:
+Confirm both halves are up — the FTL Server, then the Apache Kafka port it now serves:
 
 ```bash
 FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone.yaml)"
@@ -212,7 +212,7 @@ now answered by FSK.
 
 ### Step 6 — Shut down the FTL Server
 
-Nothing carries over to the next scenario, so stop the FTL Server: it is holding both the realm port and the Kafka port the next scenario wants.
+Nothing carries over to the next scenario, so stop the FTL Server: it is holding both the realm port and the Apache Kafka port the next scenario wants.
 
 ```bash
 FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone.yaml)"
@@ -235,7 +235,7 @@ Scale out to a 3-broker KRaft cluster. Pass one `server.properties` file per bro
 the tool derives the FTL Server count from the file count.
 
 :::tip Already running a 3-node KRaft cluster?
-Steps 1–3 only set up and start the three example brokers. If you already have a running Kafka
+Steps 1–3 only set up and start the three example brokers. If you already have a running Apache Kafka
 broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
 three `server.properties` files to the tool in Step 5. The tool reads the files; it never
 contacts the running brokers.
@@ -338,7 +338,7 @@ The three FTL Servers take over ports 9092, 9102 and 9112, so the brokers have t
 "$KAFKA_HOME/bin/kafka-server-stop.sh"
 ```
 
-One call stops all three. Kafka writes no PID files: `kafka-server-stop.sh` runs
+One call stops all three. Apache Kafka writes no PID files: `kafka-server-stop.sh` runs
 `ps ax | grep ' kafka.Kafka '` and sends `SIGTERM` to every match, which is every broker JVM on the
 host — including any belonging to a cluster you did not start here. It prints `No kafka server to
 stop` and exits 1 when it finds none. To take down a single broker, name it:
@@ -419,7 +419,7 @@ Status:                   online
 ```
 
 One block per FTL Server, each with its own `Status:`, and a single `Leader:` above them — so a
-member that never joined shows up as a missing block rather than as silence. The Kafka side is
+member that never joined shows up as a missing block rather than as silence. The Apache Kafka side is
 the same three-broker check as before, now answered by the FTL Servers:
 
 ```bash
@@ -429,7 +429,7 @@ the same three-broker check as before, now answered by the FTL Servers:
 
 ### Step 7 — Shut down the FTL Servers
 
-Nothing carries over to the next scenario, so stop the FTL Servers: between them they hold the realm port and all three Kafka ports the next scenario wants.
+Nothing carries over to the next scenario, so stop the FTL Servers: between them they hold the realm port and all three Apache Kafka ports the next scenario wants.
 
 ```bash
 FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster.yaml)"
@@ -448,12 +448,12 @@ or skip to [Scenario 5](#scenario-5--single-node-sasl-plain-over-tls) to start a
 
 ## Scenario 3 — Single-node plaintext (ZooKeeper)
 
-Kafka 3.9 and earlier keep their cluster metadata in ZooKeeper rather than in a KRaft quorum.
+Apache Kafka 3.9 and earlier keep their cluster metadata in ZooKeeper rather than in a KRaft quorum.
 The conversion is the same work — `tibftlimportconfig` reads the same file and writes the same
 artifacts — but two things differ from Scenario 1, and both are worth seeing before you convert a
 real ZooKeeper cluster.
 
-**FSK has no ZooKeeper.** The cluster membership and metadata ZooKeeper holds for Kafka are
+**FSK has no ZooKeeper.** The cluster membership and metadata ZooKeeper holds for Apache Kafka are
 FTL-native, so every `zookeeper.*` key is routed to `unsupported.properties`. Nothing is lost
 in the translation; there is simply nothing for FSK to do with them.
 
@@ -461,21 +461,21 @@ in the translation; there is simply nothing for FSK to do with them.
 `node.id`. FSK reads `node.id` only, so the tool renames it on the way through and records
 where the value came from.
 
-:::note Kafka 4.x cannot run this scenario
-ZooKeeper support was removed in Kafka 4.0, so a 4.x installation ships no
-`zookeeper-server-start.sh`. Point `KAFKA_HOME` at Kafka 3.9 or earlier for Scenarios 3 and 4. The
-*conversion* works whatever Kafka version is installed — only starting the brokers needs the
+:::note Apache Kafka 4.x cannot run this scenario
+ZooKeeper support was removed in Apache Kafka 4.0, so a 4.x installation ships no
+`zookeeper-server-start.sh`. Point `KAFKA_HOME` at Apache Kafka 3.9 or earlier for Scenarios 3 and 4. The
+*conversion* works whatever Apache Kafka version is installed — only starting the brokers needs the
 older release.
 :::
 
 :::tip Already running a single-node ZooKeeper broker?
 Steps 1 and 2 only set up and start the example broker and its ZooKeeper. If you already have a
-running Kafka broker or brokers, skip them and start at **Step 3 — Stop Apache Kafka and
+running Apache Kafka broker or brokers, skip them and start at **Step 3 — Stop Apache Kafka and
 ZooKeeper**, then hand your own `server.properties` to the tool in Step 4. Only starting the
-example broker needs Kafka 3.9 or earlier; the conversion itself works whatever version you run.
+example broker needs Apache Kafka 3.9 or earlier; the conversion itself works whatever version you run.
 :::
 
-### Step 1 — Kafka server.properties
+### Step 1 — Apache Kafka server.properties
 
 Save this as **`server-1.properties`**, in the directory you will work from. Step 2 starts the
 broker with it, and Step 4 passes that same file to `tibftlimportconfig` by name.
@@ -605,7 +605,7 @@ cluster metadata itself.
 
 ### Step 6 — Shut down the FTL Server
 
-Nothing carries over to the next scenario, so stop the FTL Server: it is holding both the realm port and the Kafka port the next scenario wants.
+Nothing carries over to the next scenario, so stop the FTL Server: it is holding both the realm port and the Apache Kafka port the next scenario wants.
 
 ```bash
 FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone.yaml)"
@@ -626,11 +626,11 @@ The command is asynchronous: it returns as soon as the server accepts the reques
 The ZooKeeper counterpart of Scenario 2. One ZooKeeper serves all three brokers, which differ only
 in `broker.id`, listener port and `log.dirs`.
 
-Kafka 3.9 or earlier is required here too, for the same reason as Scenario 3.
+Apache Kafka 3.9 or earlier is required here too, for the same reason as Scenario 3.
 
 :::tip Already running a 3-node ZooKeeper cluster?
 Steps 1–3 only set up and start ZooKeeper and the three example brokers. If you already have a
-running Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka and
+running Apache Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka and
 ZooKeeper**, then hand your own three `server.properties` files to the tool in Step 5.
 :::
 
@@ -772,7 +772,7 @@ other two join it. The cluster is available once two of the three are up.
 
 ### Step 7 — Shut down the FTL Servers
 
-Nothing carries over to the next scenario, so stop the FTL Servers: between them they hold the realm port and all three Kafka ports the next scenario wants.
+Nothing carries over to the next scenario, so stop the FTL Servers: between them they hold the realm port and all three Apache Kafka ports the next scenario wants.
 
 ```bash
 FTLS="http://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-cluster.yaml)"
@@ -793,7 +793,7 @@ The command is asynchronous: it returns as soon as the server accepts the reques
 Adds username/password authentication and TLS encryption. This is the most common
 starting point for non-production secured environments.
 
-Kafka uses JKS/PKCS12 keystores; FSK reads PEM. The tool rewrites `ssl.keystore.type` to
+Apache Kafka uses JKS/PKCS12 keystores; FSK reads PEM. The tool rewrites `ssl.keystore.type` to
 `PEM` and repoints `ssl.keystore.location` at the `.pem` path, then prints the exact
 commands that create that file — creating it is a real conversion, not a rename, and it
 is the one step below (Step 2) that the tool leaves to you.
@@ -803,7 +803,7 @@ is the one step below (Step 2) that the tool leaves to you.
 Two separate sets of certificates are in play, and mixing them up is the usual reason this
 scenario stalls.
 
-**The Kafka side — you create these.** A keystore holding the broker's certificate and its
+**The Apache Kafka side — you create these.** A keystore holding the broker's certificate and its
 private key, and a truststore holding the certificate authority that signed it. They have to be
 JKS or PKCS12, because that is all Apache Kafka reads, and the certificate's subject alternative
 name must cover the advertised host (`localhost` here) or clients reject the connection during the
@@ -822,18 +822,18 @@ nothing to generate for the realm service.
 | FTL Server certificate, key, CA | — | `server_cert.pem`, `server_key.pem`, `client_trust.pem` | shipped in `samples/yaml/tls-user` |
 | FTL realm user accounts | — | `users.txt` | shipped in `samples/yaml/tls-user` |
 
-No keystores yet? [Creating self-signed Kafka certificates](#creating-self-signed-kafka-certificates)
+No keystores yet? [Creating self-signed Apache Kafka certificates](#creating-self-signed-apache-kafka-certificates)
 produces the two this scenario names, with the passwords Step 1 expects.
 
 :::tip Already running a secured single-node broker?
-Steps 1 and 3 only set up and start the example broker. If you already have a running Kafka
+Steps 1 and 3 only set up and start the example broker. If you already have a running Apache Kafka
 broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
 `server.properties` to the tool in Step 5. **Step 2 still applies**: FSK reads PEM, so the `.pem`
 files have to exist before the FTL Server starts, even though your brokers are already running
 on JKS.
 :::
 
-### Step 1 — Kafka server.properties
+### Step 1 — Apache Kafka server.properties
 
 ```properties
 process.roles=broker,controller
@@ -914,7 +914,7 @@ LOG_DIR="/var/tmp/kafka/scenario5/logs/broker-1" \
   "$KAFKA_HOME/bin/kafka-server-start.sh" -daemon server-1.properties
 ```
 
-A plain `kafka-topics.sh --list` will not reach a SASL_SSL listener — every Kafka CLI needs the
+A plain `kafka-topics.sh --list` will not reach a SASL_SSL listener — every Apache Kafka CLI needs the
 truststore and the SASL credentials before it can complete the handshake. Save this as
 **client.properties**:
 
@@ -964,15 +964,15 @@ tibftlimportconfig \
 ```
 
 These four flags configure the **FTL** side — the realm service's own TLS and the accounts that
-may log in to it. They have nothing to do with the Kafka listener, which FSK serves using the PEMs
+may log in to it. They have nothing to do with the Apache Kafka listener, which FSK serves using the PEMs
 converted in Step 2 and named in `kof.broker.1.properties`. Taking them from the installed
-`tls-user` sample means the only certificates you create in this scenario are the Kafka ones.
+`tls-user` sample means the only certificates you create in this scenario are the Apache Kafka ones.
 `--tls-key-password` is required here because the sample `server_key.pem` is encrypted with the
 passphrase `password`.
 
 `--auth-users-file` supplies the FTL realm's own users file — the sample grants `admin` the
 `ftl-admin` role and `internal` the `ftl-internal` role, which is what the generated
-`ftlserver.properties` logs in as. The Kafka clients from the inline JAAS config are a separate
+`ftlserver.properties` logs in as. The Apache Kafka clients from the inline JAAS config are a separate
 list: the tool extracts them into `kafka-users.txt` in the output directory and layers both files
 into `auth.providers`. The tool writes a `tibftlserver-standalone-secure.yaml` alongside the plain
 standalone YAML whenever TLS or auth flags are supplied.
@@ -1025,7 +1025,7 @@ or jump to [Scenario 7](#scenario-7--3-node-sasl-plain-cluster) for a 3-node SAS
 
 ## Scenario 6 — Single-node OAuth2
 
-Replaces username/password authentication with OAuth 2.0 bearer tokens. Kafka clients
+Replaces username/password authentication with OAuth 2.0 bearer tokens. Apache Kafka clients
 present a JWT; the tool wires the OAUTHBEARER mechanism through to FSK's OAuth2
 provider.
 
@@ -1035,16 +1035,16 @@ This is the first scenario that cannot run entirely on material that ships with 
 OAuth2 deployment needs an authorization server, and only you know where yours is. The list is
 short, and everything not on it comes from the installed samples:
 
-1. **The Kafka keystore and truststore**, exactly as in Scenario 5 — JKS or PKCS12, SAN covering
+1. **The Apache Kafka keystore and truststore**, exactly as in Scenario 5 — JKS or PKCS12, SAN covering
    `localhost`, placed in `/var/tmp/kafka/scenario6/certs`.
-   [Creating self-signed Kafka certificates](#creating-self-signed-kafka-certificates) makes them.
+   [Creating self-signed Apache Kafka certificates](#creating-self-signed-apache-kafka-certificates) makes them.
 2. **The token endpoint URL** of your authorization server — `--oauth-token-url`, and the same URL
    in the broker's JAAS line in Step 1.
 3. **The JWKS URL**, or a local validation key file — `--oauth-jwks-url`. FSK validates incoming
    tokens against this; it accepts a `file:` path as well as a URL.
 4. **A client ID and secret for FSK itself** — `--oauth-client-id` and `--oauth-client-secret`.
    This is how the FTL Servers get their own tokens for server-to-server traffic.
-5. **A client ID and secret for the Kafka broker** — only for Step 1, and only until the broker is
+5. **A client ID and secret for the Apache Kafka broker** — only for Step 1, and only until the broker is
    retired at the end of the scenario.
 6. **The Strimzi OAuth callback jars**, on the broker's classpath in Step 2. Apache Kafka has no
    built-in OAUTHBEARER validator; FSK does, and needs no jar.
@@ -1061,12 +1061,12 @@ authorization server to hand? Run [Scenario 5](#scenario-5--single-node-sasl-pla
 instead; it needs nothing but the two keystores.
 
 :::tip Already running a single-node broker with OAuth2?
-Steps 1 and 2 only set up and start the example broker. If you already have a running Kafka
+Steps 1 and 2 only set up and start the example broker. If you already have a running Apache Kafka
 broker or brokers, skip them and start at **Step 3 — Stop Apache Kafka**, then hand your own
 `server.properties` to the tool in Step 4.
 :::
 
-### Step 1 — Kafka server.properties
+### Step 1 — Apache Kafka server.properties
 
 ```properties
 process.roles=broker,controller
@@ -1151,12 +1151,12 @@ tibftlimportconfig \
 ```
 
 The four TLS and auth flags come from the installed sample, exactly as in Scenario 5 — they
-configure the realm service, not the Kafka listener. The four `--oauth-*` flags are the values
+configure the realm service, not the Apache Kafka listener. The four `--oauth-*` flags are the values
 from the list above.
 
 `--auth-users-file` is not strictly required here, and the scenario would work without it: FSK
 would then validate every caller, administrators included, by OAuth2 token. Passing it costs
-nothing and writes `auth.providers: file:…,oauth2`, so Kafka clients still authenticate by token
+nothing and writes `auth.providers: file:…,oauth2`, so Apache Kafka clients still authenticate by token
 while `tibftladmin` can use the sample's `admin`/`admin-pw` account — which is one fewer token to
 mint every time you want to look at the server. Drop the flag if you would rather prove the
 token path end to end.
@@ -1214,11 +1214,11 @@ JAAS users.
 
 One item, and it is the one you already made:
 
-1. **The Kafka keystore and truststore.** All three brokers are `localhost`, so the single
+1. **The Apache Kafka keystore and truststore.** All three brokers are `localhost`, so the single
    certificate pair from [Scenario 5](#scenario-5--single-node-sasl-plain-over-tls) serves the
    whole cluster — keep `/var/tmp/kafka/scenario5/certs` in the `ssl.*` lines of all three files,
    including the `.pem` copies. Starting fresh?
-   [Creating self-signed Kafka certificates](#creating-self-signed-kafka-certificates) makes them.
+   [Creating self-signed Apache Kafka certificates](#creating-self-signed-apache-kafka-certificates) makes them.
 
 The FTL Servers' own certificate, key, CA and user accounts come from
 `/opt/tibco/ftl/current-version/samples/yaml/tls-user`, so there is nothing else to create. A
@@ -1227,7 +1227,7 @@ one certificate whose SAN lists every advertised name.
 
 :::tip Already running a 3-node SASL/PLAIN cluster?
 Steps 1 and 2 only describe and start the three example brokers. If you already have a running
-Kafka broker or brokers, skip them and start at **Step 3 — Stop Apache Kafka**, then hand your
+Apache Kafka broker or brokers, skip them and start at **Step 3 — Stop Apache Kafka**, then hand your
 own three `server.properties` files to the tool in Step 4. Whatever `.pem` files your configuration
 names still have to exist before the FTL Servers start — see Scenario 5, Step 2 if yours are
 Java keystores.
@@ -1327,7 +1327,7 @@ the FTL side does not change with the size of the cluster.
 
 The tool reads the inline JAAS `user_X` entries from each broker's properties and writes them to
 `kafka-users.txt` in `--output-dir`, which `auth.providers` lists after the sample `users.txt` —
-Kafka client principals in one file, FTL accounts in the other. Leave `--auth-users-file` out and
+Apache Kafka client principals in one file, FTL accounts in the other. Leave `--auth-users-file` out and
 the tool generates a third file, `ftl-users.txt`, to give the servers accounts of their own.
 
 ### Step 5 — Start the FTL Servers
@@ -1366,7 +1366,7 @@ authentication.**
 
 ## Scenario 8 — 3-node mutual TLS (mTLS)
 
-Client certificates replace username/password. The Kafka `SSL` listener with
+Client certificates replace username/password. The Apache Kafka `SSL` listener with
 `ssl.client.auth=required` maps to FSK's `tls-only` auth mode with
 `tls.server.trust.file`.
 
@@ -1374,7 +1374,7 @@ Client certificates replace username/password. The Kafka `SSL` listener with
 
 Still one item, because FTL ships a complete mTLS sample:
 
-1. **The Kafka keystore and truststore.** Same pair as Scenario 5, reused unchanged — with
+1. **The Apache Kafka keystore and truststore.** Same pair as Scenario 5, reused unchanged — with
    `ssl.client.auth=required` the truststore takes on a second job, since it is now also the CA
    against which the broker verifies *client* certificates. A self-signed pair works for this
    scenario because the same certificate signs both sides.
@@ -1397,13 +1397,13 @@ authenticates and is then refused everything.
 
 :::tip Already running a 3-node mTLS cluster?
 Steps 1–3 only describe and start the three example brokers. If you already have a running
-Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
+Apache Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
 three `server.properties` files to the tool in Step 5. Whatever `.pem` files your configuration
 names still have to exist before the FTL Servers start — see Scenario 5, Step 2 if yours are
 Java keystores.
 :::
 
-### Step 1 — Kafka server.properties highlights
+### Step 1 — Apache Kafka server.properties highlights
 
 ```properties
 inter.broker.listener.name=MTLS
@@ -1557,7 +1557,7 @@ clients use OAUTHBEARER. FSK runs both auth providers concurrently.
 
 Scenario 7's list plus Scenario 6's, with nothing new of its own:
 
-1. **The Kafka keystore and truststore** — Scenario 5's pair, reused unchanged.
+1. **The Apache Kafka keystore and truststore** — Scenario 5's pair, reused unchanged.
 2. **The authorization server values** — token endpoint, JWKS URL, and a client ID and secret for
    FSK, exactly as itemised under
    [Scenario 6](#what-you-must-supply--oauth2). The broker additionally needs its own client
@@ -1570,13 +1570,13 @@ is not optional here the way it is in Scenario 6.
 
 :::tip Already running a 3-node SASL/PLAIN + OAuth2 cluster?
 Steps 1–3 only describe and start the three example brokers. If you already have a running
-Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
+Apache Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
 three `server.properties` files to the tool in Step 5. Whatever `.pem` files your configuration
 names still have to exist before the FTL Servers start — see Scenario 5, Step 2 if yours are
 Java keystores.
 :::
 
-### Step 1 — Kafka server.properties highlights
+### Step 1 — Apache Kafka server.properties highlights
 
 ```properties
 inter.broker.listener.name=INTERNAL
@@ -1593,7 +1593,7 @@ listener.name.oauth.oauthbearer.sasl.server.callback.handler.class=io.strimzi.ka
 ```
 
 `INTERNAL` exists only to carry inter-broker traffic, on an SSL listener of its own. Naming one of
-the two client listeners there would work for Kafka, but the tool would then read that listener as
+the two client listeners there would work for Apache Kafka, but the tool would then read that listener as
 internal and leave it out of the generated broker properties — and a scenario about serving SASL/PLAIN
 and OAUTHBEARER side by side would end up with one client port. `INTERNAL` is dropped instead,
 which is what you want, and both client listeners come through.
@@ -1731,8 +1731,8 @@ mTLS listener.
 
 One item, the same as Scenario 8:
 
-1. **The Kafka keystore and truststore** — Scenario 5's pair, reused unchanged. The truststore is
-   what the `MTLS` listener checks Kafka clients against, so in a real deployment it holds the CA
+1. **The Apache Kafka keystore and truststore** — Scenario 5's pair, reused unchanged. The truststore is
+   what the `MTLS` listener checks Apache Kafka clients against, so in a real deployment it holds the CA
    that issued their certificates rather than the broker's own.
 
 Everything on the FTL side is shipped. This scenario draws on **both** sample directories, because
@@ -1749,13 +1749,13 @@ Everything on the FTL side is shipped. This scenario draws on **both** sample di
 
 :::tip Already running a 3-node SASL/PLAIN + mTLS cluster?
 Steps 1–3 only describe and start the three example brokers. If you already have a running
-Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
+Apache Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
 three `server.properties` files to the tool in Step 5. Whatever `.pem` files your configuration
 names still have to exist before the FTL Servers start — see Scenario 5, Step 2 if yours are
 Java keystores.
 :::
 
-### Step 1 — Kafka server.properties highlights
+### Step 1 — Apache Kafka server.properties highlights
 
 ```properties
 inter.broker.listener.name=INTERNAL
@@ -1891,7 +1891,7 @@ OAUTHBEARER for token-bearing clients.
 
 ### What you must supply — mTLS + OAuth2
 
-1. **The Kafka keystore and truststore** — Scenario 5's pair, reused unchanged.
+1. **The Apache Kafka keystore and truststore** — Scenario 5's pair, reused unchanged.
 2. **The authorization server values** — token endpoint, JWKS URL, and a client ID and secret for
    FSK, as itemised under [Scenario 6](#what-you-must-supply--oauth2). The broker needs its own
    client credentials and the Strimzi callback jars on top of that.
@@ -1903,13 +1903,13 @@ in [Scenario 8](#what-you-must-supply--mtls). No users file is passed: the tool 
 
 :::tip Already running a 3-node mTLS + OAuth2 cluster?
 Steps 1–3 only describe and start the three example brokers. If you already have a running
-Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
+Apache Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
 three `server.properties` files to the tool in Step 5. Whatever `.pem` files your configuration
 names still have to exist before the FTL Servers start — see Scenario 5, Step 2 if yours are
 Java keystores.
 :::
 
-### Step 1 — Kafka server.properties highlights
+### Step 1 — Apache Kafka server.properties highlights
 
 ```properties
 inter.broker.listener.name=INTERNAL
@@ -2057,7 +2057,7 @@ them.
 
 The union of Scenarios 7, 8 and 6, and still only two things of your own:
 
-1. **The Kafka keystore and truststore** — Scenario 5's pair, reused unchanged.
+1. **The Apache Kafka keystore and truststore** — Scenario 5's pair, reused unchanged.
 2. **The authorization server values** — token endpoint, JWKS URL, and a client ID and secret for
    FSK, as itemised under [Scenario 6](#what-you-must-supply--oauth2), plus the broker's own client
    credentials and the Strimzi callback jars.
@@ -2068,13 +2068,13 @@ SASL/PLAIN listener.
 
 :::tip Already running a 3-node SASL/PLAIN + mTLS + OAuth2 cluster?
 Steps 1–3 only describe and start the three example brokers. If you already have a running
-Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
+Apache Kafka broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
 three `server.properties` files to the tool in Step 5. Whatever `.pem` files your configuration
 names still have to exist before the FTL Servers start — see Scenario 5, Step 2 if yours are
 Java keystores.
 :::
 
-### Step 1 — Kafka server.properties highlights
+### Step 1 — Apache Kafka server.properties highlights
 
 ```properties
 inter.broker.listener.name=INTERNAL
@@ -2193,7 +2193,7 @@ three mechanisms are active at once, so a client that authenticates by any one o
 
 ### Step 7 — Shut down the FTL Servers
 
-The last scenario, so nothing follows this cluster — but leaving it running keeps three Kafka ports
+The last scenario, so nothing follows this cluster — but leaving it running keeps three Apache Kafka ports
 and a realm port occupied. The `-secure` YAML puts TLS and authentication on the realm service,
 so stopping it needs `https://`, a trust flag and an account holding the `ftl-admin` role.
 
@@ -2378,10 +2378,10 @@ Combine the flags of [example 12](#12--9-broker-full-security-stack-3-shards) wi
 
 ---
 
-## Creating self-signed Kafka certificates
+## Creating self-signed Apache Kafka certificates
 
 [Scenario 5](#scenario-5--single-node-sasl-plain-over-tls) and the secured scenarios after it
-need a Kafka keystore and truststore that you supply. If you have none, these commands produce
+need an Apache Kafka keystore and truststore that you supply. If you have none, these commands produce
 the pair those scenarios name, with the passwords their `server.properties` expects. This is a
 demo PKI — one self-signed certificate acting as its own authority, no CA hierarchy, no
 revocation. Do not model a production deployment on it.
@@ -2399,7 +2399,7 @@ keytool -genkeypair -alias kafka-server \
   -storepass keystorePassword123 -keypass keyPassword123
 ```
 
-`SAN` is the part that matters and the part most often left out: a Kafka client verifies the
+`SAN` is the part that matters and the part most often left out: an Apache Kafka client verifies the
 hostname it dialled against the certificate's subject alternative name, not against `CN`. The
 scenarios advertise `localhost`, so `DNS:localhost` has to be in there. Advertising a real
 hostname means naming that hostname instead.
@@ -2424,7 +2424,7 @@ keytool -importcert -noprompt -alias kafka-server \
   -storepass truststorePassword123
 ```
 
-`-storepass` here is `ssl.truststore.password` in Step 1. Kafka clients need this truststore too —
+`-storepass` here is `ssl.truststore.password` in Step 1. Apache Kafka clients need this truststore too —
 it is what `ssl.truststore.location` points at in the `client.properties` of Step 3.
 
 ### 3. The PEM copies FSK reads

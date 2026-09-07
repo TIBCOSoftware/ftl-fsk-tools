@@ -24,7 +24,7 @@ var section1Keys = map[string]bool{
 	"sasl.enabled.mechanisms":         true,
 	"plain.connections.max.reauth.ms": true,
 	// per-mechanism (OAUTHBEARER) listener-scoped reauth deadline; the mechanism name
-	// is the lowercase Kafka spelling. The non-Kafka "oauth2." form is deliberately not
+	// is the lowercase Apache Kafka spelling. The non-Kafka "oauth2." form is deliberately not
 	// accepted (the runtime rejects it), matching kofbroker/whitelist.go.
 	"oauthbearer.connections.max.reauth.ms": true,
 	"authorizer.class.name":                 true,

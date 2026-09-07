@@ -10,7 +10,7 @@ import "strings"
 // A security setting can be present without being in use: an empty
 // authorizer.class.name is no authorizer, a keystore type with no location loads
 // nothing, and a SASL mechanism list means nothing on a broker whose listeners are
-// all PLAINTEXT. Kafka's own DescribeConfigs reports all three at their factory
+// all PLAINTEXT. Apache Kafka's own DescribeConfigs reports all three at their factory
 // defaults, so a plain unsecured broker fetched over the Admin API carries every one
 // of them.
 //
@@ -40,7 +40,7 @@ func inertReason(cfg *BrokerConfig, k string) string {
 	return ""
 }
 
-// keystoreLocation resolves the keystore file a .type key governs, following Kafka's
+// keystoreLocation resolves the keystore file a .type key governs, following Apache Kafka's
 // fallback between the per-listener and broker-wide forms: a listener that names no
 // location of its own uses the broker-wide one, and a broker-wide type can be the
 // type of a location only some listener names. It returns the key it would have come
@@ -86,7 +86,7 @@ func saslInUse(cfg *BrokerConfig, key string) bool {
 	matched := false
 	for _, ld := range cfg.Listeners {
 		if ld.IsController {
-			continue // controller traffic is FTL's in FSK, not a Kafka listener
+			continue // controller traffic is FTL's in FSK, not an Apache Kafka listener
 		}
 		if name != "" && !strings.EqualFold(ld.Name, name) {
 			continue
@@ -106,7 +106,7 @@ func saslInUse(cfg *BrokerConfig, key string) bool {
 	return !matched
 }
 
-// listenerProtocol reports the security protocol of ld. Kafka defaults a listener's
+// listenerProtocol reports the security protocol of ld. Apache Kafka defaults a listener's
 // protocol to its own name when listener.security.protocol.map does not name it, so
 // "listeners=SASL_SSL://..." with no map still resolves.
 func listenerProtocol(ld ListenerDef) string {

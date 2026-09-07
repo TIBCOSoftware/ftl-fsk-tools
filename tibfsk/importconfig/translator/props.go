@@ -355,7 +355,7 @@ func emitJavaKeystore(f *os.File, cfg *BrokerConfig, k, v string) {
 	fmt.Fprintln(f, resolveBandClose)
 }
 
-// emitAuthorizer rewrites authorizer.class.name. A recognized Kafka authorizer
+// emitAuthorizer rewrites authorizer.class.name. A recognized Apache Kafka authorizer
 // class is replaced with AuthorizerCanonical; FSK enforces the same ACL model.
 // Any other class is a custom Java authorizer FSK cannot run, so it is left with
 // no active value and the file is INVALID until the operator resolves it.

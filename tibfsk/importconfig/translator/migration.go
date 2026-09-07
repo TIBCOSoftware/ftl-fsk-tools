@@ -13,10 +13,10 @@ import (
 )
 
 // WriteMigrationConfig generates a kafka-to-kof.properties file in outputDir.
-// source.bootstrap.servers is populated from the advertised Kafka address of each
+// source.bootstrap.servers is populated from the advertised Apache Kafka address of each
 // input BrokerConfig (cfg.KOFHost:cfg.KOFPort).
 // target.bootstrap.servers uses <KOF-HOST-N> placeholders with the same ports,
-// since FSK pservers will run on different hosts but reuse the same Kafka listener port.
+// since FSK pservers will run on different hosts but reuse the same Apache Kafka listener port.
 // Users replace the placeholders with actual pserver hostnames before running the migration.
 func WriteMigrationConfig(cfgs []*BrokerConfig, outputDir string) error {
 	path := filepath.Join(outputDir, "kafka-to-kof.properties")

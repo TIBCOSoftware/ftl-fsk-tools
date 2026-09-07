@@ -13,7 +13,7 @@ import "strings"
 // status -- they are informational.
 
 // interBrokerKeys configure inter-broker or controller traffic. In FSK that
-// traffic uses the FTL servers' own connections, not a Kafka listener, so the
+// traffic uses the FTL servers' own connections, not an Apache Kafka listener, so the
 // ftlserver ignores these keys. The tool keeps them for reference and notes that
 // they are ignored.
 var interBrokerKeys = map[string]bool{

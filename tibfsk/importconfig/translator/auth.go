@@ -25,7 +25,7 @@ const (
 	BackendNone   AuthBackend = ""       // no configured credential source
 )
 
-// recognizedHandlers maps a known Kafka SASL server callback handler class to the
+// recognizedHandlers maps a known Apache Kafka SASL server callback handler class to the
 // backend it resolves to. Recognition is by exact class name -- we never run the
 // class. Only classes whose behavior FSK can reproduce natively are listed;
 // anything else is unrecognized and must be resolved by the operator.
@@ -157,7 +157,7 @@ func mechanismsUnservable(value string) bool {
 	return len(sup) == 0 && len(unsup) > 0
 }
 
-// recognizedAuthorizers are Kafka's built-in ACL authorizer classes. FSK
+// recognizedAuthorizers are Apache Kafka's built-in ACL authorizer classes. FSK
 // reproduces their ACL model natively. StandardAuthorizer is the KRaft-mode
 // authorizer; AclAuthorizer is the ZooKeeper-mode one; SimpleAclAuthorizer is the
 // older deprecated name. All enforce the same rules, so all map to AuthorizerCanonical.
@@ -192,7 +192,7 @@ func isAuthorizerKey(key string) bool {
 	return strings.EqualFold(key, "authorizer.class.name")
 }
 
-// resolveAuthorizer recognizes Kafka's built-in ACL authorizers (the ones FSK can
+// resolveAuthorizer recognizes Apache Kafka's built-in ACL authorizers (the ones FSK can
 // reproduce) and returns the canonical value to write for them. Any other class is
 // a custom Java authorizer FSK cannot run.
 func resolveAuthorizer(value string) (recognized bool, canonical string) {
@@ -207,13 +207,13 @@ func resolveAuthorizer(value string) (recognized bool, canonical string) {
 	return false, ""
 }
 
-// handlerClassSuffix is the Kafka key suffix that carries a SASL server callback
+// handlerClassSuffix is the Apache Kafka key suffix that carries a SASL server callback
 // handler class. It appears as the global "sasl.server.callback.handler.class" or
 // per-listener/per-mechanism "listener.name.<l>[.<mech>].sasl.server.callback.handler.class".
 const handlerClassSuffix = ".sasl.server.callback.handler.class"
 
 // isHandlerClassKey reports whether a property key carries a SASL callback handler
-// class -- the one Kafka key whose value is an opaque Java class name.
+// class -- the one Apache Kafka key whose value is an opaque Java class name.
 func isHandlerClassKey(key string) bool {
 	kl := strings.ToLower(key)
 	return kl == "sasl.server.callback.handler.class" || strings.HasSuffix(kl, handlerClassSuffix)
@@ -358,7 +358,7 @@ func backendParamHints(handlerKey string, be AuthBackend) []paramHint {
 }
 
 // parsePlainJaasUsers extracts inline user_<name>="<password>" entries from a
-// SASL/PLAIN jaas config value (Kafka form: `<ModuleClass> <flag> user_a="x" ...;`).
+// SASL/PLAIN jaas config value (Apache Kafka form: `<ModuleClass> <flag> user_a="x" ...;`).
 // Quote-aware so a password may contain spaces. The module's own
 // username=/password= and every other option are ignored. Returns index-aligned
 // users/passwords. This is the same grammar the runtime parser uses.

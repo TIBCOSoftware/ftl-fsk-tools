@@ -224,9 +224,9 @@ func writePrimaryYAML(path string, cfg *BrokerConfig, dataDir string, propsPaths
 	for _, c := range cores {
 		fmt.Fprintf(f, "    %s: %s\n", c.Name, c.Address)
 	}
-	// Auto-provisioned FTL server basic auth: present iff a Kafka listener is secured. The realm
+	// Auto-provisioned FTL server basic auth: present iff an Apache Kafka listener is secured. The realm
 	// authenticates the FTL servers against this tool-generated users file. This is the FTL
-	// servers' own login, separate from the Kafka listener security. The Kafka client users
+	// servers' own login, separate from the Apache Kafka listener security. The Apache Kafka client users
 	// (the inline JAAS user_X entries, materialized as kafka-users.txt) ride the same
 	// provider list as a second file: provider.
 	if authUsersFile != "" {

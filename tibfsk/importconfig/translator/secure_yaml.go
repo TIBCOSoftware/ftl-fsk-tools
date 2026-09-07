@@ -57,7 +57,7 @@ type SecureOpts struct {
 	// cluster YAML. Not an operator input; populated from the generated file.
 	KafkaUsersFile string
 
-	// mTLS — needed when a Kafka mTLS listener is present
+	// mTLS — needed when an Apache Kafka mTLS listener is present
 	TLSServerTrust       string // tls.server.trust.file — CA used to verify inbound client certs
 	TLSClientCert        string // tls.client.cert — cert presented when connecting to other FTL servers
 	TLSClientKey         string // tls.client.private.key

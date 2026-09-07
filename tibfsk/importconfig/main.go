@@ -3,7 +3,7 @@
  * All Rights Reserved.
  */
 
-// tibftlimportconfig translates one or more Kafka broker server.properties files into
+// tibftlimportconfig translates one or more Apache Kafka broker server.properties files into
 // the FTL artifacts needed to run a FSK-enabled pserver cluster:
 //
 //	tibftlserver-cluster.yaml         — FTL pserver cluster configuration (every server, however many shards)
@@ -59,7 +59,7 @@ func main() {
 	tlsKeyPassword := flag.String("tls-key-password", "", "TLS private key passphrase")
 	tlsCA := flag.String("tls-ca", "", "CA/trust PEM file path for connecting to other FTL servers")
 
-	// mTLS flags (needed when a Kafka mTLS listener is present)
+	// mTLS flags (needed when an Apache Kafka mTLS listener is present)
 	tlsServerTrust := flag.String("tls-server-trust", "", "CA PEM to verify inbound client certificates (tls.server.trust.file)")
 	tlsClientCert := flag.String("tls-client-cert", "", "client cert PEM for server-to-server connections (tls.client.cert)")
 	tlsClientKey := flag.String("tls-client-key", "", "client private key PEM for server-to-server connections (tls.client.private.key)")
@@ -140,7 +140,7 @@ func main() {
 		"add a tibschemad (FTL schema daemon) section to the generated cluster YAML\n"+
 			"    each server gains a schemaN persistence and a tibschemad entry; no extra servers or ports")
 
-	// Undocumented. Reads the configuration from live Kafka brokers over the Admin
+	// Undocumented. Reads the configuration from live Apache Kafka brokers over the Admin
 	// API instead of from server.properties files: a comma-separated host:port list,
 	// mutually exclusive with the positional arguments. What the Admin API reports is
 	// the broker's effective configuration, not the file the operator wrote, so the
@@ -367,10 +367,10 @@ func main() {
 	// The cluster and realm artifacts derive from the listener layout, independent
 	// of the security resolution in broker.properties, so they are always written --
 	// even when broker.properties is still INVALID.
-	// Policy: if any Kafka listener is secured, the FTL servers (the realm and the pservers) must
+	// Policy: if any Apache Kafka listener is secured, the FTL servers (the realm and the pservers) must
 	// require authentication too. Auto-provision FTL basic auth (a users file, self-contained, no
 	// operator certs) so the pserver-to-pserver connections are valid; this is separate from the
-	// Kafka listener security.
+	// Apache Kafka listener security.
 	ftlUsersFile := *authUsersFile // operator-provided FTL users file, if any
 	if cfgs[0].IsSecure && ftlUsersFile == "" {
 		uf, uerr := translator.WriteFTLServerUsers(*outputDir)
@@ -381,7 +381,7 @@ func main() {
 		ftlUsersFile = uf
 		fmt.Fprintf(os.Stdout, "Writing file: %s (FTL server basic auth; a Kafka listener is secured)\n", uf)
 	}
-	// Kafka client users: the inline JAAS user_X entries of the SASL/PLAIN listeners,
+	// Apache Kafka client users: the inline JAAS user_X entries of the SASL/PLAIN listeners,
 	// materialized as a second file: provider. Only relevant when the FTL servers
 	// authenticate (ftlUsersFile set), which any secured listener implies.
 	kafkaUsersFile := ""
@@ -401,7 +401,7 @@ func main() {
 		os.Exit(1)
 	}
 	if translator.ShouldWriteSecure(cfgs[0], secureOpts) {
-		// Wire the auto-generated FTL + Kafka users into the secure YAML's
+		// Wire the auto-generated FTL + Apache Kafka users into the secure YAML's
 		// auth.providers, same as the base cluster YAML. Without this the secure
 		// YAML would be TLS-without-auth, which the FTL server rejects at startup.
 		if secureOpts.AuthUsersFile == "" {
@@ -631,10 +631,10 @@ func parseCoreServers(s string) []translator.CoreServer {
 //   - pserver connection ports: 5700–5799
 //
 // The choice is arbitrary but NOT random: the generator is seeded from the cluster
-// itself (node ids and Kafka listener addresses), so converting the same brokers twice
+// itself (node ids and Apache Kafka listener addresses), so converting the same brokers twice
 // produces the same YAML. Re-running the tool should not churn the output, and the
 // checked-in examples would otherwise differ on every regeneration. Two clusters on one
-// host still get different ports, because they must already differ in their Kafka
+// host still get different ports, because they must already differ in their Apache Kafka
 // listeners to coexist.
 func generatePorts(cfgs []*translator.BrokerConfig) translator.PortMap {
 	n := len(cfgs)

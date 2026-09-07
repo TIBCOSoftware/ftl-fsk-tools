@@ -12,7 +12,7 @@ import (
 )
 
 // This file is the canonical, line-by-line account of how tibftlimportconfig treats
-// each Kafka listener/security broker property. It is the single source of truth:
+// each Apache Kafka listener/security broker property. It is the single source of truth:
 // the --list-properties flag prints it, and the README support section is
 // generated from it, so the documentation cannot drift from the tool.
 //
@@ -42,7 +42,7 @@ const (
 
 // PropSupport is one property's line in the account.
 type PropSupport struct {
-	Property    string // exact Kafka property key, or a "<...>" pattern for a family
+	Property    string // exact Apache Kafka property key, or a "<...>" pattern for a family
 	Disp        Disposition
 	Explanation string // plain-language reason; carries the comment for DispDepends
 }

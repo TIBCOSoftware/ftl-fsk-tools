@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// The three settings a plain, unsecured broker reports at their Kafka defaults. None
+// The three settings a plain, unsecured broker reports at their Apache Kafka defaults. None
 // of them is doing anything, so none of them may make the file INVALID -- this is
 // exactly the case that made `tibftlimportconfig -from-brokers localhost:9092` fail
 // against a broker with no TLS and no auth.
@@ -86,7 +86,7 @@ func TestInertDoesNotSwallowSettingsInUse(t *testing.T) {
 			src:  "node.id=1\nsasl.enabled.mechanisms=GSSAPI\n",
 		},
 		{
-			// Kafka defaults a listener's protocol to its own name when no
+			// Apache Kafka defaults a listener's protocol to its own name when no
 			// listener.security.protocol.map names it.
 			name: "mechanisms with an unmapped SASL_SSL listener",
 			src:  "node.id=1\nlisteners=SASL_SSL://0.0.0.0:9092\nsasl.enabled.mechanisms=GSSAPI\n",
@@ -111,7 +111,7 @@ func TestInertDoesNotSwallowSettingsInUse(t *testing.T) {
 }
 
 // A per-listener keystore type with no location of its own falls back to the
-// broker-wide location, the way Kafka resolves it -- so it is in use, not inert.
+// broker-wide location, the way Apache Kafka resolves it -- so it is in use, not inert.
 func TestKeystoreLocationFallsBackAcrossListenerScope(t *testing.T) {
 	cfg := parseSrc(t, "node.id=1\nlisteners=SSL://0.0.0.0:9093\n"+
 		"ssl.keystore.location=/c/broker.keystore.pem\n"+

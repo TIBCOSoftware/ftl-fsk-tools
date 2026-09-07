@@ -13,13 +13,13 @@ import (
 )
 
 // Auto-provisioned authentication for the FTL SERVERS (the realm server and the pservers) -- as
-// opposed to the Kafka listeners.
+// opposed to the Apache Kafka listeners.
 //
-// Policy: if any Kafka listener is secured (cfg.IsSecure), the FTL servers must require
-// authentication too. FSK does not support a secured Kafka listener running on FTL servers that
+// Policy: if any Apache Kafka listener is secured (cfg.IsSecure), the FTL servers must require
+// authentication too. FSK does not support a secured Apache Kafka listener running on FTL servers that
 // accept unauthenticated connections. The FTL servers' authentication is their own login (FTL
-// basic auth via a users file, and TLS later) and is independent of the Kafka listener security
-// (PLAIN / OAuth / mTLS): the two only share the rule "if a Kafka listener is secured, the FTL
+// basic auth via a users file, and TLS later) and is independent of the Apache Kafka listener security
+// (PLAIN / OAuth / mTLS): the two only share the rule "if an Apache Kafka listener is secured, the FTL
 // servers authenticate too"; their user lists and protocols are otherwise separate.
 //
 // FTL permits authentication over an unencrypted connection, so a users file alone makes the FTL
@@ -28,7 +28,7 @@ import (
 
 // FTLInternal* is the login each tibftlserver presents to the other FTL servers (ftl-internal
 // role); FTLAdmin* administers the realm REST (ftl-admin role). These log the FTL servers in --
-// they are NOT the Kafka client users.
+// they are NOT the Apache Kafka client users.
 //
 // Secret-scanner note (documented false positive, not a leak): the password literals below are
 // PUBLISHED DEFAULT placeholders the tool writes into a throwaway cluster it generates from scratch.
@@ -97,7 +97,7 @@ func WriteKafkaClientUsers(outputDir string, cfgs []*BrokerConfig) (string, erro
 			if !strings.Contains(ld.SASLMech, "PLAIN") {
 				continue // OAUTHBEARER-only listener: tokens, not passwords
 			}
-			// Kafka key precedence: per-listener-per-mechanism, then
+			// Apache Kafka key precedence: per-listener-per-mechanism, then
 			// per-listener, then global (the same forms jaasForHandlerKey
 			// pairs elsewhere).
 			lower := strings.ToLower(ld.Name)

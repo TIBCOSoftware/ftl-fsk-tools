@@ -15,7 +15,7 @@ import (
 	"github.com/IBM/sarama"
 )
 
-// FetchBrokerConfig connects to the Kafka broker at addr (host:port), retrieves its
+// FetchBrokerConfig connects to the Apache Kafka broker at addr (host:port), retrieves its
 // effective configuration via the Admin DescribeConfigs API, and returns a BrokerConfig
 // ready for the same translation pipeline used for file-based inputs.
 //
@@ -83,7 +83,7 @@ func FetchBrokerConfig(addr string, timeoutMs int) (*BrokerConfig, error) {
 	orderedKeys := make([]string, 0, len(entries))
 	for _, e := range entries {
 		// DescribeConfigs returns every key the broker knows about, set or not.
-		// Kafka's own defaults are not this operator's configuration, and copying
+		// Apache Kafka's own defaults are not this operator's configuration, and copying
 		// them in makes the tool report factory values nobody chose --
 		// ssl.keystore.type=JKS on a broker with no TLS at all. Version 0 of the
 		// response leaves Source unset, so Default has to be checked too.
@@ -163,7 +163,7 @@ func brokerConfigFromRaw(raw map[string]string, orderedKeys []string, sourceLabe
 		internalListeners[n] = true
 	}
 	// Same rule as ParseBrokerConfig: the inter-broker listener is only internal
-	// when another client listener remains to serve Kafka clients.
+	// when another client listener remains to serve Apache Kafka clients.
 	ib := strings.ToUpper(strings.TrimSpace(raw["inter.broker.listener.name"]))
 	if ib != "" && hasOtherClientListener(raw["listeners"], controllerSet, ib) {
 		internalListeners[ib] = true
