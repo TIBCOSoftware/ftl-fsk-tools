@@ -6,6 +6,8 @@
 package translator
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -157,6 +159,38 @@ func TestJavaKeystoreIsRewrittenToPEM(t *testing.T) {
 	}
 	if strings.Contains(out, resolveBandOpen) {
 		t.Errorf("a convertible keystore must not open a RESOLVE-REQUIRED block:\n%s", out)
+	}
+}
+
+// The operator who ran the keytool/openssl commands by hand -- or followed the
+// certificate appendix, which runs the same ones -- has nothing left to do, and must
+// not be told the .pem does not exist. The file on disk is what settles it, not
+// whether --auto was the thing that wrote it.
+func TestExistingPemIsNotPending(t *testing.T) {
+	dir := t.TempDir()
+	jks := filepath.Join(dir, "server.keystore.jks")
+	pem := filepath.Join(dir, "server.keystore.pem")
+	src := "node.id=1\nlisteners=SSL://0.0.0.0:9093\n" +
+		"ssl.keystore.type=JKS\nssl.keystore.location=" + jks + "\n"
+
+	cfg := parseSrc(t, src)
+	if len(PendingKeystores(cfg)) != 1 {
+		t.Fatal("with no .pem on disk the conversion must be pending")
+	}
+
+	// Empty does not count: tibftlserver would fail on it just as it would on absent.
+	if err := os.WriteFile(pem, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if len(PendingKeystores(parseSrc(t, src))) != 1 {
+		t.Error("a zero-length .pem is not a completed conversion")
+	}
+
+	if err := os.WriteFile(pem, []byte("-----BEGIN CERTIFICATE-----\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := PendingKeystores(parseSrc(t, src)); len(got) != 0 {
+		t.Errorf("pending = %+v, want none -- %s exists", got, pem)
 	}
 }
 

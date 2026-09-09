@@ -996,11 +996,13 @@ list: the tool extracts them into `kafka-users.txt` in the output directory and 
 into `auth.providers`. The tool writes a `tibftlserver-standalone-secure.yaml` alongside the plain
 standalone YAML whenever TLS or auth flags are supplied.
 
-:::note The `SEVERE WARNING` about missing `.pem` files
-The run ends with `SEVERE WARNING -- … WILL NOT RUN WITH FSK AS IT STANDS` and a claim that the
-converted `.pem` files do not exist. The tool only tracks conversions it performed itself, so the
-warning fires even when you did Step 2 by hand and the files are there. Confirm with
-`ls /var/tmp/kafka/scenario5/certs/*.pem`; if both exist, carry on.
+:::note If you skipped Step 2
+The run ends with `SEVERE WARNING -- … WILL NOT RUN WITH FSK AS IT STANDS`, listing the `.pem`
+files the generated config names but that are not on disk. The tool checks for the files
+themselves, so it does not matter whether you created them by hand, from the certificate
+appendix, or in an earlier run — if both are there the run ends with
+`All kof.broker.*.properties files are processed successfully.` instead. Seeing the warning means
+Step 2 has not been done: run it, then re-run this command.
 :::
 
 `--tls-ca` writes `tls.client.trust.file`, the trust anchor the FTL Server's own internal
@@ -2709,8 +2711,11 @@ tibftlserver will fail at startup on the missing file. Create them first:
 ```
 
 followed by the `keytool`/`openssl` commands for each one — the same commands the generated
-file carries above each setting. Run them on a host that holds the `.jks`, then re-run the
-conversion and the warning disappears.
+file carries above each setting. Run them on a host that holds the `.jks`, then re-run
+`tibftlimportconfig`: it looks for the `.pem` files on disk each time, so once they exist the
+warning is gone and the run ends with `All kof.broker.*.properties files are processed
+successfully.` A `.pem` that is empty or unreadable still counts as missing, because
+`tibftlserver` would fail on it just the same.
 
 #### Settings that are present but doing nothing
 

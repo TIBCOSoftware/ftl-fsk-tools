@@ -6,6 +6,7 @@
 package translator
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -115,15 +116,29 @@ func (cfg *BrokerConfig) keystoreConversionByLoc(locKey string) *KeystoreConvers
 }
 
 // PendingKeystores lists the conversions whose .pem does not exist yet -- the ones
-// the operator still has to run by hand. --auto marks the rest Done.
+// the operator still has to run by hand.
+//
+// What settles a conversion is the file being on disk, not who put it there. --auto
+// marks what it converted Done, but the operator may equally have run the commands
+// by hand, in an earlier pass, or from the certificate appendix in the guide, so a
+// .pem that is already there is checked for directly. Anything unreadable or empty
+// counts as missing: tibftlserver would fail on it just the same.
 func PendingKeystores(cfg *BrokerConfig) []KeystoreConversion {
 	var out []KeystoreConversion
 	for _, kc := range cfg.KeystoreConversions {
-		if !kc.Done {
-			out = append(out, kc)
+		if kc.Done || pemExists(kc.ToLoc) {
+			continue
 		}
+		out = append(out, kc)
 	}
 	return out
+}
+
+// pemExists reports a readable, non-empty file at loc. A relative path resolves
+// against the working directory, which is where tibftlserver would resolve it too.
+func pemExists(loc string) bool {
+	fi, err := os.Stat(loc)
+	return err == nil && fi.Mode().IsRegular() && fi.Size() > 0
 }
 
 // Commands renders the keytool/openssl invocations that turn FromLoc into ToLoc.
