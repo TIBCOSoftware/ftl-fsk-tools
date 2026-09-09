@@ -823,7 +823,8 @@ nothing to generate for the realm service.
 | FTL realm user accounts | — | `users.txt` | shipped in `samples/yaml/tls-user` |
 
 No keystores yet? [Creating self-signed Apache Kafka certificates](#creating-self-signed-apache-kafka-certificates)
-produces the two this scenario names, with the passwords Step 1 expects.
+produces the two this scenario names, with the passwords Step 1 expects. Its last part also writes
+the PEM copies, so following it all the way through does Step 2 for you.
 
 :::tip Already running a secured single-node broker?
 Steps 1 and 3 only set up and start the example broker. If you already have a running Apache Kafka
@@ -874,6 +875,15 @@ file.
 
 ### Step 2 — Convert keystores to PEM
 
+:::note Skip this step if you already ran the certificate appendix
+[Creating self-signed Apache Kafka certificates](#creating-self-signed-apache-kafka-certificates)
+ends with *3. The PEM copies FSK reads*, which runs these same conversions with the passwords
+already filled in. If you followed that section through to the end,
+`/var/tmp/kafka/scenario5/certs/server.keystore.pem` and `kafka.truststore.pem` are already on
+disk — confirm with `ls /var/tmp/kafka/scenario5/certs/*.pem` and go straight to Step 3. This
+step is for the case where you brought your own JKS keystores.
+:::
+
 The generated `kof.broker.1.properties` already names the `.pem` files; these are the
 commands, printed in the file above each setting and again as a `SEVERE WARNING` at the end
 of the run, that actually create them. For JKS:
@@ -901,7 +911,7 @@ every JDK; `keytool -exportcert -rfc` writes the same PEM directly, as the appen
 
 ### Step 3 — Start Apache Kafka (KRaft)
 
-Same sequence as Scenario 1. The broker reads the JKS keystores named in its `server.properties`, so
+Same sequence as Scenario 1. The broker reads the JKS keystores named in `server-1.properties`, so
 those must exist before it will start:
 
 ```bash
@@ -2430,7 +2440,7 @@ it is what `ssl.truststore.location` points at in the `client.properties` of Ste
 ### 3. The PEM copies FSK reads
 
 Apache Kafka reads the JKS stores above; FSK reads PEM. This is Step 2 of the scenario, with the
-passwords filled in so nothing prompts:
+passwords filled in so nothing prompts — run it here and Step 2 has nothing left to do:
 
 ```bash
 keytool -importkeystore -alias kafka-server \
