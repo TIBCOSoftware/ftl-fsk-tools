@@ -1255,9 +1255,7 @@ Without `--auth-users-file` the same call becomes `--oauth2.token <token>` in pl
 ## Scenario 7 — 3-node SASL/PLAIN cluster
 
 Add SASL/PLAIN + TLS to a 3-node cluster. Every broker carries the Scenario 5 listener and security
-configuration unchanged — the TLS keystores, the `BROKER` listener at `SASL_SSL`,
-`inter.broker.listener.name=BROKER`, `sasl.mechanism.inter.broker.protocol=PLAIN`, and the inline
-JAAS users.
+configuration unchanged; Step 1 lists what each file adds on top of it.
 
 ### What you must supply — SASL/PLAIN
 
