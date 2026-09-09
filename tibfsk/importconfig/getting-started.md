@@ -1403,7 +1403,24 @@ Three shells, one per server. The `-secure` YAML is the one that carries the cer
 `auth.providers`; the users files are referenced from it by the paths they had at generation time,
 so keep `kafka-users.txt` where the tool wrote it and leave the sample directory alone.
 
-### Step 6 — Shut down the FTL Servers
+### Step 6 — Confirm FSK is serving the Apache Kafka ports
+
+The three FTL Servers now hold ports 9092, 9102 and 9112. The most direct proof is the check from
+Step 2, unchanged — same `client.properties`, same command, answered by FSK instead of the brokers:
+
+```bash
+"$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
+  --bootstrap-server localhost:9092,localhost:9102,localhost:9112 \
+  --command-config client.properties | grep 'id:'
+```
+
+Three lines come back, one per broker id — the same three the brokers answered with in Step 2. That
+they arrive at all means the converted `.pem` files terminated TLS and the SASL/PLAIN handshake
+completed against the users the tool extracted into `kafka-users.txt`; `--command-config` is still
+required, because the listeners FSK took over are `SASL_SSL` exactly as the brokers' were. Fewer
+than three lines means a server never came up — check its shell from Step 5.
+
+### Step 7 — Shut down the FTL Servers
 
 Stop the FTL Servers before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role.
 
