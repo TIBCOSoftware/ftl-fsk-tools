@@ -150,7 +150,7 @@ rm -f kof-output/*.bak
 
 ```bash
 rm -rf /var/tmp/kof/data
-tibftlserver -c kof-output/tibftlserver_standalone.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
+tibftlserver -c kof-output/tibftlserver-standalone.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
 bash demo/wait-for-kof.sh --server localhost:5600
 ```
 
@@ -160,7 +160,7 @@ soon as the cluster has quorum with every pserver joined, so there is nothing to
 prints `✓ kof.cluster.0 has quorum: 1/1 members` and exits 0; on failure it exits 1, and the
 migration in step 6 never runs against a half-started cluster.
 
-`--server` is the **FTL server** port from `core.servers` in `tibftlserver_standalone.yaml`, not the FSK
+`--server` is the **FTL server** port from `core.servers` in `tibftlserver-standalone.yaml`, not the FSK
 Kafka listener port.
 
 No realm upload is needed. Every `- realm:` entry in the generated YAML carries
@@ -417,7 +417,7 @@ rm -f kof-output/*.bak
 
 ```bash
 rm -rf /var/tmp/kof/data
-tibftlserver -c kof-output/tibftlserver_standalone.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
+tibftlserver -c kof-output/tibftlserver-standalone.yaml -n SRV1 > /tmp/kof-SRV1.log 2>&1 &
 bash demo/wait-for-kof.sh --server localhost:5600
 ```
 

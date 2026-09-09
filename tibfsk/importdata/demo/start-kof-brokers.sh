@@ -41,13 +41,13 @@ fi
 
 # The demo is a three-broker cluster, so tibftlimportconfig names the file
 # tibftlserver-cluster.yaml. A single-broker conversion is named
-# tibftlserver_standalone.yaml instead, and this script cannot use it: it starts
+# tibftlserver-standalone.yaml instead, and this script cannot use it: it starts
 # SRV1/SRV2/SRV3, which a standalone output does not define.
 CLUSTER_YAML="$KOF_OUTPUT_DIR/tibftlserver-cluster.yaml"
 if [[ ! -f "$CLUSTER_YAML" ]]; then
   echo "ERROR: $CLUSTER_YAML not found."
-  if [[ -f "$KOF_OUTPUT_DIR/tibftlserver_standalone.yaml" ]]; then
-    echo "Found tibftlserver_standalone.yaml instead — that output came from a single broker."
+  if [[ -f "$KOF_OUTPUT_DIR/tibftlserver-standalone.yaml" ]]; then
+    echo "Found tibftlserver-standalone.yaml instead — that output came from a single broker."
     echo "This script starts SRV1/SRV2/SRV3; re-run tibftlimportconfig with all three"
     echo "demo/kraft/server-*.properties files."
   else
