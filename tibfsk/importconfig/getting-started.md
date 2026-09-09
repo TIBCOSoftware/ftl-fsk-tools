@@ -327,7 +327,7 @@ The quorum forms once a majority of controllers are up. Confirm:
 
 ```bash
 "$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
-  --bootstrap-server localhost:9092,localhost:9102,localhost:9112 | grep id:
+  --bootstrap-server localhost:9092,localhost:9102,localhost:9112 | grep 'id:'
 ```
 
 ### Step 4 — Stop Apache Kafka
@@ -713,7 +713,7 @@ three registered:
 
 ```bash
 "$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
-  --bootstrap-server localhost:9092,localhost:9102,localhost:9112 | grep id:
+  --bootstrap-server localhost:9092,localhost:9102,localhost:9112 | grep 'id:'
 ```
 
 ### Step 4 — Stop Apache Kafka and ZooKeeper
@@ -951,12 +951,15 @@ Then:
 
 ```bash
 "$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
-  --bootstrap-server localhost:9092 --command-config client.properties
+  --bootstrap-server localhost:9092 --command-config client.properties | grep 'id:'
 ```
 
-A line beginning `localhost:9092 (id: 1 rack: null …) ->` means the broker is up and the
-certificates are good. Keep the file: Step 7 points the same one at FSK on port 9092, which is the
-most direct proof the converted PEMs took over.
+```
+localhost:9092 (id: 1 rack: null isFenced: false) -> (
+```
+
+That line means the broker is up and the certificates are good. Keep the file: Step 7 points the
+same one at FSK on port 9092, which is the most direct proof the converted PEMs took over.
 
 ### Step 4 — Stop Apache Kafka
 
@@ -1029,13 +1032,16 @@ same `client.properties`, same command, answered by FSK instead of the broker:
 
 ```bash
 "$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
-  --bootstrap-server localhost:9092 --command-config client.properties
+  --bootstrap-server localhost:9092 --command-config client.properties | grep 'id:'
 ```
 
-A line beginning `localhost:9092 (id: 1 rack: null …) ->` means all three pieces held: the
-converted `.pem` files terminated TLS, the inline JAAS users came through into `kafka-users.txt`,
-and the SASL/PLAIN handshake completed against them. A TLS failure here points at Step 2 — check
-`ls /var/tmp/kafka/scenario5/certs/*.pem`.
+```
+localhost:9092 (id: 1 rack: null isFenced: false) -> (
+```
+
+That line means all three pieces held: the converted `.pem` files terminated TLS, the inline JAAS
+users came through into `kafka-users.txt`, and the SASL/PLAIN handshake completed against them. A
+TLS failure here points at Step 2 — check `ls /var/tmp/kafka/scenario5/certs/*.pem`.
 
 The realm service answers separately, on its own port:
 
