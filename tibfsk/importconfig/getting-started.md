@@ -829,9 +829,9 @@ the PEM copies, so following it all the way through does Step 2 for you.
 :::tip Already running a secured single-node broker?
 Steps 1 and 3 only set up and start the example broker. If you already have a running Apache Kafka
 broker or brokers, skip them and start at **Step 4 — Stop Apache Kafka**, then hand your own
-`server.properties` to the tool in Step 5. **Step 2 still applies**: FSK reads PEM, so the `.pem`
-files have to exist before the FTL Server starts, even though your brokers are already running
-on JKS.
+`server.properties` to the tool in Step 5 instead of `server-1.properties`. **Step 2 still
+applies**: FSK reads PEM, so the `.pem` files have to exist before the FTL Server starts, even
+though your brokers are already running on JKS.
 :::
 
 ### Step 1 — Apache Kafka server.properties
