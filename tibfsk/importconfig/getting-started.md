@@ -836,6 +836,9 @@ though your brokers are already running on JKS.
 
 ### Step 1 — Apache Kafka server.properties
 
+Save this as **`server-1.properties`** in your working directory — the commands below name
+that file.
+
 ```properties
 process.roles=broker,controller
 node.id=1
@@ -869,9 +872,6 @@ offsets.topic.replication.factor=1
 transaction.state.log.replication.factor=1
 transaction.state.log.min.isr=1
 ```
-
-Save this as **server-1.properties** in your working directory — the commands below name that
-file.
 
 ### Step 2 — Convert keystores to PEM
 
