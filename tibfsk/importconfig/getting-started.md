@@ -807,9 +807,18 @@ scenario stalls.
 private key, and a truststore holding the certificate authority that signed it. They have to be
 JKS or PKCS12, because that is all Apache Kafka reads, and the certificate's subject alternative
 name must cover the advertised host (`localhost` here) or clients reject the connection during the
-handshake. The three passwords have to match `ssl.keystore.password`, `ssl.key.password` and
-`ssl.truststore.password` in Step 1. FSK reads PEM rather than JKS, so Step 2 converts the same
-material a second time — same certificate and key, different container.
+handshake.
+
+Creating those two stores means choosing three passwords: one for the keystore, one for the
+private key inside it, and one for the truststore. Step 1 has to repeat whatever you chose, as
+`ssl.keystore.password`, `ssl.key.password` and `ssl.truststore.password` — the broker cannot open
+a store whose password it was handed wrong. This scenario uses `keystorePassword123`,
+`keyPassword123` and `truststorePassword123` throughout.
+
+Step 2 then writes the same certificate and key out a second time in PEM form, because FSK reads
+PEM and not JKS. It issues nothing new — same material, different file format — and both copies
+stay on disk: the broker in Step 3 reads the JKS pair, and FSK from Step 6 onward reads the PEM
+pair.
 
 **The FTL side — already on disk.** The FTL Server's own TLS material and its user accounts come
 from the installed samples in `/opt/tibco/ftl/current-version/samples/yaml/tls-user`, so there is
@@ -946,8 +955,8 @@ Then:
 ```
 
 A line beginning `localhost:9092 (id: 1 rack: null …) ->` means the broker is up and the
-certificates are good. Keep the file: the same one reaches FSK on port 9092 after Step 6, which is
-the most direct proof the converted PEMs took over.
+certificates are good. Keep the file: Step 7 points the same one at FSK on port 9092, which is the
+most direct proof the converted PEMs took over.
 
 ### Step 4 — Stop Apache Kafka
 
@@ -1011,7 +1020,35 @@ Start from the `-secure` YAML, not the plain one: it is the file that carries th
 paths and the `auth.providers` list. The plain YAML is written too, and is the one to use if you
 want the same topology without security.
 
-### Step 7 — Shut down the FTL Server
+### Step 7 — Confirm FSK is serving the Apache Kafka port
+
+The FTL Server now holds port 9092. The most direct proof is the client from Step 3, unchanged —
+same `client.properties`, same command, answered by FSK instead of the broker:
+
+```bash
+"$KAFKA_HOME/bin/kafka-broker-api-versions.sh" \
+  --bootstrap-server localhost:9092 --command-config client.properties
+```
+
+A line beginning `localhost:9092 (id: 1 rack: null …) ->` means all three pieces held: the
+converted `.pem` files terminated TLS, the inline JAAS users came through into `kafka-users.txt`,
+and the SASL/PLAIN handshake completed against them. A TLS failure here points at Step 2 — check
+`ls /var/tmp/kafka/scenario5/certs/*.pem`.
+
+The realm service answers separately, on its own port:
+
+```bash
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone-secure.yaml)"
+
+tibftladmin --ftlserver "$FTLS" --tls.trust.file $FTL_SAMPLES/client_trust.pem \
+  -u admin -pw admin-pw --available
+```
+
+```
+FTLserver is available
+```
+
+### Step 8 — Shut down the FTL Server
 
 Stop the FTL Server before the next scenario. The `-secure` YAML puts TLS and authentication on the realm service, so this needs `https://`, a trust flag and an account holding the `ftl-admin` role.
 
