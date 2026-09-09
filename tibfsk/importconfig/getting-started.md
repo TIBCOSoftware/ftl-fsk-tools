@@ -1282,7 +1282,15 @@ names still have to exist before the FTL Servers start — see Scenario 5, Step 
 Java keystores.
 :::
 
-### Step 1 — What changes in each broker file
+### Step 1 — Start with the common properties from Scenario 5
+
+Every broker here runs the Scenario 5 configuration: the same `ssl.*` keystore and truststore
+lines, the `BROKER` listener at `SASL_SSL`, `inter.broker.listener.name=BROKER`,
+`sasl.mechanism.inter.broker.protocol=PLAIN` and the same inline JAAS users. Copy
+[Scenario 5](#scenario-5--single-node-sasl-plain-over-tls)'s `server-1.properties` three times —
+as `server-1.properties`, `server-2.properties` and `server-3.properties` — then add the
+broker-specific properties below to each file. These four are the ones that cannot be shared,
+because they name the node and the ports and directory it owns:
 
 ```properties
 # server-1.properties
@@ -1304,7 +1312,7 @@ advertised.listeners=BROKER://localhost:9112
 log.dirs=/var/tmp/kafka/scenario7/data/broker-3
 ```
 
-Two things change identically in all three files, because Scenario 5 was a single node: swap
+Two further edits apply identically to all three files, because Scenario 5 was a single node: swap
 `controller.quorum.bootstrap.servers` for the voter list
 `controller.quorum.voters=1@localhost:9093,2@localhost:9103,3@localhost:9113`, and raise the
 replication settings to `offsets.topic.replication.factor=3`,
