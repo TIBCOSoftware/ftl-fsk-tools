@@ -2680,7 +2680,7 @@ realm from it at startup. Upload manually only to push a *hand-edited* `ftlserve
 is already running:
 
 ```sh
-tibrealmadmin --server localhost:5600 --realm _default_realm upload-realm ftlserver.json
+tibftladmin --ftlserver http://localhost:5600 --updaterealm ftlserver.json
 ```
 
 In DR mode, each cluster has `dr_enabled: true` and two persistence sets: `_setA` (primary) and `_DRset` (DR replicas).

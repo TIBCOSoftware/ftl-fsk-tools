@@ -674,7 +674,7 @@ To push a *hand-edited* `ftlserver.json` to an already-running realm — the onl
 manual upload — use that port:
 
 ```bash
-tibrealmadmin --server <KOF-HOST-1>:5600 --realm my-realm upload-realm ./kof-output/ftlserver.json
+tibftladmin --ftlserver http://<KOF-HOST-1>:5600 --updaterealm ./kof-output/ftlserver.json
 ```
 
 ---
