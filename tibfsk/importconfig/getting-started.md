@@ -985,9 +985,10 @@ tibftlimportconfig \
   server-1.properties
 ```
 
-These four flags configure the **FTL** side — the realm service's own TLS and the accounts that
-may log in to it. They have nothing to do with the Apache Kafka listener, which FSK serves using the PEMs
-converted in Step 2 and named in `kof.broker.1.properties`. Taking them from the installed
+The four `--tls-*` flags and `--auth-users-file` configure the **FTL** side — the realm service's
+own TLS and the accounts that may log in to it. They have nothing to do with the Apache Kafka
+listener, which FSK serves using the PEMs converted in Step 2 and named in
+`kof.broker.1.properties`. Taking them from the installed
 `tls-user` sample means the only certificates you create in this scenario are the Apache Kafka ones.
 `--tls-key-password` is required here because the sample `server_key.pem` is encrypted with the
 passphrase `password`.
@@ -1205,9 +1206,9 @@ tibftlimportconfig \
   server-1.properties
 ```
 
-The four TLS and auth flags come from the installed sample, exactly as in Scenario 5 — they
-configure the realm service, not the Apache Kafka listener. The four `--oauth-*` flags are the values
-from the list above.
+The four `--tls-*` flags and `--auth-users-file` come from the installed sample, exactly as in
+Scenario 5 — they configure the realm service, not the Apache Kafka listener. The four
+`--oauth-*` flags are the values from the list above.
 
 `--auth-users-file` is not strictly required here, and the scenario would work without it: FSK
 would then validate every caller, administrators included, by OAuth2 token. Passing it costs
@@ -2635,9 +2636,9 @@ DR replica cluster, laid out like the plain YAML and likewise covering every ser
 DR hosts using the DR server names from `-dr-servers`:
 
 ```sh
-tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver1
-tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver2
-tibftlserver -c tibftlserver-cluster-dr.yaml -n drserver3
+tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV1
+tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV2
+tibftlserver -c tibftlserver-cluster-dr.yaml -n DRSRV3
 ```
 
 #### `tibftlserver-cluster-secure.yaml`
@@ -3043,7 +3044,7 @@ As in example 11, the three shards come from the default [`-replication-factor`]
 
 #### 13 — 3-broker, PLAINTEXT + DR
 
-**Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT. Primary servers named `primary1/2/3`; DR servers named `drserver1/2/3`. Mirrors the layout of the FTL `dr-simple` sample cluster configuration.
+**Apache Kafka config:** 3 nodes, KRaft (broker+controller), PLAINTEXT. Primary servers named `primary1/2/3`; DR servers named `drserver1/2/3`. Mirrors the layout of the installed FTL `dr` sample cluster configuration.
 
 Generated reference output: [`examples/13-3broker-dr/output/`](examples/13-3broker-dr/output/)
 
