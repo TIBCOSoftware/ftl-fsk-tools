@@ -2343,7 +2343,7 @@ tibftlimportconfig -h all        # every flag, grouped
 
 The sections below list the same flags as the corresponding `-h <group>` topic: the OAuth2 flags
 used in scenarios 6, 9, 11 and 12 are all under `tibftlimportconfig -h oauth`, and the TLS/mTLS
-flags from scenarios 5, 8, 10, 11 and 12 under `tibftlimportconfig -h tls`.
+flags from scenarios 5–12 under `tibftlimportconfig -h tls`.
 
 Both spellings work: Go's `flag` package accepts `-flag` and `--flag` alike. The scenarios above
 use `--`, the tables below use `-`.
