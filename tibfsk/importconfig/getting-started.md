@@ -1238,14 +1238,10 @@ Stop the FTL Server before the next scenario. Step 4 passed the sample users fil
 OAuth2 configuration, so the realm service accepts either an account or a token here.
 
 ```bash
+FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone-secure.yaml)"
+
 tibftladmin --ftlserver "$FTLS" --tls.trust.file $FTL_SAMPLES/client_trust.pem \
   -u admin -pw admin-pw -x
-```
-
-where `FTLS` is the address the server prints at startup:
-
-```bash
-FTLS="https://$(awk '/^ *SRV1:/ {print $2; exit}' kof-output/tibftlserver-standalone-secure.yaml)"
 ```
 
 `-x` (`--shutdown`) stops the FTL Server process.
@@ -1484,6 +1480,11 @@ Java keystores.
 
 ### Step 1 — Apache Kafka server.properties highlights
 
+Start from [Scenario 5](#scenario-5--single-node-sasl-plain-over-tls)'s `server-1.properties`: its
+broker-wide `ssl.keystore.*`, `ssl.key.password` and `ssl.truststore.*` block carries over
+unchanged, and the brokers will not start without it. The lines below replace its listener and
+SASL configuration:
+
 ```properties
 inter.broker.listener.name=MTLS
 listener.security.protocol.map=CONTROLLER:SSL,MTLS:SSL
@@ -1656,6 +1657,11 @@ Java keystores.
 :::
 
 ### Step 1 — Apache Kafka server.properties highlights
+
+Start from [Scenario 5](#scenario-5--single-node-sasl-plain-over-tls)'s `server-1.properties`: its
+broker-wide `ssl.keystore.*`, `ssl.key.password` and `ssl.truststore.*` block carries over
+unchanged, and the brokers will not start without it. The lines below replace its listener and
+SASL configuration:
 
 ```properties
 inter.broker.listener.name=INTERNAL
@@ -1836,6 +1842,11 @@ Java keystores.
 
 ### Step 1 — Apache Kafka server.properties highlights
 
+Start from [Scenario 5](#scenario-5--single-node-sasl-plain-over-tls)'s `server-1.properties`: its
+broker-wide `ssl.keystore.*`, `ssl.key.password` and `ssl.truststore.*` block carries over
+unchanged, and the brokers will not start without it. The lines below replace its listener and
+SASL configuration:
+
 ```properties
 inter.broker.listener.name=INTERNAL
 listener.security.protocol.map=CONTROLLER:SSL,SASL_AUTH:SASL_SSL,MTLS:SSL,INTERNAL:SSL
@@ -1989,6 +2000,11 @@ Java keystores.
 :::
 
 ### Step 1 — Apache Kafka server.properties highlights
+
+Start from [Scenario 5](#scenario-5--single-node-sasl-plain-over-tls)'s `server-1.properties`: its
+broker-wide `ssl.keystore.*`, `ssl.key.password` and `ssl.truststore.*` block carries over
+unchanged, and the brokers will not start without it. The lines below replace its listener and
+SASL configuration:
 
 ```properties
 inter.broker.listener.name=INTERNAL
@@ -2154,6 +2170,11 @@ Java keystores.
 :::
 
 ### Step 1 — Apache Kafka server.properties highlights
+
+Start from [Scenario 5](#scenario-5--single-node-sasl-plain-over-tls)'s `server-1.properties`: its
+broker-wide `ssl.keystore.*`, `ssl.key.password` and `ssl.truststore.*` block carries over
+unchanged, and the brokers will not start without it. The lines below replace its listener and
+SASL configuration:
 
 ```properties
 inter.broker.listener.name=INTERNAL
