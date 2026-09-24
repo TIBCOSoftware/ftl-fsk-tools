@@ -13,9 +13,7 @@ the `server.properties` you already run into a working FSK configuration across 
 scenarios, from a single plaintext broker up to a secured three-node cluster. It is the only guide
 you need: the flag-by-flag reference, the output file details and the worked examples are sections
 at the end of it. `importdata` is a separate job — moving the *records* over after the
-configuration is in place. The same guide is browsable offline at
-[tibfsk/importconfig/doc/fsk-doc/index.html](tibfsk/importconfig/doc/fsk-doc/index.html); open it
-straight from disk, no web server needed.
+configuration is in place.
 
 The migration tool also ships a runnable demo scenario — see
 [tibfsk/importdata/README.md](tibfsk/importdata/README.md) for the four
@@ -144,3 +142,9 @@ cmake --install . --prefix /usr/local
 Installs:
 - `/usr/local/bin/tibftlimportconfig`
 - `/usr/local/share/tibftlfskimportdata/` (classes, conf, run script)
+
+---
+
+## License
+
+BSD 3-Clause. See [LICENSE](LICENSE) for the full text and [NOTICE](NOTICE) for attribution.

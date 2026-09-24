@@ -1,0 +1,18 @@
+ftl-fsk-tools
+
+Copyright (c) 2026 Cloud Software Group, Inc. All Rights Reserved.
+
+This product includes software developed by Cloud Software Group, Inc.
+
+Tools for configuring and migrating to TIBCO FTL(R) Service for Kafka (FSK)
+persistence clusters.
+
+TIBCO and TIBCO FTL are trademarks or registered trademarks of Cloud Software
+Group, Inc. in the United States and/or other countries.
+
+Apache, Apache Kafka, Kafka and ZooKeeper are trademarks of The Apache Software
+Foundation. Use of these marks does not imply endorsement by The Apache Software
+Foundation.
+
+This software is licensed under the BSD 3-Clause License. See the LICENSE file
+in the root of this repository for the full text.
